@@ -1,0 +1,16 @@
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# Local Python environment for validation scripts
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Generated figure artifacts (reproducible from plot scripts)
+figs/
+
+# Keep all numerical datasets tracked
+!data/
