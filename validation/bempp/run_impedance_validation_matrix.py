@@ -276,7 +276,6 @@ def main() -> None:
         and gates["count_max_le_25"] == gates["num_cases"]
     )
 
-    write_summary_md(summary_md, summary_rows, gates, config)
     config = {
         "bempp_op_sign": args.bempp_op_sign,
         "bempp_rhs_cross": args.bempp_rhs_cross,
@@ -284,6 +283,7 @@ def main() -> None:
         "bempp_phase_sign": args.bempp_phase_sign,
         "bempp_zs_scale": args.bempp_zs_scale,
     }
+    write_summary_md(summary_md, summary_rows, gates, config)
     summary_json.write_text(
         json.dumps({"config": config, "cases": summary_rows, "gates": gates}, indent=2),
         encoding="utf-8",

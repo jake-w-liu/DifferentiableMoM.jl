@@ -1,4 +1,11 @@
 {
+  "config": {
+    "bempp_op_sign": "minus",
+    "bempp_rhs_cross": "e_cross_n",
+    "bempp_rhs_sign": 1.0,
+    "bempp_phase_sign": "plus",
+    "bempp_zs_scale": 0.002654418727984993
+  },
   "cases": [
     {
       "case_id": "case01_z50_n0_f3p00",
@@ -6,15 +13,15 @@
       "zs_imag_ohm": 50.0,
       "theta_inc_deg": 0.0,
       "phi_inc_deg": 0.0,
-      "rmse_db": 7.80055488436517,
-      "mean_abs_db": 4.836059939641303,
-      "max_abs_db": 41.87397279041198,
-      "near_target_theta_deg": 29.5,
-      "near_target_mean_abs_db": 2.821390885672278,
-      "near_target_max_abs_db": 8.023812256590777,
+      "rmse_db": 4.720343068699572,
+      "mean_abs_db": 2.855371424404849,
+      "max_abs_db": 21.394332863726664,
+      "near_target_theta_deg": 28.5,
+      "near_target_mean_abs_db": 2.7003152128407444,
+      "near_target_max_abs_db": 9.158435909276633,
       "pass_rmse_le_2p5": false,
       "pass_target_le_1p5": false,
-      "pass_max_le_25": false
+      "pass_max_le_25": true
     },
     {
       "case_id": "case02_z100_n0_f3p00",
@@ -22,15 +29,15 @@
       "zs_imag_ohm": 100.0,
       "theta_inc_deg": 0.0,
       "phi_inc_deg": 0.0,
-      "rmse_db": 6.023954724686764,
-      "mean_abs_db": 3.799551656530815,
-      "max_abs_db": 36.2398691766721,
-      "near_target_theta_deg": 29.5,
-      "near_target_mean_abs_db": 3.377045643672494,
-      "near_target_max_abs_db": 10.294856415744302,
+      "rmse_db": 2.7009528821493687,
+      "mean_abs_db": 1.7692052910811855,
+      "max_abs_db": 14.415419667104054,
+      "near_target_theta_deg": 28.5,
+      "near_target_mean_abs_db": 0.640593493023034,
+      "near_target_max_abs_db": 1.4173697490317567,
       "pass_rmse_le_2p5": false,
-      "pass_target_le_1p5": false,
-      "pass_max_le_25": false
+      "pass_target_le_1p5": true,
+      "pass_max_le_25": true
     },
     {
       "case_id": "case03_z200_n0_f3p00",
@@ -38,15 +45,15 @@
       "zs_imag_ohm": 200.0,
       "theta_inc_deg": 0.0,
       "phi_inc_deg": 0.0,
-      "rmse_db": 9.783424254017946,
-      "mean_abs_db": 6.640496320491086,
-      "max_abs_db": 43.11929783919835,
-      "near_target_theta_deg": 29.5,
-      "near_target_mean_abs_db": 6.8974259346728495,
-      "near_target_max_abs_db": 19.43750062959992,
+      "rmse_db": 6.237418307823048,
+      "mean_abs_db": 4.459306716376138,
+      "max_abs_db": 23.664288020843685,
+      "near_target_theta_deg": 28.5,
+      "near_target_mean_abs_db": 4.0169534135408504,
+      "near_target_max_abs_db": 9.144970469665509,
       "pass_rmse_le_2p5": false,
       "pass_target_le_1p5": false,
-      "pass_max_le_25": false
+      "pass_max_le_25": true
     },
     {
       "case_id": "case04_z300_n0_f3p00",
@@ -54,12 +61,12 @@
       "zs_imag_ohm": 300.0,
       "theta_inc_deg": 0.0,
       "phi_inc_deg": 0.0,
-      "rmse_db": 8.310591532651884,
-      "mean_abs_db": 5.407732079337493,
-      "max_abs_db": 42.42257807848622,
-      "near_target_theta_deg": 29.5,
-      "near_target_mean_abs_db": 4.24033794675557,
-      "near_target_max_abs_db": 15.160786969173145,
+      "rmse_db": 8.30865975531418,
+      "mean_abs_db": 6.046604849209972,
+      "max_abs_db": 25.049989660763217,
+      "near_target_theta_deg": 28.5,
+      "near_target_mean_abs_db": 3.6215687564882018,
+      "near_target_max_abs_db": 7.77971882681612,
       "pass_rmse_le_2p5": false,
       "pass_target_le_1p5": false,
       "pass_max_le_25": false
@@ -70,15 +77,15 @@
       "zs_imag_ohm": 200.0,
       "theta_inc_deg": 5.0,
       "phi_inc_deg": 0.0,
-      "rmse_db": 7.998854576735314,
-      "mean_abs_db": 5.971802644018709,
-      "max_abs_db": 32.77504995990678,
-      "near_target_theta_deg": 29.5,
-      "near_target_mean_abs_db": 5.161410635241108,
-      "near_target_max_abs_db": 15.894280158093242,
+      "rmse_db": 6.331345742547655,
+      "mean_abs_db": 4.560973847135917,
+      "max_abs_db": 24.48306794725641,
+      "near_target_theta_deg": 28.5,
+      "near_target_mean_abs_db": 2.94622058783499,
+      "near_target_max_abs_db": 12.137582813522709,
       "pass_rmse_le_2p5": false,
       "pass_target_le_1p5": false,
-      "pass_max_le_25": false
+      "pass_max_le_25": true
     },
     {
       "case_id": "case06_z200_n0_f3p06",
@@ -86,22 +93,22 @@
       "zs_imag_ohm": 200.0,
       "theta_inc_deg": 0.0,
       "phi_inc_deg": 0.0,
-      "rmse_db": 9.78343640521601,
-      "mean_abs_db": 6.640508813909441,
-      "max_abs_db": 43.119386389881,
-      "near_target_theta_deg": 29.5,
-      "near_target_mean_abs_db": 6.897427100112669,
-      "near_target_max_abs_db": 19.43750852893194,
+      "rmse_db": 6.237312372432339,
+      "mean_abs_db": 4.459274153224277,
+      "max_abs_db": 23.6561779685335,
+      "near_target_theta_deg": 28.5,
+      "near_target_mean_abs_db": 4.01678073961651,
+      "near_target_max_abs_db": 9.144528556737848,
       "pass_rmse_le_2p5": false,
       "pass_target_le_1p5": false,
-      "pass_max_le_25": false
+      "pass_max_le_25": true
     }
   ],
   "gates": {
     "num_cases": 6,
-    "count_target_le_1p5": 0,
+    "count_target_le_1p5": 1,
     "count_rmse_le_2p5": 0,
-    "count_max_le_25": 0,
+    "count_max_le_25": 5,
     "matrix_gate_pass": false
   }
 }
