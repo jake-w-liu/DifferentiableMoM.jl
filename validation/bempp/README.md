@@ -63,8 +63,7 @@ python validation/bempp/compare_impedance_to_julia.py \
   --output-prefix impedance --target-theta-deg 30
 ```
 
-Use a Julia-matching structured plate mesh in Bempp (recommended for
-apples-to-apples checks):
+Use a Julia-matching structured plate mesh in Bempp (recommended for apples-to-apples checks):
 
 ```bash
 python validation/bempp/run_impedance_cross_validation.py \
@@ -83,12 +82,24 @@ python validation/bempp/run_impedance_validation_matrix.py
 
 The matrix runner defaults to a refined Bempp screen mesh
 `--mesh-step-lambda 0.2` for stronger impedance cross-validation.
+The default convention profile is `paper_default` (the profile used for
+manuscript-reported beam-centric matrix values).
 
 Matrix run with structured Bempp mesh:
 
 ```bash
 python validation/bempp/run_impedance_validation_matrix.py \
   --mesh-mode structured --nx 12 --ny 12
+```
+
+Select a named convention profile:
+
+```bash
+python validation/bempp/run_impedance_validation_matrix.py \
+  --convention-profile paper_default
+
+python validation/bempp/run_impedance_validation_matrix.py \
+  --convention-profile case03_sweep_best
 ```
 
 Dry-run command preview:
@@ -116,6 +127,18 @@ Sweep Bempp convention variants against a fixed Julia impedance reference:
 python validation/bempp/sweep_impedance_conventions.py --run-julia
 ```
 
+Sweep against an existing Julia reference (no Julia run), with matched
+structured mesh:
+
+```bash
+python validation/bempp/sweep_impedance_conventions.py \
+  --julia-prefix case03_z200_n0_f3p00 \
+  --freq-ghz 3.0 --zs-imag-ohm 200 \
+  --theta-inc-deg 0 --phi-inc-deg 0 \
+  --n-theta 180 --n-phi 72 \
+  --mesh-mode structured --nx 12 --ny 12
+```
+
 Outputs:
 
 - `data/impedance_convention_sweep.csv`
@@ -136,6 +159,32 @@ python validation/bempp/plot_impedance_comparison.py \
   --title "Impedance case: Zs=i200 Ohm, f=3.0 GHz"
 ```
 
+### Operator-Aligned Impedance Benchmark (Current/Phase + Residuals)
+
+Run a single-case benchmark that combines:
+- far-field beam metrics,
+- element-center complex current comparison,
+- phase/coherence diagnostics,
+- forward-solve residual checks in Julia and Bempp.
+
+```bash
+python validation/bempp/run_impedance_operator_aligned_benchmark.py \
+  --output-prefix opalign_z200 \
+  --freq-ghz 3.0 \
+  --zs-imag-ohm 200 \
+  --theta-inc-deg 0 \
+  --phi-inc-deg 0 \
+  --mesh-mode structured --nx 12 --ny 12
+```
+
+Standalone current/phase comparator for existing artifacts:
+
+```bash
+python validation/bempp/compare_impedance_operator_aligned.py \
+  --output-prefix opalign_z200 \
+  --mag-floor-db -20
+```
+
 ## Outputs
 
 - `data/bempp_pec_farfield.csv`
@@ -146,6 +195,12 @@ python validation/bempp/plot_impedance_comparison.py \
 - `data/impedance_validation_matrix_summary.csv` (matrix run)
 - `data/impedance_validation_matrix_summary.md` (matrix run)
 - `data/impedance_validation_matrix_summary.json` (matrix run)
+- `data/julia_*_element_currents.csv` (operator-aligned benchmark inputs)
+- `data/julia_*_operator_checks.json` (Julia residual diagnostics)
+- `data/bempp_*_element_currents.csv` (Bempp current-center outputs)
+- `data/bempp_*_operator_aligned_report.json` (current/phase metrics)
+- `data/bempp_*_operator_aligned_report.md` (current/phase metrics)
+- `data/bempp_*_operator_aligned_benchmark.md` (combined summary)
 - `data/bempp_*_diagnostic.png` (optional impedance diagnostic plots)
 - `data/bempp_*_diagnostic_summary.txt` (optional impedance diagnostic stats)
 
@@ -153,5 +208,4 @@ python validation/bempp/plot_impedance_comparison.py \
 
 - Angular sampling is matched to the Julia grid (`180 x 72`) with centered bins.
 - Comparison keys are matched on `(theta_deg, phi_deg)` rounded to `1e-6` deg.
-- Small dB-level differences are expected because discretization and kernels differ
-  between implementations.
+- Small dB-level differences are expected because discretization and kernels differ between implementations.
