@@ -127,6 +127,12 @@ end
 function fig_beam_steer_farfield(; outpath="figs")
     df = CSV.read("data/beam_steer_cut_phi0.csv", DataFrame)
     df = df[df.theta_deg .<= 90.0, :]
+    df = combine(
+        groupby(df, :theta_deg),
+        :dir_pec_dBi => (x -> sum(x) / length(x)) => :dir_pec_dBi,
+        :dir_opt_dBi => (x -> sum(x) / length(x)) => :dir_opt_dBi,
+    )
+    sort!(df, :theta_deg)
 
     p = plot(
         df.theta_deg, df.dir_pec_dBi,
@@ -141,6 +147,21 @@ function fig_beam_steer_farfield(; outpath="figs")
     )
     plot!(df.theta_deg, df.dir_opt_dBi,
           color=:red, linestyle=:solid, label="Optimized impedance")
+
+    bempp_path = "data/bempp_pec_cut_phi0.csv"
+    if isfile(bempp_path)
+        df_bempp = CSV.read(bempp_path, DataFrame)
+        df_bempp = df_bempp[df_bempp.theta_deg .<= 90.0, :]
+        df_bempp = combine(
+            groupby(df_bempp, :theta_deg),
+            :dir_bempp_dBi => (x -> sum(x) / length(x)) => :dir_bempp_dBi,
+        )
+        sort!(df_bempp, :theta_deg)
+        plot!(df_bempp.theta_deg, df_bempp.dir_bempp_dBi,
+              color=:black, linestyle=:dot, linewidth=2.0, label="Bempp PEC (cross-val)")
+    else
+        println("  Skipping Bempp overlay (missing data/bempp_pec_cut_phi0.csv)")
+    end
 
     # Mark target angle
     vline!([30.0], linestyle=:dot, color=:green, label=raw"Target $\theta_s = 30°$")
