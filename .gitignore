@@ -11,6 +11,8 @@ __pycache__/
 
 # Generated figure artifacts (reproducible from plot scripts)
 figs/
+figs
 
 # Generated validation data/artifacts (can be regenerated)
 data/
+data
