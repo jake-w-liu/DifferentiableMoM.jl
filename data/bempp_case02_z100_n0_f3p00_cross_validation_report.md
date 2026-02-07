@@ -1,16 +1,16 @@
 # Bempp vs Julia Impedance-Loaded Cross-Validation
 
 ## Global Error Metrics
-- Mean delta (Bempp - Julia): -2.0479 dB
-- Mean absolute delta: 3.7996 dB
-- RMSE: 6.0240 dB
-- Max absolute delta: 36.2399 dB
+- Mean delta (Bempp - Julia): 0.1306 dB
+- Mean absolute delta: 1.7692 dB
+- RMSE: 2.7010 dB
+- Max absolute delta: 14.4154 dB
 
 ## Phi=0 Cut Metrics
-- Mean absolute delta: 3.9342 dB
-- RMSE: 6.6203 dB
-- Max absolute delta: 32.6102 dB
+- Mean absolute delta: 2.2597 dB
+- RMSE: 3.0328 dB
+- Max absolute delta: 6.4509 dB
 
 ## Directional Slices
-- Near 0 deg: nearest theta = 0.5 deg, mean abs delta = 0.2389 dB, max abs delta = 0.2391 dB
-- Near 30 deg: nearest theta = 29.5 deg, mean abs delta = 3.3770 dB, max abs delta = 10.2949 dB
+- Near 0 deg: nearest theta = 1.5 deg, mean abs delta = 0.0009 dB, max abs delta = 0.0017 dB
+- Near 30 deg: nearest theta = 28.5 deg, mean abs delta = 0.6406 dB, max abs delta = 1.4174 dB

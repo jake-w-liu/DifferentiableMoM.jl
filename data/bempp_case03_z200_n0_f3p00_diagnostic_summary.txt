@@ -1,0 +1,3 @@
+Global: N=1440, mean|Δ|=4.459 dB, RMSE=6.237 dB, max|Δ|=23.664 dB
+Main-lobe (Julia >= peak-10 dB): N=192, mean|Δ|=0.540 dB, RMSE=0.730 dB, max|Δ|=2.244 dB
+Deep-null (Julia <= -20 dBi): N=168, mean|Δ|=9.265 dB, RMSE=10.440 dB, max|Δ|=22.250 dB

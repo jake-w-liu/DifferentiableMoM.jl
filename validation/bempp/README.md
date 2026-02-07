@@ -102,6 +102,19 @@ Outputs:
 - `data/impedance_convention_sweep.md`
 - `data/impedance_convention_sweep.json`
 
+### Impedance Diagnostic Plots
+
+Generate heuristic plots to inspect where impedance mismatch is concentrated
+(cut comparison, cut error, 2D error map, error-vs-level scatter):
+
+```bash
+python validation/bempp/plot_impedance_comparison.py \
+  --julia-prefix case03_z200_n0_f3p00 \
+  --bempp-prefix case03_z200_n0_f3p00 \
+  --output-prefix case03_z200_diag \
+  --title "Impedance case: Zs=i200 Ohm, f=3.0 GHz"
+```
+
 ## Outputs
 
 - `data/bempp_pec_farfield.csv`
@@ -112,6 +125,8 @@ Outputs:
 - `data/impedance_validation_matrix_summary.csv` (matrix run)
 - `data/impedance_validation_matrix_summary.md` (matrix run)
 - `data/impedance_validation_matrix_summary.json` (matrix run)
+- `data/bempp_*_diagnostic.png` (optional impedance diagnostic plots)
+- `data/bempp_*_diagnostic_summary.txt` (optional impedance diagnostic stats)
 
 ## Notes
 

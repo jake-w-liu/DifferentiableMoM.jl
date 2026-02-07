@@ -1,28 +1,28 @@
 {
-  "num_common_points": 12960,
-  "n_phi_detected": 72,
+  "num_common_points": 1440,
+  "n_phi_detected": 24,
   "global": {
-    "mean_diff_db": -3.474009733022441,
-    "mean_abs_diff_db": 5.407732079337493,
-    "rmse_db": 8.310591532651884,
-    "max_abs_diff_db": 42.42257807848622
+    "mean_diff_db": 4.915790936149036,
+    "mean_abs_diff_db": 6.046604849209972,
+    "rmse_db": 8.30865975531418,
+    "max_abs_diff_db": 25.049989660763217
   },
   "phi0_cut": {
-    "mean_diff_db": 0.13745374113188408,
-    "mean_abs_diff_db": 4.571978282212668,
-    "rmse_db": 6.934887920651101,
-    "max_abs_diff_db": 28.506895182615303
+    "mean_diff_db": 2.120610315203336,
+    "mean_abs_diff_db": 4.055547872629201,
+    "rmse_db": 5.676645244730673,
+    "max_abs_diff_db": 12.578384536694749
   },
   "near_broadside": {
     "target_theta_deg": 0.0,
-    "nearest_theta_deg": 0.5,
-    "mean_abs_diff_db": 0.09980891011200813,
-    "max_abs_diff_db": 0.10039523068143907
+    "nearest_theta_deg": 1.5,
+    "mean_abs_diff_db": 0.716473219042276,
+    "max_abs_diff_db": 0.7622867067076378
   },
   "near_target": {
     "target_theta_deg": 30.0,
-    "nearest_theta_deg": 29.5,
-    "mean_abs_diff_db": 4.24033794675557,
-    "max_abs_diff_db": 15.160786969173145
+    "nearest_theta_deg": 28.5,
+    "mean_abs_diff_db": 3.6215687564882018,
+    "max_abs_diff_db": 7.77971882681612
   }
 }
