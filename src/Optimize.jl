@@ -7,7 +7,14 @@ export optimize_lbfgs, optimize_directivity
                    maxiter=100, tol=1e-6, m_lbfgs=10,
                    alpha0=0.01, verbose=true,
                    reactive=false, maximize=false,
-                   lb=nothing, ub=nothing)
+                   lb=nothing, ub=nothing,
+                   regularization_alpha=0.0,
+                   regularization_R=nothing,
+                   preconditioner_M=nothing,
+                   preconditioning=:off,
+                   auto_precondition_n_threshold=256,
+                   iterative_solver=false,
+                   auto_precondition_eps_rel=1e-6)
 
 L-BFGS optimization with precomputed EFIE matrix, patch mass matrices,
 excitation vector, and Q matrix.
@@ -16,6 +23,16 @@ Options:
   reactive:  if true, impedance is Z_s = iθ (reactive/lossless)
   maximize:  if true, maximize J = I†QI instead of minimizing
   lb, ub:    box constraints on θ (projected L-BFGS-B)
+  regularization_alpha, regularization_R:
+             solve with Z + αR (if α ≠ 0). If R is omitted, uses Σ_p M_p.
+  preconditioner_M:
+             left preconditioner M. The solve uses M⁻¹Z and M⁻¹v, and
+             gradients are evaluated with M⁻¹M_p.
+  preconditioning:
+             `:off` (default), `:on`, or `:auto`.
+  auto_precondition_n_threshold, iterative_solver, auto_precondition_eps_rel:
+             controls `:auto` activation and conservative mass-based
+             preconditioner construction.
 
 Returns (theta_opt, trace) where trace records (iter, J, |g|) per iteration.
 """
@@ -32,7 +49,14 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
                         reactive::Bool=false,
                         maximize::Bool=false,
                         lb=nothing,
-                        ub=nothing)
+                        ub=nothing,
+                        regularization_alpha::Float64=0.0,
+                        regularization_R=nothing,
+                        preconditioner_M=nothing,
+                        preconditioning::Symbol=:off,
+                        auto_precondition_n_threshold::Int=256,
+                        iterative_solver::Bool=false,
+                        auto_precondition_eps_rel::Float64=1e-6)
     theta = copy(theta0)
     sense = maximize ? -1.0 : 1.0
 
@@ -48,6 +72,30 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
     end
     project!(theta)
 
+    # Conditioning setup (constant across iterations)
+    R_mat = if regularization_alpha == 0.0
+        nothing
+    else
+        regularization_R === nothing ? make_mass_regularizer(Mp) : Matrix{ComplexF64}(regularization_R)
+    end
+
+    precond_M_eff, precond_enabled, precond_reason = select_preconditioner(
+        Mp;
+        mode=preconditioning,
+        preconditioner_M=preconditioner_M,
+        n_threshold=auto_precondition_n_threshold,
+        iterative_solver=iterative_solver,
+        eps_rel=auto_precondition_eps_rel,
+    )
+    verbose && (preconditioning == :auto || preconditioner_M !== nothing || precond_enabled) &&
+        println("  preconditioning: ", precond_enabled ? "ON ($precond_reason)" : "OFF ($precond_reason)")
+
+    Mp_eff, precond_fac = transform_patch_matrices(
+        Mp;
+        preconditioner_M=precond_M_eff,
+    )
+    rhs_eff_base = precond_fac === nothing ? Vector{ComplexF64}(v) : (precond_fac \ Vector{ComplexF64}(v))
+
     # L-BFGS history
     s_list = Vector{Vector{Float64}}()
     y_list = Vector{Vector{Float64}}()
@@ -59,8 +107,16 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
 
     for iter in 1:maxiter
         # Assemble and solve
-        Z = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
-        I_coeffs = Z \ v
+        Z_raw = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
+        Z, _, _ = prepare_conditioned_system(
+            Z_raw,
+            v;
+            regularization_alpha=regularization_alpha,
+            regularization_R=R_mat,
+            preconditioner_M=precond_M_eff,
+            preconditioner_factor=precond_fac,
+        )
+        I_coeffs = Z \ rhs_eff_base
 
         # Objective (always report the true J)
         J_val = real(dot(I_coeffs, Q * I_coeffs))
@@ -69,7 +125,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
         lambda = Z' \ (Q * I_coeffs)
 
         # Gradient of J (true objective)
-        g_true = gradient_impedance(Mp, I_coeffs, lambda; reactive=reactive)
+        g_true = gradient_impedance(Mp_eff, I_coeffs, lambda; reactive=reactive)
 
         # For minimization: g = g_true; for maximization: g = -g_true
         g = sense .* g_true
@@ -135,8 +191,16 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
 
         for ls in 1:20
             theta_trial = project!(theta_old + alpha * d)
-            Z_trial = assemble_full_Z(Z_efie, Mp, theta_trial; reactive=reactive)
-            I_trial = Z_trial \ v
+            Z_trial_raw = assemble_full_Z(Z_efie, Mp, theta_trial; reactive=reactive)
+            Z_trial, _, _ = prepare_conditioned_system(
+                Z_trial_raw,
+                v;
+                regularization_alpha=regularization_alpha,
+                regularization_R=R_mat,
+                preconditioner_M=precond_M_eff,
+                preconditioner_factor=precond_fac,
+            )
+            I_trial = Z_trial \ rhs_eff_base
             J_trial_internal = sense * real(dot(I_trial, Q * I_trial))
 
             if J_trial_internal <= J_internal + 1e-4 * alpha * dot(g, d)
@@ -179,7 +243,14 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
                               verbose::Bool=true,
                               reactive::Bool=false,
                               lb=nothing,
-                              ub=nothing)
+                              ub=nothing,
+                              regularization_alpha::Float64=0.0,
+                              regularization_R=nothing,
+                              preconditioner_M=nothing,
+                              preconditioning::Symbol=:off,
+                              auto_precondition_n_threshold::Int=256,
+                              iterative_solver::Bool=false,
+                              auto_precondition_eps_rel::Float64=1e-6)
     theta = copy(theta0)
 
     function project!(x)
@@ -189,6 +260,30 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
     end
     project!(theta)
 
+    # Conditioning setup (constant across iterations)
+    R_mat = if regularization_alpha == 0.0
+        nothing
+    else
+        regularization_R === nothing ? make_mass_regularizer(Mp) : Matrix{ComplexF64}(regularization_R)
+    end
+
+    precond_M_eff, precond_enabled, precond_reason = select_preconditioner(
+        Mp;
+        mode=preconditioning,
+        preconditioner_M=preconditioner_M,
+        n_threshold=auto_precondition_n_threshold,
+        iterative_solver=iterative_solver,
+        eps_rel=auto_precondition_eps_rel,
+    )
+    verbose && (preconditioning == :auto || preconditioner_M !== nothing || precond_enabled) &&
+        println("  preconditioning: ", precond_enabled ? "ON ($precond_reason)" : "OFF ($precond_reason)")
+
+    Mp_eff, precond_fac = transform_patch_matrices(
+        Mp;
+        preconditioner_M=precond_M_eff,
+    )
+    rhs_eff_base = precond_fac === nothing ? Vector{ComplexF64}(v) : (precond_fac \ Vector{ComplexF64}(v))
+
     s_list = Vector{Vector{Float64}}()
     y_list = Vector{Vector{Float64}}()
     trace = Vector{NamedTuple{(:iter, :J, :gnorm), Tuple{Int,Float64,Float64}}}()
@@ -197,8 +292,16 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
     g_old = zeros(length(theta))
 
     for iter in 1:maxiter
-        Z = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
-        I_c = Z \ v
+        Z_raw = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
+        Z, _, _ = prepare_conditioned_system(
+            Z_raw,
+            v;
+            regularization_alpha=regularization_alpha,
+            regularization_R=R_mat,
+            preconditioner_M=precond_M_eff,
+            preconditioner_factor=precond_fac,
+        )
+        I_c = Z \ rhs_eff_base
 
         # Directivity ratio
         f_val = real(dot(I_c, Q_target * I_c))
@@ -209,8 +312,8 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
         # ∂(f/g)/∂θ = (g·∂f/∂θ - f·∂g/∂θ) / g²
         lam_t = Z' \ (Q_target * I_c)
         lam_a = Z' \ (Q_total * I_c)
-        g_f = gradient_impedance(Mp, I_c, lam_t; reactive=reactive)
-        g_g = gradient_impedance(Mp, I_c, lam_a; reactive=reactive)
+        g_f = gradient_impedance(Mp_eff, I_c, lam_t; reactive=reactive)
+        g_g = gradient_impedance(Mp_eff, I_c, lam_a; reactive=reactive)
         g_true = (g_val .* g_f .- f_val .* g_g) ./ (g_val^2)
 
         # For L-BFGS we minimize -J_ratio, so g_lbfgs = -g_true
@@ -268,8 +371,16 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
         # Line search on J_ratio directly
         for ls in 1:20
             theta_trial = project!(theta_old + alpha_ls * d)
-            Z_trial = assemble_full_Z(Z_efie, Mp, theta_trial; reactive=reactive)
-            I_trial = Z_trial \ v
+            Z_trial_raw = assemble_full_Z(Z_efie, Mp, theta_trial; reactive=reactive)
+            Z_trial, _, _ = prepare_conditioned_system(
+                Z_trial_raw,
+                v;
+                regularization_alpha=regularization_alpha,
+                regularization_R=R_mat,
+                preconditioner_M=precond_M_eff,
+                preconditioner_factor=precond_fac,
+            )
+            I_trial = Z_trial \ rhs_eff_base
             f_trial = real(dot(I_trial, Q_target * I_trial))
             g_trial = real(dot(I_trial, Q_total * I_trial))
             J_trial = f_trial / g_trial

@@ -439,9 +439,15 @@ df_pec_julia = CSV.read(joinpath(DATADIR, "beam_steer_farfield.csv"), DataFrame)
 df_pec_bempp = CSV.read(joinpath(DATADIR, "bempp_pec_farfield.csv"), DataFrame)
 df_imp_julia = CSV.read(joinpath(DATADIR, "julia_impedance_farfield.csv"), DataFrame)
 df_imp_bempp = CSV.read(joinpath(DATADIR, "bempp_impedance_farfield.csv"), DataFrame)
+df_imp_beam = CSV.read(joinpath(DATADIR, "impedance_validation_matrix_summary_paper_default.csv"), DataFrame)
 
 pec_cv = crossval_metrics(df_pec_julia, :dir_pec_dBi, df_pec_bempp, :dir_bempp_dBi)
 imp_cv = crossval_metrics(df_imp_julia, :dir_julia_imp_dBi, df_imp_bempp, :dir_bempp_imp_dBi)
+
+n_beam_cases = nrow(df_imp_beam)
+n_pass_main_theta = count(df_imp_beam.pass_main_theta_le_3deg)
+n_pass_main_level = count(df_imp_beam.pass_main_level_le_1p5db)
+n_pass_sll = count(df_imp_beam.pass_sll_le_3db)
 
 println("  Max grad rel. err (reference): $max_grad_ref")
 println("  Max grad rel. err (mesh sweep): $max_grad_mesh")
@@ -450,6 +456,7 @@ println("  Nominal J_opt/J_pec (%): $J_opt_nom / $J_pec_nom")
 println("  +2% freq peak theta (deg): $peak_theta_p2")
 println("  PEC CV RMSE / near-target |ΔD| (dB): $(pec_cv.rmse) / $(pec_cv.target_mean_abs)")
 println("  IMP CV RMSE / near-target |ΔD| (dB): $(imp_cv.rmse) / $(imp_cv.target_mean_abs)")
+println("  Beam-centric passes (main θ / main L / SLL): $n_pass_main_theta/$n_beam_cases, $n_pass_main_level/$n_beam_cases, $n_pass_sll/$n_beam_cases")
 
 # These checks track manuscript quantitative claims.
 @assert max_grad_ref < 3e-7
@@ -458,7 +465,116 @@ println("  IMP CV RMSE / near-target |ΔD| (dB): $(imp_cv.rmse) / $(imp_cv.targe
 @assert J_opt_nom > J_pec_nom
 @assert peak_theta_p2 < 5.0
 @assert pec_cv.target_mean_abs < 0.5
-@assert imp_cv.target_mean_abs < 3.0
+@assert n_pass_main_theta == n_beam_cases
+@assert n_pass_main_level == n_beam_cases
+@assert n_pass_sll == n_beam_cases
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 12: Conditioning / preconditioning consistency
+# ─────────────────────────────────────────────────
+println("\n── Test 12: Conditioning and preconditioning ──")
+
+theta_c = copy(theta_real)
+Z_raw = assemble_full_Z(Z_efie, Mp, theta_c)
+I_raw = Z_raw \ v
+
+# Build mass-based regularizer and left preconditioner
+R_mass = make_mass_regularizer(Mp)
+M_left = make_left_preconditioner(Mp; eps_rel=1e-6)
+
+# Auto-preconditioning selector behavior
+M_auto_off, enabled_auto_off, reason_auto_off = select_preconditioner(
+    Mp;
+    mode=:auto,
+    n_threshold=10_000,
+    iterative_solver=false,
+)
+println("  Auto preconditioning (high threshold): enabled=$enabled_auto_off ($reason_auto_off)")
+@assert !enabled_auto_off
+@assert M_auto_off === nothing
+
+M_auto_on, enabled_auto_on, reason_auto_on = select_preconditioner(
+    Mp;
+    mode=:auto,
+    n_threshold=1,
+    iterative_solver=false,
+    eps_rel=1e-6,
+)
+println("  Auto preconditioning (low threshold): enabled=$enabled_auto_on ($reason_auto_on)")
+@assert enabled_auto_on
+@assert M_auto_on !== nothing
+
+# Left-preconditioned system should preserve the same solution
+Z_pre, v_pre, fac_pre = prepare_conditioned_system(
+    Z_raw,
+    v;
+    regularization_alpha=0.0,
+    regularization_R=nothing,
+    preconditioner_M=M_left,
+)
+I_pre = Z_pre \ v_pre
+rel_I_pre = norm(I_pre - I_raw) / max(norm(I_raw), 1e-30)
+println("  Left-preconditioned solution mismatch: $rel_I_pre")
+@assert rel_I_pre < 1e-10
+
+# Auto-selected preconditioner (activated) should also preserve the solution
+Z_pre_auto, v_pre_auto, _ = prepare_conditioned_system(
+    Z_raw,
+    v;
+    regularization_alpha=0.0,
+    regularization_R=nothing,
+    preconditioner_M=M_auto_on,
+)
+I_pre_auto = Z_pre_auto \ v_pre_auto
+rel_I_pre_auto = norm(I_pre_auto - I_raw) / max(norm(I_raw), 1e-30)
+println("  Auto-preconditioned solution mismatch: $rel_I_pre_auto")
+@assert rel_I_pre_auto < 1e-10
+
+# Regularization should alter the solve (for nonzero alpha)
+alpha_reg = 1e-3
+Z_reg, v_reg, _ = prepare_conditioned_system(
+    Z_raw,
+    v;
+    regularization_alpha=alpha_reg,
+    regularization_R=R_mass,
+    preconditioner_M=nothing,
+)
+I_reg = Z_reg \ v_reg
+rel_I_reg = norm(I_reg - I_raw) / max(norm(I_raw), 1e-30)
+println("  Regularized solution change (alpha=$alpha_reg): $rel_I_reg")
+@assert rel_I_reg > 1e-9
+
+# Adjoint gradient with left preconditioning should match FD on the
+# equivalently preconditioned system objective.
+Mp_pre, fac_pre = transform_patch_matrices(
+    Mp;
+    preconditioner_M=M_left,
+    preconditioner_factor=fac_pre,
+)
+lambda_pre = solve_adjoint(Z_pre, Q, I_pre)
+g_pre = gradient_impedance(Mp_pre, I_pre, lambda_pre)
+
+function J_of_theta_pre(theta_vec)
+    Z_t = assemble_full_Z(Z_efie, Mp, theta_vec)
+    Zp, vp, _ = prepare_conditioned_system(
+        Z_t,
+        v;
+        regularization_alpha=0.0,
+        regularization_R=nothing,
+        preconditioner_M=M_left,
+        preconditioner_factor=fac_pre,
+    )
+    I_t = Zp \ vp
+    return real(dot(I_t, Q * I_t))
+end
+
+p_pre = 1
+g_fd_pre = fd_grad(J_of_theta_pre, theta_c, p_pre; h=1e-5)
+rel_g_pre = abs(g_pre[p_pre] - g_fd_pre) / max(abs(g_pre[p_pre]), 1e-30)
+println("  Preconditioned gradient rel. error (p=$p_pre): $rel_g_pre")
+@assert rel_g_pre < 1e-4
 
 println("  PASS ✓")
 
