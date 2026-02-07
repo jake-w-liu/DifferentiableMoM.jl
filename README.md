@@ -10,6 +10,7 @@ From this folder:
 julia --project=. test/runtests.jl
 julia --project=. examples/ex_beam_steer.jl
 julia --project=. plot.jl
+julia --project=. validation/paper/generate_consistency_report.jl
 ```
 
 ## Repository Layout
@@ -29,3 +30,19 @@ julia --project=. plot.jl
 ## Bempp Cross-Validation
 
 See `validation/bempp/README.md` for setup and commands.
+For acceptance-focused impedance external checks, use
+`validation/bempp/run_impedance_validation_matrix.py`.
+For convention-reconciliation sweeps, use
+`validation/bempp/sweep_impedance_conventions.py`.
+
+## Paper Consistency Snapshot
+
+Generate a manuscript-facing metrics snapshot from tracked CSV outputs:
+
+```bash
+julia --project=. validation/paper/generate_consistency_report.jl
+```
+
+This writes:
+- `data/paper_metrics_snapshot.csv`
+- `data/paper_consistency_report.md`

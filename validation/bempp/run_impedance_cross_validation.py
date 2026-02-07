@@ -6,10 +6,24 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
+import sys
 from typing import Tuple
 
 import numpy as np
+
+
+def ensure_gmsh_on_path() -> None:
+    venv_bin = str(Path(sys.executable).parent)
+    path = os.environ.get("PATH", "")
+    entries = path.split(os.pathsep) if path else []
+    if venv_bin not in entries:
+        os.environ["PATH"] = venv_bin + os.pathsep + path
+
+
+ensure_gmsh_on_path()
+
 
 try:
     import bempp_cl.api as bempp
@@ -50,8 +64,15 @@ def run_bempp_impedance(
     aperture_lambda: float,
     mesh_step_lambda: float,
     zs_imag_ohm: float,
+    theta_inc_deg: float,
+    phi_inc_deg: float,
     n_theta: int,
     n_phi: int,
+    op_sign: str,
+    rhs_cross: str,
+    rhs_sign: float,
+    phase_sign: str,
+    zs_scale: float,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
     lambda0 = C0 / freq_hz
     k0 = 2.0 * np.pi / lambda0
@@ -72,17 +93,51 @@ def run_bempp_impedance(
 
     electric = bempp.operators.boundary.maxwell.electric_field(rwg, rwg, snc, k0)
     identity = bempp.operators.boundary.sparse.identity(rwg, rwg, snc)
-    zs = 1j * zs_imag_ohm
-    op = electric - zs * identity
+    zs = 1j * zs_imag_ohm * zs_scale
+    if op_sign == "minus":
+        op = electric - zs * identity
+    elif op_sign == "plus":
+        op = electric + zs * identity
+    else:
+        raise ValueError(f"Unknown op_sign: {op_sign}")
 
-    direction = np.array([0.0, 0.0, -1.0])
-    polarization = np.array([1.0, 0.0, 0.0], dtype=np.complex128)
+    theta_inc = np.deg2rad(theta_inc_deg)
+    phi_inc = np.deg2rad(phi_inc_deg)
+
+    direction = np.array(
+        [
+            np.sin(theta_inc) * np.cos(phi_inc),
+            np.sin(theta_inc) * np.sin(phi_inc),
+            -np.cos(theta_inc),
+        ],
+        dtype=float,
+    )
+    # Theta polarization unit vector, perpendicular to propagation direction.
+    polarization = np.array(
+        [
+            np.cos(theta_inc) * np.cos(phi_inc),
+            np.cos(theta_inc) * np.sin(phi_inc),
+            np.sin(theta_inc),
+        ],
+        dtype=np.complex128,
+    )
 
     @bempp.complex_callable
     def tangential_trace(x, n, domain_index, result):
-        phase = np.exp(1j * k0 * np.dot(direction, x))
+        if phase_sign == "plus":
+            phase = np.exp(1j * k0 * np.dot(direction, x))
+        elif phase_sign == "minus":
+            phase = np.exp(-1j * k0 * np.dot(direction, x))
+        else:
+            raise ValueError(f"Unknown phase_sign: {phase_sign}")
         e_inc = polarization * phase
-        result[:] = np.cross(e_inc, n)
+        if rhs_cross == "e_cross_n":
+            trace = np.cross(e_inc, n)
+        elif rhs_cross == "n_cross_e":
+            trace = np.cross(n, e_inc)
+        else:
+            raise ValueError(f"Unknown rhs_cross: {rhs_cross}")
+        result[:] = rhs_sign * trace
 
     rhs = bempp.GridFunction(rwg, fun=tangential_trace, dual_space=snc)
     surface_current = lu(op, rhs)
@@ -108,6 +163,14 @@ def run_bempp_impedance(
         "mesh_step_lambda": mesh_step_lambda,
         "mesh_step_m": mesh_h,
         "zs_imag_ohm": zs_imag_ohm,
+        "zs_scale": zs_scale,
+        "zs_effective_imag_ohm": zs_imag_ohm * zs_scale,
+        "theta_inc_deg": theta_inc_deg,
+        "phi_inc_deg": phi_inc_deg,
+        "op_sign": op_sign,
+        "rhs_cross": rhs_cross,
+        "rhs_sign": rhs_sign,
+        "phase_sign": phase_sign,
         "n_theta": n_theta,
         "n_phi": n_phi,
         "dtheta_deg": float(np.rad2deg(steps[0])),
@@ -147,8 +210,16 @@ def main() -> None:
     parser.add_argument("--aperture-lambda", type=float, default=4.0)
     parser.add_argument("--mesh-step-lambda", type=float, default=1.0 / 3.0)
     parser.add_argument("--zs-imag-ohm", type=float, default=200.0)
+    parser.add_argument("--theta-inc-deg", type=float, default=0.0)
+    parser.add_argument("--phi-inc-deg", type=float, default=0.0)
     parser.add_argument("--n-theta", type=int, default=180)
     parser.add_argument("--n-phi", type=int, default=72)
+    parser.add_argument("--op-sign", choices=["minus", "plus"], default="minus")
+    parser.add_argument("--rhs-cross", choices=["e_cross_n", "n_cross_e"], default="e_cross_n")
+    parser.add_argument("--rhs-sign", type=float, default=1.0)
+    parser.add_argument("--phase-sign", choices=["plus", "minus"], default="plus")
+    parser.add_argument("--zs-scale", type=float, default=1.0)
+    parser.add_argument("--output-prefix", type=str, default="impedance")
     parser.add_argument(
         "--project-root",
         type=Path,
@@ -165,13 +236,20 @@ def main() -> None:
         aperture_lambda=args.aperture_lambda,
         mesh_step_lambda=args.mesh_step_lambda,
         zs_imag_ohm=args.zs_imag_ohm,
+        theta_inc_deg=args.theta_inc_deg,
+        phi_inc_deg=args.phi_inc_deg,
         n_theta=args.n_theta,
         n_phi=args.n_phi,
+        op_sign=args.op_sign,
+        rhs_cross=args.rhs_cross,
+        rhs_sign=args.rhs_sign,
+        phase_sign=args.phase_sign,
+        zs_scale=args.zs_scale,
     )
 
-    farfield_csv = data_dir / "bempp_impedance_farfield.csv"
-    cut_csv = data_dir / "bempp_impedance_cut_phi0.csv"
-    meta_json = data_dir / "bempp_impedance_metadata.json"
+    farfield_csv = data_dir / f"bempp_{args.output_prefix}_farfield.csv"
+    cut_csv = data_dir / f"bempp_{args.output_prefix}_cut_phi0.csv"
+    meta_json = data_dir / f"bempp_{args.output_prefix}_metadata.json"
 
     write_farfield_csv(farfield_csv, theta, phi, dir_dbi)
     write_phi0_cut_csv(cut_csv, theta, phi, dir_dbi, args.n_phi)
@@ -188,4 +266,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

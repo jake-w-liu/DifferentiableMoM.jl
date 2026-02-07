@@ -33,7 +33,18 @@ function parse_int_flag(args::Vector{String}, name::String, default::Int)
     return default
 end
 
-freq = 3e9
+function parse_string_flag(args::Vector{String}, name::String, default::String)
+    for i in eachindex(args)
+        if args[i] == name
+            i < length(args) || error("Missing value for $(name)")
+            return args[i + 1]
+        end
+    end
+    return default
+end
+
+freq_ghz = parse_float_flag(ARGS, "--freq-ghz", 3.0)
+freq = freq_ghz * 1e9
 c0 = 299792458.0
 lambda0 = c0 / freq
 k = 2π / lambda0
@@ -46,6 +57,27 @@ Nx, Ny = 12, 12
 theta_uniform = parse_float_flag(ARGS, "--theta-ohm", 200.0)  # Zs = i*theta_uniform [ohm]
 n_theta = parse_int_flag(ARGS, "--n-theta", 180)
 n_phi = parse_int_flag(ARGS, "--n-phi", 72)
+theta_inc_deg = parse_float_flag(ARGS, "--theta-inc-deg", 0.0)
+phi_inc_deg = parse_float_flag(ARGS, "--phi-inc-deg", 0.0)
+output_prefix = parse_string_flag(ARGS, "--output-prefix", "impedance")
+
+theta_inc = deg2rad(theta_inc_deg)
+phi_inc = deg2rad(phi_inc_deg)
+
+# Propagation direction points toward -z at normal incidence.
+k_hat = Vec3(
+    sin(theta_inc) * cos(phi_inc),
+    sin(theta_inc) * sin(phi_inc),
+    -cos(theta_inc),
+)
+
+# Choose theta-polarization unit vector so E ⟂ k_hat.
+pol_inc = normalize(Vec3(
+    cos(theta_inc) * cos(phi_inc),
+    cos(theta_inc) * sin(phi_inc),
+    sin(theta_inc),
+))
+k_vec = k * k_hat
 
 mesh = make_rect_plate(Lx, Ly, Nx, Ny)
 rwg = build_rwg(mesh)
@@ -53,6 +85,9 @@ Nt = ntriangles(mesh)
 N = rwg.nedges
 
 println("Julia impedance-reference case")
+println("  f = $(freq_ghz) GHz")
+println("  theta_inc = $(theta_inc_deg) deg, phi_inc = $(phi_inc_deg) deg")
+println("  Zs = i*$(theta_uniform) ohm")
 println("  Mesh: N=$N RWG, Nt=$Nt triangles")
 
 Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=3, eta0=eta0)
@@ -62,9 +97,7 @@ Mp = precompute_patch_mass(mesh, rwg, partition; quad_order=3)
 theta_vec = fill(theta_uniform, Nt)
 Z_imp = assemble_full_Z(Z_efie, Mp, theta_vec; reactive=true)
 
-k_vec = Vec3(0.0, 0.0, -k)
 E0 = 1.0
-pol_inc = Vec3(1.0, 0.0, 0.0)
 v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
 I_imp = Z_imp \ v
 
@@ -95,15 +128,15 @@ df_ff = DataFrame(
     dir_julia_imp_dBi = dir_imp_dBi,
     in_target = in_target,
 )
-CSV.write(joinpath(DATADIR, "julia_impedance_farfield.csv"), df_ff)
+CSV.write(joinpath(DATADIR, "julia_$(output_prefix)_farfield.csv"), df_ff)
 
-dphi = 2π / 72
+dphi = 2π / n_phi
 phi0_idx = [q for q in 1:NΩ if min(grid.phi[q], 2π - grid.phi[q]) <= dphi / 2 + 1e-10]
 df_cut = DataFrame(
     theta_deg = rad2deg.(grid.theta[phi0_idx]),
     dir_julia_imp_dBi = dir_imp_dBi[phi0_idx],
 )
-CSV.write(joinpath(DATADIR, "julia_impedance_cut_phi0.csv"), df_cut)
+CSV.write(joinpath(DATADIR, "julia_$(output_prefix)_cut_phi0.csv"), df_cut)
 
-println("Saved data/julia_impedance_farfield.csv")
-println("Saved data/julia_impedance_cut_phi0.csv")
+println("Saved data/julia_$(output_prefix)_farfield.csv")
+println("Saved data/julia_$(output_prefix)_cut_phi0.csv")
