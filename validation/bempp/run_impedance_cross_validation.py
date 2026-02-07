@@ -59,10 +59,60 @@ def spherical_sampling_grid(
     return theta_flat, phi_flat, directions, weights, np.array([dtheta, dphi])
 
 
+def write_structured_plate_msh(path: Path, side: float, nx: int, ny: int) -> None:
+    """Write a Julia-matching structured rectangular plate mesh in Gmsh v2 format."""
+    dx = side / nx
+    dy = side / ny
+
+    nodes = []
+    node_id = 0
+    for jy in range(ny + 1):
+        y = -0.5 * side + jy * dy
+        for jx in range(nx + 1):
+            x = -0.5 * side + jx * dx
+            node_id += 1
+            nodes.append((node_id, x, y, 0.0))
+
+    def vid(ix: int, iy: int) -> int:
+        return iy * (nx + 1) + ix + 1
+
+    elems = []
+    elem_id = 0
+    for jy in range(ny):
+        for jx in range(nx):
+            v1 = vid(jx, jy)
+            v2 = vid(jx + 1, jy)
+            v3 = vid(jx + 1, jy + 1)
+            v4 = vid(jx, jy + 1)
+
+            elem_id += 1
+            elems.append((elem_id, v1, v2, v3))
+            elem_id += 1
+            elems.append((elem_id, v1, v3, v4))
+
+    with path.open("w", encoding="utf-8") as f:
+        f.write("$MeshFormat\n")
+        f.write("2.2 0 8\n")
+        f.write("$EndMeshFormat\n")
+        f.write("$Nodes\n")
+        f.write(f"{len(nodes)}\n")
+        for nid, x, y, z in nodes:
+            f.write(f"{nid} {x:.16e} {y:.16e} {z:.16e}\n")
+        f.write("$EndNodes\n")
+        f.write("$Elements\n")
+        f.write(f"{len(elems)}\n")
+        for eid, n1, n2, n3 in elems:
+            f.write(f"{eid} 2 0 {n1} {n2} {n3}\n")
+        f.write("$EndElements\n")
+
+
 def run_bempp_impedance(
     freq_hz: float,
     aperture_lambda: float,
     mesh_step_lambda: float,
+    mesh_mode: str,
+    nx: int,
+    ny: int,
     zs_imag_ohm: float,
     theta_inc_deg: float,
     phi_inc_deg: float,
@@ -79,15 +129,37 @@ def run_bempp_impedance(
     side = aperture_lambda * lambda0
     mesh_h = mesh_step_lambda * lambda0
 
-    corners = np.array(
-        [
-            [-side / 2.0, -side / 2.0, 0.0],
-            [side / 2.0, -side / 2.0, 0.0],
-            [side / 2.0, side / 2.0, 0.0],
-            [-side / 2.0, side / 2.0, 0.0],
-        ]
-    )
-    grid = bempp.shapes.screen(corners=corners, h=mesh_h)
+    if mesh_mode == "gmsh_screen":
+        corners = np.array(
+            [
+                [-side / 2.0, -side / 2.0, 0.0],
+                [side / 2.0, -side / 2.0, 0.0],
+                [side / 2.0, side / 2.0, 0.0],
+                [-side / 2.0, side / 2.0, 0.0],
+            ]
+        )
+        grid = bempp.shapes.screen(corners=corners, h=mesh_h)
+        mesh_descriptor = {
+            "mesh_mode": mesh_mode,
+            "mesh_step_lambda": mesh_step_lambda,
+            "mesh_step_m": mesh_h,
+        }
+    elif mesh_mode == "structured":
+        mesh_file = Path(__file__).resolve().parents[2] / "data" / f"structured_plate_nx{nx}_ny{ny}.msh"
+        mesh_file.parent.mkdir(parents=True, exist_ok=True)
+        write_structured_plate_msh(mesh_file, side=side, nx=nx, ny=ny)
+        grid = bempp.import_grid(str(mesh_file))
+        mesh_descriptor = {
+            "mesh_mode": mesh_mode,
+            "structured_nx": nx,
+            "structured_ny": ny,
+            "mesh_file": str(mesh_file),
+            "mesh_step_lambda": side / (nx * lambda0),
+            "mesh_step_m": side / nx,
+        }
+    else:
+        raise ValueError(f"Unknown mesh_mode: {mesh_mode}")
+
     rwg = bempp.function_space(grid, "RWG", 0)
     snc = bempp.function_space(grid, "SNC", 0)
 
@@ -160,8 +232,7 @@ def run_bempp_impedance(
         "wavenumber_rad_per_m": k0,
         "aperture_lambda": aperture_lambda,
         "aperture_side_m": side,
-        "mesh_step_lambda": mesh_step_lambda,
-        "mesh_step_m": mesh_h,
+        **mesh_descriptor,
         "zs_imag_ohm": zs_imag_ohm,
         "zs_scale": zs_scale,
         "zs_effective_imag_ohm": zs_imag_ohm * zs_scale,
@@ -209,6 +280,9 @@ def main() -> None:
     parser.add_argument("--freq-ghz", type=float, default=3.0)
     parser.add_argument("--aperture-lambda", type=float, default=4.0)
     parser.add_argument("--mesh-step-lambda", type=float, default=1.0 / 3.0)
+    parser.add_argument("--mesh-mode", choices=["gmsh_screen", "structured"], default="gmsh_screen")
+    parser.add_argument("--nx", type=int, default=12, help="Structured mesh x-cells when --mesh-mode structured")
+    parser.add_argument("--ny", type=int, default=12, help="Structured mesh y-cells when --mesh-mode structured")
     parser.add_argument("--zs-imag-ohm", type=float, default=200.0)
     parser.add_argument("--theta-inc-deg", type=float, default=0.0)
     parser.add_argument("--phi-inc-deg", type=float, default=0.0)
@@ -235,6 +309,9 @@ def main() -> None:
         freq_hz=args.freq_ghz * 1e9,
         aperture_lambda=args.aperture_lambda,
         mesh_step_lambda=args.mesh_step_lambda,
+        mesh_mode=args.mesh_mode,
+        nx=args.nx,
+        ny=args.ny,
         zs_imag_ohm=args.zs_imag_ohm,
         theta_inc_deg=args.theta_inc_deg,
         phi_inc_deg=args.phi_inc_deg,

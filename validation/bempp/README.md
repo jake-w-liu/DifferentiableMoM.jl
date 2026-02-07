@@ -63,12 +63,32 @@ python validation/bempp/compare_impedance_to_julia.py \
   --output-prefix impedance --target-theta-deg 30
 ```
 
+Use a Julia-matching structured plate mesh in Bempp (recommended for
+apples-to-apples checks):
+
+```bash
+python validation/bempp/run_impedance_cross_validation.py \
+  --freq-ghz 3.0 --zs-imag-ohm 200 --theta-inc-deg 0 --phi-inc-deg 0 \
+  --mesh-mode structured --nx 12 --ny 12 \
+  --output-prefix impedance
+```
+
 ### Impedance-Loaded Validation Matrix (Acceptance Guide)
 
 Run the 6-case impedance matrix and produce aggregate summary artifacts:
 
 ```bash
 python validation/bempp/run_impedance_validation_matrix.py
+```
+
+The matrix runner defaults to a refined Bempp screen mesh
+`--mesh-step-lambda 0.2` for stronger impedance cross-validation.
+
+Matrix run with structured Bempp mesh:
+
+```bash
+python validation/bempp/run_impedance_validation_matrix.py \
+  --mesh-mode structured --nx 12 --ny 12
 ```
 
 Dry-run command preview:
@@ -112,6 +132,7 @@ python validation/bempp/plot_impedance_comparison.py \
   --julia-prefix case03_z200_n0_f3p00 \
   --bempp-prefix case03_z200_n0_f3p00 \
   --output-prefix case03_z200_diag \
+  --theta-min 0 --theta-max 90 \
   --title "Impedance case: Zs=i200 Ohm, f=3.0 GHz"
 ```
 
