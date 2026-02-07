@@ -5,9 +5,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 from pathlib import Path
 from typing import Dict, List, Tuple
 
+os.environ.setdefault("MPLCONFIGDIR", "/tmp/mpl")
+os.environ.setdefault("XDG_CACHE_HOME", "/tmp")
+
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -104,6 +110,8 @@ def main() -> None:
     parser.add_argument("--output-prefix", default="impedance_diag")
     parser.add_argument("--title", default="")
     parser.add_argument("--delta-clim", type=float, default=12.0)
+    parser.add_argument("--theta-min", type=float, default=0.0)
+    parser.add_argument("--theta-max", type=float, default=90.0)
     args = parser.parse_args()
 
     data_dir = args.project_root / "data"
@@ -141,6 +149,7 @@ def main() -> None:
     ax.set_xlabel(r"$\theta$ (deg)")
     ax.set_ylabel("Directivity (dBi)")
     ax.set_title(r"E-plane cut ($\phi \approx 0^\circ$)")
+    ax.set_xlim(args.theta_min, args.theta_max)
     ax.grid(True, alpha=0.25)
     ax.legend(loc="best")
 
@@ -150,6 +159,7 @@ def main() -> None:
     ax.set_xlabel(r"$\theta$ (deg)")
     ax.set_ylabel(r"$\Delta D$ (dB)")
     ax.set_title(r"Cut error: Bempp$-$Julia")
+    ax.set_xlim(args.theta_min, args.theta_max)
     ax.grid(True, alpha=0.25)
 
     ax = axes[1, 0]
@@ -165,6 +175,7 @@ def main() -> None:
     ax.set_xlabel(r"$\phi$ (deg)")
     ax.set_ylabel(r"$\theta$ (deg)")
     ax.set_title(r"2D error map $\Delta D$ (dB)")
+    ax.set_ylim(args.theta_min, args.theta_max)
     cbar = fig.colorbar(im, ax=ax, shrink=0.9)
     cbar.set_label(r"$\Delta D$ (dB)")
 
