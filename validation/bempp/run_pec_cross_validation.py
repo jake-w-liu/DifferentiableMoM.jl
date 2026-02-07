@@ -18,10 +18,24 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 from pathlib import Path
+import sys
 from typing import Tuple
 
 import numpy as np
+
+
+def ensure_gmsh_on_path() -> None:
+    venv_bin = str(Path(sys.executable).parent)
+    path = os.environ.get("PATH", "")
+    entries = path.split(os.pathsep) if path else []
+    if venv_bin not in entries:
+        os.environ["PATH"] = venv_bin + os.pathsep + path
+
+
+ensure_gmsh_on_path()
+
 
 try:
     import bempp_cl.api as bempp

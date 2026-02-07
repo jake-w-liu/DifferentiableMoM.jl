@@ -385,6 +385,84 @@ end
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 11: Paper-consistency metrics from tracked data
+# ─────────────────────────────────────────────────
+println("\n── Test 11: Paper-consistency metrics ──")
+
+meanval(x) = sum(x) / length(x)
+
+function crossval_metrics(
+    df_ref::DataFrame,
+    ref_col::Symbol,
+    df_cmp::DataFrame,
+    cmp_col::Symbol;
+    target_theta_deg::Float64=30.0,
+)
+    left = select(df_ref, :theta_deg, :phi_deg, ref_col)
+    right = select(df_cmp, :theta_deg, :phi_deg, cmp_col)
+    merged = innerjoin(left, right, on=[:theta_deg, :phi_deg])
+
+    delta = merged[!, cmp_col] .- merged[!, ref_col]
+    abs_delta = abs.(delta)
+
+    theta_unique = unique(merged.theta_deg)
+    theta_near = theta_unique[argmin(abs.(theta_unique .- target_theta_deg))]
+    idx_target = findall(t -> abs(t - theta_near) < 1e-12, merged.theta_deg)
+
+    return (
+        n = nrow(merged),
+        rmse = sqrt(sum(abs2, delta) / length(delta)),
+        mean_abs = meanval(abs_delta),
+        target_theta_near = theta_near,
+        target_mean_abs = meanval(abs_delta[idx_target]),
+    )
+end
+
+conv = CSV.read(joinpath(DATADIR, "convergence_study.csv"), DataFrame)
+grad = CSV.read(joinpath(DATADIR, "gradient_verification.csv"), DataFrame)
+rob = CSV.read(joinpath(DATADIR, "robustness_sweep.csv"), DataFrame)
+
+max_grad_mesh = maximum(conv.max_grad_err)
+min_energy_ratio = minimum(conv.energy_ratio)
+max_grad_ref = maximum(grad.rel_error)
+
+idx_nom = findfirst(rob.case .== "f_nom")
+idx_p2 = findfirst(rob.case .== "f_+2pct")
+@assert idx_nom !== nothing
+@assert idx_p2 !== nothing
+
+J_opt_nom = rob.J_opt_pct[idx_nom]
+J_pec_nom = rob.J_pec_pct[idx_nom]
+peak_theta_p2 = rob.peak_theta_opt_deg[idx_p2]
+
+df_pec_julia = CSV.read(joinpath(DATADIR, "beam_steer_farfield.csv"), DataFrame)
+df_pec_bempp = CSV.read(joinpath(DATADIR, "bempp_pec_farfield.csv"), DataFrame)
+df_imp_julia = CSV.read(joinpath(DATADIR, "julia_impedance_farfield.csv"), DataFrame)
+df_imp_bempp = CSV.read(joinpath(DATADIR, "bempp_impedance_farfield.csv"), DataFrame)
+
+pec_cv = crossval_metrics(df_pec_julia, :dir_pec_dBi, df_pec_bempp, :dir_bempp_dBi)
+imp_cv = crossval_metrics(df_imp_julia, :dir_julia_imp_dBi, df_imp_bempp, :dir_bempp_imp_dBi)
+
+println("  Max grad rel. err (reference): $max_grad_ref")
+println("  Max grad rel. err (mesh sweep): $max_grad_mesh")
+println("  Min energy ratio: $min_energy_ratio")
+println("  Nominal J_opt/J_pec (%): $J_opt_nom / $J_pec_nom")
+println("  +2% freq peak theta (deg): $peak_theta_p2")
+println("  PEC CV RMSE / near-target |ΔD| (dB): $(pec_cv.rmse) / $(pec_cv.target_mean_abs)")
+println("  IMP CV RMSE / near-target |ΔD| (dB): $(imp_cv.rmse) / $(imp_cv.target_mean_abs)")
+
+# These checks track manuscript quantitative claims.
+@assert max_grad_ref < 3e-7
+@assert max_grad_mesh < 3e-6
+@assert min_energy_ratio > 0.98
+@assert J_opt_nom > J_pec_nom
+@assert peak_theta_p2 < 5.0
+@assert pec_cv.target_mean_abs < 0.5
+@assert imp_cv.target_mean_abs < 3.0
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)

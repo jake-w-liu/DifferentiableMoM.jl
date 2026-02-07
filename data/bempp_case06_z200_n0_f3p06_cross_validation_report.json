@@ -1,0 +1,28 @@
+{
+  "num_common_points": 12960,
+  "n_phi_detected": 72,
+  "global": {
+    "mean_diff_db": -5.015779251285083,
+    "mean_abs_diff_db": 6.640508813909441,
+    "rmse_db": 9.78343640521601,
+    "max_abs_diff_db": 43.119386389881
+  },
+  "phi0_cut": {
+    "mean_diff_db": -3.5991675250076267,
+    "mean_abs_diff_db": 7.621672596157405,
+    "rmse_db": 10.807580854562916,
+    "max_abs_diff_db": 42.96445971672041
+  },
+  "near_broadside": {
+    "target_theta_deg": 0.0,
+    "nearest_theta_deg": 0.5,
+    "mean_abs_diff_db": 0.9684099400909914,
+    "max_abs_diff_db": 0.9706095343278456
+  },
+  "near_target": {
+    "target_theta_deg": 30.0,
+    "nearest_theta_deg": 29.5,
+    "mean_abs_diff_db": 6.897427100112669,
+    "max_abs_diff_db": 19.43750852893194
+  }
+}

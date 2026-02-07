@@ -89,14 +89,33 @@ def main() -> None:
         default=Path(__file__).resolve().parents[2],
         help="Project root containing data/.",
     )
+    parser.add_argument("--output-prefix", type=str, default="impedance")
+    parser.add_argument(
+        "--julia-prefix",
+        type=str,
+        default=None,
+        help="Prefix for Julia reference file (defaults to output-prefix)",
+    )
+    parser.add_argument(
+        "--bempp-prefix",
+        type=str,
+        default=None,
+        help="Prefix for Bempp file (defaults to output-prefix)",
+    )
     parser.add_argument("--target-theta-deg", type=float, default=30.0)
+    parser.add_argument("--max-rmse-db", type=float, default=None)
+    parser.add_argument("--max-abs-db", type=float, default=None)
     args = parser.parse_args()
 
     data_dir = args.project_root / "data"
-    julia_csv = data_dir / "julia_impedance_farfield.csv"
-    bempp_csv = data_dir / "bempp_impedance_farfield.csv"
-    report_json = data_dir / "bempp_impedance_cross_validation_report.json"
-    report_md = data_dir / "bempp_impedance_cross_validation_report.md"
+    julia_prefix = args.julia_prefix if args.julia_prefix is not None else args.output_prefix
+    bempp_prefix = args.bempp_prefix if args.bempp_prefix is not None else args.output_prefix
+
+    julia_csv = data_dir / f"julia_{julia_prefix}_farfield.csv"
+    bempp_csv = data_dir / f"bempp_{bempp_prefix}_farfield.csv"
+    report_prefix = args.output_prefix
+    report_json = data_dir / f"bempp_{report_prefix}_cross_validation_report.json"
+    report_md = data_dir / f"bempp_{report_prefix}_cross_validation_report.md"
 
     if not julia_csv.exists():
         raise SystemExit(f"Missing Julia reference file: {julia_csv}")
@@ -145,6 +164,22 @@ def main() -> None:
     print(f"Global max |delta|: {metrics['global']['max_abs_diff_db']:.4f} dB")
     print(f"Saved {report_json}")
     print(f"Saved {report_md}")
+
+    failed = False
+    if args.max_rmse_db is not None and metrics["global"]["rmse_db"] > args.max_rmse_db:
+        print(
+            f"FAIL: global RMSE {metrics['global']['rmse_db']:.4f} dB "
+            f"> threshold {args.max_rmse_db:.4f} dB"
+        )
+        failed = True
+    if args.max_abs_db is not None and metrics["global"]["max_abs_diff_db"] > args.max_abs_db:
+        print(
+            f"FAIL: global max abs diff {metrics['global']['max_abs_diff_db']:.4f} dB "
+            f"> threshold {args.max_abs_db:.4f} dB"
+        )
+        failed = True
+    if failed:
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":
