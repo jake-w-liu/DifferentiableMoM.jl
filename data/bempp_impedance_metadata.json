@@ -1,0 +1,17 @@
+{
+  "frequency_hz": 3000000000.0,
+  "lambda_m": 0.09993081933333334,
+  "wavenumber_rad_per_m": 62.87535065855045,
+  "aperture_lambda": 4.0,
+  "aperture_side_m": 0.39972327733333335,
+  "mesh_step_lambda": 0.3333333333333333,
+  "mesh_step_m": 0.03331027311111111,
+  "zs_imag_ohm": 2.0,
+  "n_theta": 180,
+  "n_phi": 72,
+  "dtheta_deg": 1.0,
+  "dphi_deg": 5.0,
+  "num_points": 12960,
+  "num_vertices": 198,
+  "num_elements": 346
+}
