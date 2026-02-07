@@ -39,6 +39,23 @@ CASES: List[ValidationCase] = [
     ValidationCase("case06_z200_n0_f3p06", 3.06, 200.0, 0.0, 0.0),
 ]
 
+CONVENTION_PROFILES: Dict[str, Dict[str, object]] = {
+    "paper_default": {
+        "op_sign": "minus",
+        "rhs_cross": "e_cross_n",
+        "rhs_sign": 1.0,
+        "phase_sign": "plus",
+        "zs_scale": 1.0,
+    },
+    "case03_sweep_best": {
+        "op_sign": "plus",
+        "rhs_cross": "e_cross_n",
+        "rhs_sign": 1.0,
+        "phase_sign": "plus",
+        "zs_scale": 1.0 / 376.730313668,
+    },
+}
+
 
 def run_cmd(cmd: List[str], cwd: Path, dry_run: bool) -> None:
     print("+", " ".join(cmd))
@@ -50,9 +67,6 @@ def run_cmd(cmd: List[str], cwd: Path, dry_run: bool) -> None:
     entries = path.split(os.pathsep) if path else []
     if venv_bin not in entries:
         env["PATH"] = venv_bin + os.pathsep + path
-    if cmd and cmd[0] == "julia":
-        env.setdefault("JULIA_DEPOT_PATH", "/tmp/codex_julia_depot")
-        env.setdefault("JULIA_PKG_PRECOMPILE_AUTO", "0")
     subprocess.run(cmd, cwd=str(cwd), check=True, env=env)
 
 
@@ -171,16 +185,29 @@ def main() -> None:
     parser.add_argument("--skip-julia", action="store_true")
     parser.add_argument("--skip-bempp", action="store_true")
     parser.add_argument("--skip-compare", action="store_true")
-    parser.add_argument("--bempp-op-sign", choices=["minus", "plus"], default="minus")
-    parser.add_argument("--bempp-rhs-cross", choices=["e_cross_n", "n_cross_e"], default="e_cross_n")
-    parser.add_argument("--bempp-rhs-sign", type=float, default=1.0)
-    parser.add_argument("--bempp-phase-sign", choices=["plus", "minus"], default="plus")
-    parser.add_argument("--bempp-zs-scale", type=float, default=1.0)
+    parser.add_argument(
+        "--convention-profile",
+        choices=sorted(CONVENTION_PROFILES.keys()),
+        default="paper_default",
+        help="Named Bempp impedance-convention profile to use by default.",
+    )
+    parser.add_argument("--bempp-op-sign", choices=["minus", "plus"], default=None)
+    parser.add_argument("--bempp-rhs-cross", choices=["e_cross_n", "n_cross_e"], default=None)
+    parser.add_argument("--bempp-rhs-sign", type=float, default=None)
+    parser.add_argument("--bempp-phase-sign", choices=["plus", "minus"], default=None)
+    parser.add_argument("--bempp-zs-scale", type=float, default=None)
     args = parser.parse_args()
 
     project_root = args.project_root.resolve()
     data_dir = project_root / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+    profile = CONVENTION_PROFILES[args.convention_profile]
+
+    effective_op_sign = args.bempp_op_sign if args.bempp_op_sign is not None else profile["op_sign"]
+    effective_rhs_cross = args.bempp_rhs_cross if args.bempp_rhs_cross is not None else profile["rhs_cross"]
+    effective_rhs_sign = args.bempp_rhs_sign if args.bempp_rhs_sign is not None else profile["rhs_sign"]
+    effective_phase_sign = args.bempp_phase_sign if args.bempp_phase_sign is not None else profile["phase_sign"]
+    effective_zs_scale = args.bempp_zs_scale if args.bempp_zs_scale is not None else profile["zs_scale"]
 
     summary_rows: List[Dict[str, object]] = []
 
@@ -239,15 +266,15 @@ def main() -> None:
                     "--mesh-step-lambda",
                     str(args.mesh_step_lambda),
                     "--op-sign",
-                    args.bempp_op_sign,
+                    str(effective_op_sign),
                     "--rhs-cross",
-                    args.bempp_rhs_cross,
+                    str(effective_rhs_cross),
                     "--rhs-sign",
-                    str(args.bempp_rhs_sign),
+                    str(effective_rhs_sign),
                     "--phase-sign",
-                    args.bempp_phase_sign,
+                    str(effective_phase_sign),
                     "--zs-scale",
-                    str(args.bempp_zs_scale),
+                    str(effective_zs_scale),
                     "--output-prefix",
                     prefix,
                 ],
@@ -329,11 +356,12 @@ def main() -> None:
     )
 
     config = {
-        "bempp_op_sign": args.bempp_op_sign,
-        "bempp_rhs_cross": args.bempp_rhs_cross,
-        "bempp_rhs_sign": args.bempp_rhs_sign,
-        "bempp_phase_sign": args.bempp_phase_sign,
-        "bempp_zs_scale": args.bempp_zs_scale,
+        "convention_profile": args.convention_profile,
+        "bempp_op_sign": effective_op_sign,
+        "bempp_rhs_cross": effective_rhs_cross,
+        "bempp_rhs_sign": effective_rhs_sign,
+        "bempp_phase_sign": effective_phase_sign,
+        "bempp_zs_scale": effective_zs_scale,
         "mesh_mode": args.mesh_mode,
         "nx": args.nx,
         "ny": args.ny,

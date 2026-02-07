@@ -9,7 +9,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from typing import Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 
@@ -123,7 +123,7 @@ def run_bempp_impedance(
     rhs_sign: float,
     phase_sign: str,
     zs_scale: float,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, dict, Dict[str, np.ndarray]]:
     lambda0 = C0 / freq_hz
     k0 = 2.0 * np.pi / lambda0
     side = aperture_lambda * lambda0
@@ -213,6 +213,23 @@ def run_bempp_impedance(
 
     rhs = bempp.GridFunction(rwg, fun=tangential_trace, dual_space=snc)
     surface_current = lu(op, rhs)
+    residual = op * surface_current - rhs
+    rhs_l2 = float(rhs.l2_norm())
+    residual_l2 = float(residual.l2_norm())
+    residual_field_rel = residual_l2 / max(rhs_l2, 1e-30)
+
+    rhs_proj = np.asarray(rhs.projections(snc))
+    lhs_proj = np.asarray((op * surface_current).projections(snc))
+    residual_proj = lhs_proj - rhs_proj
+    rhs_proj_l2 = float(np.linalg.norm(rhs_proj))
+    residual_proj_l2 = float(np.linalg.norm(residual_proj))
+    residual_proj_rel = residual_proj_l2 / max(rhs_proj_l2, 1e-30)
+
+    op_mat = op.weak_form().A
+    x_coeff = surface_current.coefficients
+    residual_coeff = op_mat.dot(x_coeff) - rhs_proj
+    residual_coeff_l2 = float(np.linalg.norm(residual_coeff))
+    residual_coeff_rel = residual_coeff_l2 / max(rhs_proj_l2, 1e-30)
 
     theta_flat, phi_flat, directions, weights, steps = spherical_sampling_grid(
         n_theta=n_theta, n_phi=n_phi
@@ -249,8 +266,62 @@ def run_bempp_impedance(
         "num_points": int(theta_flat.size),
         "num_vertices": int(grid.number_of_vertices),
         "num_elements": int(grid.number_of_elements),
+        "rhs_l2_norm": rhs_l2,
+        "rhs_projection_l2_norm": rhs_proj_l2,
+        "solve_residual_field_l2_abs": residual_l2,
+        "solve_residual_field_l2_rel": residual_field_rel,
+        "solve_residual_projection_l2_abs": residual_proj_l2,
+        "solve_residual_projection_l2_rel": residual_proj_rel,
+        "solve_residual_coeff_l2_abs": residual_coeff_l2,
+        "solve_residual_coeff_l2_rel": residual_coeff_rel,
+        "solve_residual_l2_abs": residual_coeff_l2,
+        "solve_residual_l2_rel": residual_coeff_rel,
+        "surface_current_l2_norm": float(surface_current.l2_norm()),
+        "surface_current_coeff_l2_norm": float(np.linalg.norm(surface_current.coefficients)),
     }
-    return theta_flat, phi_flat, dir_dbi, metadata
+
+    centers = np.asarray(grid.centroids)
+    if centers.ndim != 2:
+        raise ValueError(f"Unexpected centroid shape: {centers.shape}")
+    if centers.shape[0] != 3 and centers.shape[1] == 3:
+        centers = centers.T
+    if centers.shape[0] != 3:
+        raise ValueError(f"Unexpected centroid shape after normalization: {centers.shape}")
+
+    currents = np.asarray(surface_current.evaluate_on_element_centers())
+    if currents.ndim != 2:
+        raise ValueError(f"Unexpected current shape: {currents.shape}")
+    if currents.shape[0] != 3 and currents.shape[1] == 3:
+        currents = currents.T
+    if currents.shape[0] != 3:
+        raise ValueError(f"Unexpected current shape after normalization: {currents.shape}")
+    current_mag = np.sqrt(np.sum(np.abs(currents) ** 2, axis=0))
+    pol_tan = polarization.copy()
+    pol_tan[2] = 0.0
+    pol_tan_norm = np.linalg.norm(pol_tan)
+    if pol_tan_norm < 1e-12:
+        pol_tan = np.array([1.0 + 0j, 0.0 + 0j, 0.0 + 0j], dtype=np.complex128)
+    else:
+        pol_tan = pol_tan / pol_tan_norm
+    proj = np.einsum("i,ij->j", np.conjugate(pol_tan), currents)
+    phase_deg = np.degrees(np.angle(proj))
+    phase_deg[current_mag < 1e-15] = np.nan
+
+    current_data = {
+        "element_index": np.arange(currents.shape[1], dtype=int) + 1,
+        "x_m": centers[0, :],
+        "y_m": centers[1, :],
+        "z_m": centers[2, :],
+        "Jx_re": np.real(currents[0, :]),
+        "Jx_im": np.imag(currents[0, :]),
+        "Jy_re": np.real(currents[1, :]),
+        "Jy_im": np.imag(currents[1, :]),
+        "Jz_re": np.real(currents[2, :]),
+        "Jz_im": np.imag(currents[2, :]),
+        "J_mag": current_mag,
+        "J_phase_deg": phase_deg,
+    }
+    return theta_flat, phi_flat, dir_dbi, metadata, current_data
 
 
 def write_farfield_csv(path: Path, theta: np.ndarray, phi: np.ndarray, dir_dbi: np.ndarray) -> None:
@@ -273,6 +344,29 @@ def write_phi0_cut_csv(
         writer.writerow(["theta_deg", "dir_bempp_imp_dBi"])
         for i in order:
             writer.writerow([float(np.rad2deg(theta[i])), float(dir_dbi[i])])
+
+
+def write_element_currents_csv(path: Path, current_data: Dict[str, np.ndarray]) -> None:
+    keys = [
+        "element_index",
+        "x_m",
+        "y_m",
+        "z_m",
+        "Jx_re",
+        "Jx_im",
+        "Jy_re",
+        "Jy_im",
+        "Jz_re",
+        "Jz_im",
+        "J_mag",
+        "J_phase_deg",
+    ]
+    num = len(current_data["element_index"])
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(keys)
+        for i in range(num):
+            writer.writerow([current_data[k][i] for k in keys])
 
 
 def main() -> None:
@@ -305,7 +399,7 @@ def main() -> None:
     data_dir = args.project_root / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    theta, phi, dir_dbi, meta = run_bempp_impedance(
+    theta, phi, dir_dbi, meta, current_data = run_bempp_impedance(
         freq_hz=args.freq_ghz * 1e9,
         aperture_lambda=args.aperture_lambda,
         mesh_step_lambda=args.mesh_step_lambda,
@@ -327,13 +421,16 @@ def main() -> None:
     farfield_csv = data_dir / f"bempp_{args.output_prefix}_farfield.csv"
     cut_csv = data_dir / f"bempp_{args.output_prefix}_cut_phi0.csv"
     meta_json = data_dir / f"bempp_{args.output_prefix}_metadata.json"
+    current_csv = data_dir / f"bempp_{args.output_prefix}_element_currents.csv"
 
     write_farfield_csv(farfield_csv, theta, phi, dir_dbi)
     write_phi0_cut_csv(cut_csv, theta, phi, dir_dbi, args.n_phi)
+    write_element_currents_csv(current_csv, current_data)
     meta_json.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     print(f"Saved {farfield_csv}")
     print(f"Saved {cut_csv}")
+    print(f"Saved {current_csv}")
     print(f"Saved {meta_json}")
     print(
         "Note: compare against Julia with "

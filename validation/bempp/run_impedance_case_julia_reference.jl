@@ -6,6 +6,7 @@ using LinearAlgebra
 using StaticArrays
 using CSV
 using DataFrames
+using JSON
 
 include(joinpath(@__DIR__, "..", "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
@@ -101,6 +102,84 @@ E0 = 1.0
 v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
 I_imp = Z_imp \ v
 
+n_hat = Vec3(0.0, 0.0, 1.0)
+pol_tan_raw = pol_inc - dot(pol_inc, n_hat) * n_hat
+pol_tan = norm(pol_tan_raw) > 1e-12 ? normalize(pol_tan_raw) : Vec3(1.0, 0.0, 0.0)
+
+tri_basis = [Int[] for _ in 1:Nt]
+for n in 1:N
+    push!(tri_basis[rwg.tplus[n]], n)
+    push!(tri_basis[rwg.tminus[n]], n)
+end
+
+tri_id = Vector{Int}(undef, Nt)
+x_m = Vector{Float64}(undef, Nt)
+y_m = Vector{Float64}(undef, Nt)
+z_m = Vector{Float64}(undef, Nt)
+Jx_re = Vector{Float64}(undef, Nt)
+Jx_im = Vector{Float64}(undef, Nt)
+Jy_re = Vector{Float64}(undef, Nt)
+Jy_im = Vector{Float64}(undef, Nt)
+Jz_re = Vector{Float64}(undef, Nt)
+Jz_im = Vector{Float64}(undef, Nt)
+J_mag = Vector{Float64}(undef, Nt)
+J_phase_deg = Vector{Float64}(undef, Nt)
+
+for t in 1:Nt
+    tri_id[t] = t
+    rc = triangle_center(mesh, t)
+    x_m[t] = rc[1]
+    y_m[t] = rc[2]
+    z_m[t] = rc[3]
+
+    J = zeros(ComplexF64, 3)
+    for n in tri_basis[t]
+        fn = eval_rwg(rwg, n, rc, t)
+        J[1] += I_imp[n] * fn[1]
+        J[2] += I_imp[n] * fn[2]
+        J[3] += I_imp[n] * fn[3]
+    end
+
+    Jx_re[t] = real(J[1]); Jx_im[t] = imag(J[1])
+    Jy_re[t] = real(J[2]); Jy_im[t] = imag(J[2])
+    Jz_re[t] = real(J[3]); Jz_im[t] = imag(J[3])
+
+    Jmag = sqrt(abs2(J[1]) + abs2(J[2]) + abs2(J[3]))
+    J_mag[t] = Jmag
+    Jproj = pol_tan[1] * J[1] + pol_tan[2] * J[2] + pol_tan[3] * J[3]
+    J_phase_deg[t] = Jmag > 1e-15 ? rad2deg(angle(Jproj)) : NaN
+end
+
+df_curr = DataFrame(
+    tri_id = tri_id,
+    x_m = x_m,
+    y_m = y_m,
+    z_m = z_m,
+    Jx_re = Jx_re, Jx_im = Jx_im,
+    Jy_re = Jy_re, Jy_im = Jy_im,
+    Jz_re = Jz_re, Jz_im = Jz_im,
+    J_mag = J_mag,
+    J_phase_deg = J_phase_deg,
+)
+
+res = Z_imp * I_imp - v
+rhs_l2 = norm(v)
+res_l2 = norm(res)
+res_rel = rhs_l2 > 0 ? res_l2 / rhs_l2 : NaN
+
+operator_checks = Dict(
+    "frequency_ghz" => freq_ghz,
+    "theta_ohm" => theta_uniform,
+    "theta_inc_deg" => theta_inc_deg,
+    "phi_inc_deg" => phi_inc_deg,
+    "num_rwg" => N,
+    "num_triangles" => Nt,
+    "rhs_l2_norm" => rhs_l2,
+    "solve_residual_l2_abs" => res_l2,
+    "solve_residual_l2_rel" => res_rel,
+    "current_coeff_l2_norm" => norm(I_imp),
+)
+
 grid = make_sph_grid(n_theta, n_phi)
 NΩ = length(grid.w)
 G_mat = radiation_vectors(mesh, rwg, grid, k; quad_order=3, eta0=eta0)
@@ -137,6 +216,13 @@ df_cut = DataFrame(
     dir_julia_imp_dBi = dir_imp_dBi[phi0_idx],
 )
 CSV.write(joinpath(DATADIR, "julia_$(output_prefix)_cut_phi0.csv"), df_cut)
+CSV.write(joinpath(DATADIR, "julia_$(output_prefix)_element_currents.csv"), df_curr)
+
+open(joinpath(DATADIR, "julia_$(output_prefix)_operator_checks.json"), "w") do io
+    JSON.print(io, operator_checks, 4)
+end
 
 println("Saved data/julia_$(output_prefix)_farfield.csv")
 println("Saved data/julia_$(output_prefix)_cut_phi0.csv")
+println("Saved data/julia_$(output_prefix)_element_currents.csv")
+println("Saved data/julia_$(output_prefix)_operator_checks.json")

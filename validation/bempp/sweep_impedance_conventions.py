@@ -75,6 +75,10 @@ def main() -> None:
     parser.add_argument("--phi-inc-deg", type=float, default=0.0)
     parser.add_argument("--n-theta", type=int, default=60)
     parser.add_argument("--n-phi", type=int, default=24)
+    parser.add_argument("--mesh-mode", choices=["gmsh_screen", "structured"], default="structured")
+    parser.add_argument("--nx", type=int, default=12)
+    parser.add_argument("--ny", type=int, default=12)
+    parser.add_argument("--mesh-step-lambda", type=float, default=0.2)
     parser.add_argument("--target-theta-deg", type=float, default=30.0)
     parser.add_argument("--julia-prefix", type=str, default="convref")
     parser.add_argument("--tag", type=str, default="convsweep")
@@ -140,6 +144,14 @@ def main() -> None:
                 str(args.n_theta),
                 "--n-phi",
                 str(args.n_phi),
+                "--mesh-mode",
+                args.mesh_mode,
+                "--nx",
+                str(args.nx),
+                "--ny",
+                str(args.ny),
+                "--mesh-step-lambda",
+                str(args.mesh_step_lambda),
                 "--op-sign",
                 op_sign,
                 "--rhs-cross",
@@ -206,7 +218,29 @@ def main() -> None:
 
     write_csv(out_csv, rows)
     write_md(out_md, rows)
-    out_json.write_text(json.dumps({"rows": rows}, indent=2), encoding="utf-8")
+    out_json.write_text(
+        json.dumps(
+            {
+                "config": {
+                    "freq_ghz": args.freq_ghz,
+                    "zs_imag_ohm": args.zs_imag_ohm,
+                    "theta_inc_deg": args.theta_inc_deg,
+                    "phi_inc_deg": args.phi_inc_deg,
+                    "n_theta": args.n_theta,
+                    "n_phi": args.n_phi,
+                    "mesh_mode": args.mesh_mode,
+                    "nx": args.nx,
+                    "ny": args.ny,
+                    "mesh_step_lambda": args.mesh_step_lambda,
+                    "target_theta_deg": args.target_theta_deg,
+                    "julia_prefix": args.julia_prefix,
+                },
+                "rows": rows,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
 
     print(f"Saved {out_csv}")
     print(f"Saved {out_md}")
