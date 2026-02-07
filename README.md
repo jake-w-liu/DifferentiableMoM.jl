@@ -9,6 +9,7 @@ From this folder:
 ```bash
 julia --project=. test/runtests.jl
 julia --project=. examples/ex_beam_steer.jl
+julia --project=. examples/ex_auto_preconditioning.jl
 julia --project=. plot.jl
 julia --project=. validation/paper/generate_consistency_report.jl
 ```
@@ -34,6 +35,20 @@ For acceptance-focused impedance external checks, use
 `validation/bempp/run_impedance_validation_matrix.py`.
 For convention-reconciliation sweeps, use
 `validation/bempp/sweep_impedance_conventions.py`.
+
+## Optional Preconditioning Modes
+
+Optimization APIs (`optimize_lbfgs`, `optimize_directivity`) support:
+
+- `preconditioning=:off` (default)
+- `preconditioning=:on` (always apply mass-based left preconditioner)
+- `preconditioning=:auto` (enable only for larger/iterative settings)
+
+You can still provide an explicit matrix via `preconditioner_M=...`, which
+overrides the mode selection.
+
+See `examples/ex_auto_preconditioning.jl` for a runnable example with
+recommended `:auto` settings for large / iterative runs.
 
 ## Paper Consistency Snapshot
 
