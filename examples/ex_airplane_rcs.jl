@@ -1,4 +1,5 @@
 # ex_airplane_rcs.jl — Airplane PEC scattering demo with automatic repair/coarsening
+# and package-level mesh preview generation.
 #
 # Usage:
 #   julia --project=. examples/ex_airplane_rcs.jl [input_obj] [freq_GHz] [scale_to_m] [target_rwg]
@@ -18,7 +19,9 @@ include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
+const FIGDIR = joinpath(@__DIR__, "..", "figs")
 mkpath(DATADIR)
+mkpath(FIGDIR)
 
 input_path = length(ARGS) >= 1 ? ARGS[1] : joinpath("..", "Airplane.obj")
 freq_ghz = length(ARGS) >= 2 ? parse(Float64, ARGS[2]) : 3.0
@@ -83,6 +86,32 @@ mesh_repaired_out = joinpath(DATADIR, "airplane_repaired.obj")
 mesh_coarse_out = joinpath(DATADIR, "airplane_coarse.obj")
 write_obj_mesh(mesh_repaired_out, mesh0; header="Scaled+repaired from $input_path")
 write_obj_mesh(mesh_coarse_out, mesh_use; header="Coarsened for RCS demo from $input_path")
+
+preview_png = ""
+preview_pdf = ""
+try
+    seg_rep = mesh_wireframe_segments(mesh0)
+    seg_coa = mesh_wireframe_segments(mesh_use)
+    preview = save_mesh_preview(
+        mesh0,
+        mesh_use,
+        joinpath(FIGDIR, "airplane_mesh_preview");
+        title_a="Repaired mesh\nV=$(nvertices(mesh0)), T=$(ntriangles(mesh0)), E=$(seg_rep.n_edges)",
+        title_b="Simulation mesh\nV=$(nvertices(mesh_use)), T=$(ntriangles(mesh_use)), E=$(seg_coa.n_edges)",
+        color_a=:steelblue,
+        color_b=:darkorange,
+        camera=(30, 30),
+        size=(1200, 520),
+        linewidth=0.7,
+        guidefontsize=10,
+        tickfontsize=8,
+        titlefontsize=10,
+    )
+    global preview_png = preview.png_path
+    global preview_pdf = preview.pdf_path
+catch err
+    @warn "Mesh preview generation failed; continuing without preview files." exception=(err, catch_backtrace())
+end
 
 freq = freq_ghz * 1e9
 c0 = 299792458.0
@@ -162,6 +191,10 @@ CSV.write(csv_summary, df_summary)
 println("\n── Outputs ──")
 println("  Repaired mesh: $mesh_repaired_out")
 println("  Coarsened mesh: $mesh_coarse_out")
+if !isempty(preview_png)
+    println("  Mesh preview PNG: $preview_png")
+    println("  Mesh preview PDF: $preview_pdf")
+end
 println("  Bistatic φ≈0° cut: $csv_cut")
 println("  Monostatic backscatter: $csv_bs")
 println("  Run summary: $csv_summary")

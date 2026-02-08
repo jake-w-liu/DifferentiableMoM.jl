@@ -21,5 +21,6 @@ include("Verification.jl")
 include("Optimize.jl")
 include("Diagnostics.jl")
 include("Mie.jl")
+include("Visualization.jl")
 
 end # module
