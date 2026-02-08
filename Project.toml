@@ -2,6 +2,7 @@ name = "DifferentiableMoM"
 uuid = "23e8cd96-b521-4dc5-8732-25c09bc9e688"
 authors = ["Jake W. Liu <jwliu@ntut.edu.tw>"]
 version = "0.1.0"
+license = "MIT"
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
