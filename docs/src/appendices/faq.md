@@ -1,26 +1,45 @@
 # Appendix: FAQ
 
-> Draft page placeholder.
+## Why does my solve fail right after importing OBJ?
 
-## Purpose
+Usually mesh quality issues (non-manifold edges, degenerates, orientation
+conflicts). Run `mesh_quality_report` and then
+`repair_mesh_for_simulation`.
 
-TODO: Explain why this chapter exists and what practical problem it addresses.
+## Why is my run very slow?
 
-## Learning Goals
+Dense MoM scales poorly with unknown count. Check `rwg.nedges` and
+`estimate_dense_matrix_gib`. Coarsen mesh or reduce scenario count.
 
-- TODO
-- TODO
-- TODO
+## Does preconditioning improve accuracy?
 
-## Planned Contents
+Primarily numerical robustness/efficiency of linear solves, not physical-model
+accuracy by itself.
 
-TODO: Add pedagogical text, equations, code mapping, runnable commands, and expected outputs.
+## Why does beam steering degrade at small frequency offsets?
 
-## Code Mapping
+Single-frequency optimized reactive maps are often narrowband; detuning shifts
+effective phase progression.
 
-TODO: Map this chapter to relevant package modules and example scripts.
+## Why do global dB residuals look worse than beam metrics?
 
-## Exercises
+Deep-null regions can dominate absolute dB residuals. For steering workflows,
+beam-centric metrics (main beam, sidelobes, target-angle gain) are usually more
+informative.
 
-- Basic: TODO
-- Challenge: TODO
+## Can I use arbitrary meshes?
+
+Yes, if they pass mesh-quality checks and are repaired/coarsened to a feasible
+unknown count.
+
+## Where should I start as a new user?
+
+1. Getting Started → Installation/Quickstart  
+2. Tutorial: First PEC Plate  
+3. Tutorial: Adjoint Gradient Check  
+4. Tutorial: Beam Steering Design
+
+## How do I verify my custom workflow?
+
+Use internal consistency gates first, then gradient checks (if optimized), then
+external validation (e.g., Bempp or sphere-vs-Mie where applicable).

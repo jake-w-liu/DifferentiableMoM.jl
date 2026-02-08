@@ -1,26 +1,124 @@
 # Installation
 
-> Draft page placeholder.
-
 ## Purpose
 
-TODO: Explain why this chapter exists and what practical problem it addresses.
+Set up a reproducible local environment so you can run forward MoM solves,
+adjoint gradients, and all validation examples without hidden configuration.
+
+---
 
 ## Learning Goals
 
-- TODO
-- TODO
-- TODO
+After this chapter, you should be able to:
 
-## Planned Contents
+1. Install and instantiate the package environment.
+2. Verify that the package imports and tests pass.
+3. Run example scripts from the repository root.
 
-TODO: Add pedagogical text, equations, code mapping, runnable commands, and expected outputs.
+---
+
+## 1) Prerequisites
+
+- Julia `1.10` or newer.
+- A local checkout of the repository (recommended for learning/tutorial use).
+
+Check Julia version:
+
+```bash
+julia --version
+```
+
+---
+
+## 2) Local-Checkout Installation (Recommended)
+
+From your shell:
+
+```bash
+cd /path/to/DifferentiableMoM.jl
+julia --project=. -e 'import Pkg; Pkg.instantiate()'
+```
+
+This installs all dependencies pinned by `Project.toml` in the project
+environment.
+
+---
+
+## 3) Install by URL (Alternative)
+
+If you want to add the package from GitHub in a general Julia environment:
+
+```julia
+import Pkg
+Pkg.add(url="https://github.com/jake-w-liu/DifferentiableMoM.jl")
+```
+
+For tutorial reproducibility, the local project environment is still preferred.
+
+---
+
+## 4) Sanity Check
+
+From the repository root:
+
+```bash
+julia --project=. -e 'using DifferentiableMoM; println("DifferentiableMoM loaded")'
+```
+
+Then run the regression suite:
+
+```bash
+julia --project=. test/runtests.jl
+```
+
+If this passes, your installation is correct.
+
+---
+
+## 5) Optional: Build Documentation Locally
+
+```bash
+julia --project=docs docs/make.jl
+```
+
+Documenter output is generated under `docs/build/`.
+
+---
+
+## 6) First Example Runs
+
+From the repository root:
+
+```bash
+julia --project=. examples/ex_beam_steer.jl
+julia --project=. examples/ex_auto_preconditioning.jl
+julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
+```
+
+Generated numeric artifacts are written into `data/` and figures into `figs/`.
+
+---
+
+## Troubleshooting
+
+- **`Package ... not found`**: run `Pkg.instantiate()` in the same project.
+- **Slow first run**: Julia compiles methods on first execution.
+- **Plot backend errors**: install a plotting-capable environment (headless CI
+  may need an alternative backend).
+
+---
 
 ## Code Mapping
 
-TODO: Map this chapter to relevant package modules and example scripts.
+- Package metadata and compat bounds: `Project.toml`
+- Main module and exports: `src/DifferentiableMoM.jl`
+- Test entry point: `test/runtests.jl`
+- Docs build entry point: `docs/make.jl`
+
+---
 
 ## Exercises
 
-- Basic: TODO
-- Challenge: TODO
+- Basic: instantiate the project and run only `examples/ex_convergence.jl`.
+- Challenge: run `test/runtests.jl`, then identify which generated CSV files
+  correspond to each major validation gate.

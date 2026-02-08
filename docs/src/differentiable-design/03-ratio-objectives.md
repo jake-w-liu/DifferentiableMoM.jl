@@ -1,26 +1,106 @@
 # Ratio Objectives
 
-> Draft page placeholder.
-
 ## Purpose
 
-TODO: Explain why this chapter exists and what practical problem it addresses.
+Explain why directivity-style ratio objectives are preferred for beam steering,
+and how the package computes stable gradients using two adjoint solves.
+
+---
 
 ## Learning Goals
 
-- TODO
-- TODO
-- TODO
+After this chapter, you should be able to:
 
-## Planned Contents
+1. Write the ratio objective used in steering optimization.
+2. Derive the quotient-rule gradient structure.
+3. Understand why two separate adjoint solves improve robustness.
 
-TODO: Add pedagogical text, equations, code mapping, runnable commands, and expected outputs.
+---
+
+## 1) Ratio Objective
+
+Define:
+
+```math
+f(\theta)=\mathbf I^\dagger\mathbf Q_t\mathbf I,\qquad
+g(\theta)=\mathbf I^\dagger\mathbf Q_{\mathrm{tot}}\mathbf I.
+```
+
+Then optimize:
+
+```math
+J(\theta)=\frac{f(\theta)}{g(\theta)}.
+```
+
+This rewards concentration of radiation in a target region relative to total
+radiation in the selected polarization channel.
+
+---
+
+## 2) Quotient-Rule Gradient
+
+```math
+\frac{\partial J}{\partial\theta_p}
+=
+\frac{
+g\,\frac{\partial f}{\partial\theta_p}
+-f\,\frac{\partial g}{\partial\theta_p}
+}{g^2}.
+```
+
+Each derivative term is computed adjointly:
+
+```math
+\mathbf Z^\dagger\lambda_f = \mathbf Q_t\mathbf I,\qquad
+\mathbf Z^\dagger\lambda_g = \mathbf Q_{\mathrm{tot}}\mathbf I.
+```
+
+---
+
+## 3) Why Two Adjoint Solves
+
+Using one “effective” matrix
+$\mathbf Q_t - J\mathbf Q_{\mathrm{tot}}$ can become numerically delicate near
+convergence due to cancellation. The package avoids that by solving separate
+adjoint systems for numerator and denominator.
+
+This is more stable for practical L-BFGS optimization.
+
+---
+
+## 4) Implementation Path
+
+`optimize_directivity` in `src/Optimize.jl` does:
+
+1. forward solve for $\mathbf I$,
+2. compute `f_val`, `g_val`, `J_ratio`,
+3. solve two adjoints (`lam_t`, `lam_a`),
+4. assemble ratio gradient from `g_f`, `g_g`,
+5. update by projected L-BFGS.
+
+---
+
+## 5) Minimal Usage Pattern
+
+```julia
+theta_opt, trace = optimize_directivity(
+    Z_efie, Mp, v, Q_target, Q_total, theta0;
+    reactive=true, maxiter=300, lb=fill(-500.0,P), ub=fill(500.0,P)
+)
+```
+
+---
 
 ## Code Mapping
 
-TODO: Map this chapter to relevant package modules and example scripts.
+- Ratio optimizer: `src/Optimize.jl`
+- Adjoint primitives: `src/Adjoint.jl`
+- Q-matrix construction: `src/QMatrix.jl`
+
+---
 
 ## Exercises
 
-- Basic: TODO
-- Challenge: TODO
+- Basic: compare early-iteration traces of absolute-power vs ratio objectives.
+- Challenge: modify target cone width and observe resulting tradeoff between
+  peak steering and sidelobe suppression.
