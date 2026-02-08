@@ -12,7 +12,7 @@ differentiating the singular EFIE kernel.
 
 After this chapter, you should be able to:
 
-1. Derive $\partial\mathbf Z/\partial\theta_p$ for patch-wise impedance.
+1. Derive ``\partial\mathbf Z/\partial\theta_p`` for patch-wise impedance.
 2. Distinguish resistive and reactive parameterizations.
 3. Map derivative expressions to `gradient_impedance` behavior.
 
@@ -65,10 +65,10 @@ These are exact for the chosen discretization and patch map.
 
 ## 3) Gradient Forms Used in Code
 
-With $l_p=\boldsymbol\lambda^\dagger \mathbf M_p \mathbf I$:
+With ``l_p=\boldsymbol\lambda^\dagger \mathbf M_p \mathbf I``:
 
-- resistive: $\partial J/\partial\theta_p = 2\Re\{l_p\}$,
-- reactive: $\partial J/\partial\theta_p = -2\Im\{l_p\}$.
+- resistive: ``\partial J/\partial\theta_p = 2\Re\{l_p\}``,
+- reactive: ``\partial J/\partial\theta_p = -2\Im\{l_p\}``.
 
 This is exactly what `gradient_impedance(...; reactive=false/true)` computes.
 

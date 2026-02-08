@@ -73,7 +73,7 @@ Implementation:
 
 ### Small-series check (why the limit is finite)
 
-Using $e^{-ikR}=1-ikR-\tfrac{k^2R^2}{2}+O(R^3)$,
+Using ``e^{-ikR}=1-ikR-\tfrac{k^2R^2}{2}+O(R^3)``,
 
 ```math
 \frac{e^{-ikR}-1}{R}
@@ -81,7 +81,7 @@ Using $e^{-ikR}=1-ikR-\tfrac{k^2R^2}{2}+O(R^3)$,
 -ik-\frac{k^2R}{2}+O(R^2),
 ```
 
-so no $1/R$ singularity remains in $G_{\mathrm{smooth}}$.
+so no ``1/R`` singularity remains in ``G_{\mathrm{smooth}}``.
 
 ---
 

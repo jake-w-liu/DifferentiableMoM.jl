@@ -19,7 +19,7 @@ After this chapter, you should be able to:
 
 ## 1) Time Convention
 
-The package uses the $e^{+i\omega t}$ convention.
+The package uses the ``e^{+i\omega t}`` convention.
 Therefore the scalar free-space Green function is
 
 ```math
@@ -28,7 +28,7 @@ G(\mathbf r,\mathbf r')
 \frac{e^{-ik|\mathbf r-\mathbf r'|}}{4\pi |\mathbf r-\mathbf r'|}.
 ```
 
-If a reference uses $e^{-i\omega t}$, phase signs will flip.
+If a reference uses ``e^{-i\omega t}``, phase signs will flip.
 
 ---
 
@@ -36,8 +36,8 @@ If a reference uses $e^{-i\omega t}$, phase signs will flip.
 
 - Lengths are in **meters**.
 - Frequency is in **Hz**.
-- Wavelength is $\lambda_0=c_0/f$.
-- Wavenumber is $k=2\pi/\lambda_0$ (rad/m).
+- Wavelength is ``\lambda_0=c_0/f``.
+- Wavenumber is ``k=2\pi/\lambda_0`` (rad/m).
 
 Imported OBJ meshes are treated as coordinate values in meters unless you
 rescale explicitly before solving.
@@ -47,7 +47,7 @@ rescale explicitly before solving.
 ## 3) Electrical Quantities
 
 - Surface current density: A/m.
-- Surface impedance: $\Omega$.
+- Surface impedance: ``\Omega``.
 - Far-field electric field: V/m (up to the usual asymptotic normalization in
   the chosen formulation).
 - Directivity/RCS values in scripts are often reported in dB units for plotting.
@@ -56,9 +56,9 @@ rescale explicitly before solving.
 
 ## 4) Matrix and Vector Notation
 
-- Current coefficients: $\mathbf I\in\mathbb C^N$.
-- MoM system: $\mathbf Z\mathbf I=\mathbf v$.
-- Conjugate transpose in equations: $(\cdot)^\dagger$.
+- Current coefficients: ``\mathbf I\in\mathbb C^N``.
+- MoM system: ``\mathbf Z\mathbf I=\mathbf v``.
+- Conjugate transpose in equations: ``(\cdot)^\dagger``.
 - In Julia code, conjugate dot products are done with `dot(a,b)` and adjoint
   solves use `Z' \\ rhs`.
 
@@ -89,11 +89,11 @@ flip of objective gradient in optimizer internals.
 
 Spherical grids follow:
 
-- $\theta\in[0,\pi]$ polar angle from +z,
-- $\phi\in[0,2\pi)$ azimuth angle in the x-y plane.
+- ``\theta\in[0,\pi]`` polar angle from +z,
+- ``\phi\in[0,2\pi)`` azimuth angle in the x-y plane.
 
 `make_sph_grid(Ntheta,Nphi)` uses midpoint sampling with weights
-$w_q=\sin\theta_q\,\Delta\theta\,\Delta\phi$.
+``w_q=\sin\theta_q\,\Delta\theta\,\Delta\phi``.
 
 ---
 
@@ -120,6 +120,6 @@ When comparing with external solvers:
 
 ## Exercises
 
-- Basic: verify that changing frequency by 2% changes $k$ by 2%.
+- Basic: verify that changing frequency by 2% changes ``k`` by 2%.
 - Challenge: reproduce one case with an external solver and list every
   convention you had to align.

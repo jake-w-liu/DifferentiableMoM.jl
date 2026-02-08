@@ -3,7 +3,7 @@
 ## Purpose
 
 Demonstrate an end-to-end complex-platform workflow:
-OBJ import $\rightarrow$ repair $\rightarrow$ coarsen $\rightarrow$ PEC RCS
+OBJ import ``\rightarrow`` repair ``\rightarrow`` coarsen ``\rightarrow`` PEC RCS
 evaluation and visualization.
 
 ---

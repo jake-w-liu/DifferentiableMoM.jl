@@ -28,8 +28,8 @@ For the linear system
 ```
 
 small perturbations in data or arithmetic can be amplified roughly in
-proportion to $\kappa(\mathbf Z)$.
-Large $\kappa(\mathbf Z)$ can lead to:
+proportion to ``\kappa(\mathbf Z)``.
+Large ``\kappa(\mathbf Z)`` can lead to:
 
 - slow/unstable iterative behavior (if you use iterative methods),
 - loss of significant digits in solves,
@@ -48,7 +48,7 @@ The package supports optional mass-based regularization:
 \mathbf Z_\alpha = \mathbf Z + \alpha \mathbf R,
 ```
 
-with $\mathbf R \succeq 0$ built from patch mass matrices when not explicitly
+with ``\mathbf R \succeq 0`` built from patch mass matrices when not explicitly
 provided.
 
 Implementation helpers:
@@ -63,7 +63,7 @@ operator in adjoint solves.
 
 ## 3) Left Preconditioning Pathway
 
-With left preconditioner $\mathbf M$:
+With left preconditioner ``\mathbf M``:
 
 ```math
 \tilde{\mathbf Z} = \mathbf M^{-1}\mathbf Z,\qquad
@@ -113,8 +113,8 @@ conditioned workflows for harder problems.
 Preconditioning can improve numerical behavior and robustness of linear solves.
 It does **not** change dense EFIE memory scaling:
 
-- storage remains $O(N^2)$,
-- dense direct solve cost remains roughly $O(N^3)$.
+- storage remains ``O(N^2)``,
+- dense direct solve cost remains roughly ``O(N^3)``.
 
 So preconditioning helps solver quality, not asymptotic dense complexity.
 

@@ -21,9 +21,17 @@ Includes self-term singular handling through internal branching.
 
 Precomputes patch mass matrices `Mp`.
 
-### `assemble_Z_impedance(Mp, theta; reactive=false)`
+### `assemble_Z_impedance(Mp, theta)`
 
-Builds impedance block from `Mp` and parameter vector.
+Builds impedance block from `Mp` and parameter vector:
+
+```math
+\mathbf Z_{\mathrm{imp}}=-\sum_p \theta_p \mathbf M_p.
+```
+
+For reactive loading, pass complex coefficients in `theta` (e.g., `1im .* θ`)
+or use `assemble_full_Z(...; reactive=true)` for the common real-parameter
+reactive workflow.
 
 ### `assemble_full_Z(Z_efie, Mp, theta; reactive=false)`
 

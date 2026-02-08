@@ -34,8 +34,8 @@ J(\theta)=\mathbf I^\dagger \mathbf Q \mathbf I.
 
 ## 2) Adjoint System
 
-Differentiate the constraint and eliminate $\partial \mathbf I/\partial\theta_p$
-with adjoint variable $\boldsymbol\lambda$:
+Differentiate the constraint and eliminate ``\partial \mathbf I/\partial\theta_p``
+with adjoint variable ``\boldsymbol\lambda``:
 
 ```math
 \mathbf Z^\dagger \boldsymbol\lambda

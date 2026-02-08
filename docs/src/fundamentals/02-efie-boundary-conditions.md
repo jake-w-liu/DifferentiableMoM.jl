@@ -19,7 +19,7 @@ After this chapter, you should be able to:
 
 ## Step 1: Time Convention and Green's Function
 
-The package uses the $e^{+i\omega t}$ time convention.
+The package uses the ``e^{+i\omega t}`` time convention.
 With that choice, the free-space scalar Green's function is:
 
 ```math
@@ -32,16 +32,16 @@ This is implemented by `greens` in `src/Greens.jl`.
 
 ### Sign sanity check from the wave equation
 
-Under $e^{+i\omega t}$, time derivatives map as
+Under ``e^{+i\omega t}``, time derivatives map as
 
 ```math
 \frac{\partial}{\partial t}\rightarrow +i\omega,\qquad
 \frac{\partial^2}{\partial t^2}\rightarrow -\omega^2.
 ```
 
-For Helmholtz form $(\nabla^2+k^2)u=-\delta$, the outgoing fundamental solution
-is $e^{-ikR}/(4\pi R)$, matching the implementation.  
-If a reference uses $e^{-i\omega t}$, the exponential sign flips.
+For Helmholtz form ``(\nabla^2+k^2)u=-\delta``, the outgoing fundamental solution
+is ``e^{-ikR}/(4\pi R)``, matching the implementation.  
+If a reference uses ``e^{-i\omega t}``, the exponential sign flips.
 
 ---
 
@@ -95,7 +95,7 @@ Z_{mn}^{\mathrm{EFIE}}
 \right].
 ```
 
-Here $\nabla_s\cdot$ is the surface divergence.  
+Here ``\nabla_s\cdot`` is the surface divergence.  
 This exact `(vector part) - (scalar/divergence part)` structure is what
 `assemble_Z_efie` computes in `src/EFIE.jl`.
 
@@ -110,9 +110,9 @@ Start from
 Project/test with tangential basis and integrate by parts on the surface:
 
 1. The identity part gives the vector-potential coupling
-   $\iint f_m\cdot f_n\,G$.
-2. The $\nabla\nabla$ part transfers derivatives onto basis divergences,
-   producing $-(1/k^2)\iint (\nabla_s\cdot f_m)(\nabla_s'\cdot f_n)\,G$.
+   ``\iint f_m\cdot f_n\,G``.
+2. The ``\nabla\nabla`` part transfers derivatives onto basis divergences,
+   producing ``-(1/k^2)\iint (\nabla_s\cdot f_m)(\nabla_s'\cdot f_n)\,G``.
 
 This is why assembly naturally separates into a vector term and a scalar
 charge-related term.

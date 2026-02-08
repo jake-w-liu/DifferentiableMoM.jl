@@ -60,7 +60,7 @@ Each derivative term is computed adjointly:
 ## 3) Why Two Adjoint Solves
 
 Using one “effective” matrix
-$\mathbf Q_t - J\mathbf Q_{\mathrm{tot}}$ can become numerically delicate near
+``\mathbf Q_t - J\mathbf Q_{\mathrm{tot}}`` can become numerically delicate near
 convergence due to cancellation. The package avoids that by solving separate
 adjoint systems for numerator and denominator.
 
@@ -72,7 +72,7 @@ This is more stable for practical L-BFGS optimization.
 
 `optimize_directivity` in `src/Optimize.jl` does:
 
-1. forward solve for $\mathbf I$,
+1. forward solve for ``\mathbf I``,
 2. compute `f_val`, `g_val`, `J_ratio`,
 3. solve two adjoints (`lam_t`, `lam_a`),
 4. assemble ratio gradient from `g_f`, `g_g`,

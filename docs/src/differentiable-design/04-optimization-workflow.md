@@ -20,13 +20,13 @@ After this chapter, you should be able to:
 
 ## 1) Core Iteration Structure
 
-At iteration $k$:
+At iteration ``k``:
 
-1. assemble $\mathbf Z(\theta^{(k)})$,
-2. solve forward for $\mathbf I^{(k)}$,
+1. assemble ``\mathbf Z(\theta^{(k)})``,
+2. solve forward for ``\mathbf I^{(k)}``,
 3. solve adjoint system(s),
-4. compute gradient $\mathbf g^{(k)}$,
-5. update $\theta$ using projected L-BFGS with backtracking.
+4. compute gradient ``\mathbf g^{(k)}``,
+5. update ``\theta`` using projected L-BFGS with backtracking.
 
 ---
 
