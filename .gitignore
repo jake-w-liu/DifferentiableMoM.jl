@@ -16,3 +16,8 @@ figs
 # Generated validation data/artifacts (can be regenerated)
 data/
 data
+
+# Julia artifacts
+.julia/
+.julia_depot/
+.juliaup_depot/

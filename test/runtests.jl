@@ -439,7 +439,12 @@ df_pec_julia = CSV.read(joinpath(DATADIR, "beam_steer_farfield.csv"), DataFrame)
 df_pec_bempp = CSV.read(joinpath(DATADIR, "bempp_pec_farfield.csv"), DataFrame)
 df_imp_julia = CSV.read(joinpath(DATADIR, "julia_impedance_farfield.csv"), DataFrame)
 df_imp_bempp = CSV.read(joinpath(DATADIR, "bempp_impedance_farfield.csv"), DataFrame)
-df_imp_beam = CSV.read(joinpath(DATADIR, "impedance_validation_matrix_summary_paper_default.csv"), DataFrame)
+
+imp_beam_csv = joinpath(DATADIR, "impedance_validation_matrix_summary.csv")
+if !isfile(imp_beam_csv)
+    imp_beam_csv = joinpath(DATADIR, "impedance_validation_matrix_summary_paper_default.csv")
+end
+df_imp_beam = CSV.read(imp_beam_csv, DataFrame)
 
 pec_cv = crossval_metrics(df_pec_julia, :dir_pec_dBi, df_pec_bempp, :dir_bempp_dBi)
 imp_cv = crossval_metrics(df_imp_julia, :dir_julia_imp_dBi, df_imp_bempp, :dir_bempp_imp_dBi)

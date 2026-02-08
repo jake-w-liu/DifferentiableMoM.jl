@@ -40,12 +40,6 @@ python validation/bempp/run_pec_cross_validation.py
 python validation/bempp/compare_pec_to_julia.py
 ```
 
-Optional threshold gate:
-
-```bash
-python validation/bempp/compare_pec_to_julia.py --max-rmse-db 2.0 --max-abs-db 6.0
-```
-
 ### Impedance-Loaded (Single Case)
 
 Generate Julia and Bempp fields for a chosen impedance case:
@@ -84,6 +78,7 @@ The matrix runner defaults to a refined Bempp screen mesh
 `--mesh-step-lambda 0.2` for stronger impedance cross-validation.
 The default convention profile is `paper_default` (the profile used for
 manuscript-reported beam-centric matrix values).
+Matrix acceptance is beam-centric (`|Δθ_main|`, `|ΔD_main|`, `|ΔSLL|`).
 
 Matrix run with structured Bempp mesh:
 

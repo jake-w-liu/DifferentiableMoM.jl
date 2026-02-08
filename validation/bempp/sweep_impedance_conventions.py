@@ -49,14 +49,14 @@ def write_md(path: Path, rows: List[Dict[str, object]]) -> None:
     lines.append("# Impedance Convention Sweep")
     lines.append("")
     lines.append(
-        "| Rank | op-sign | rhs-cross | rhs-sign | phase-sign | zs-scale | RMSE (dB) | Near-target mean |ΔD| (dB) | Max |ΔD| (dB) | Score |"
+        "| Rank | op-sign | rhs-cross | rhs-sign | phase-sign | zs-scale | Main |Δθ| (deg) | Main |ΔL| (dB) | SLL |Δ| (dB) | Beam score |"
     )
     lines.append("|---:|---|---|---:|---|---:|---:|---:|---:|---:|")
     for i, row in enumerate(rows, start=1):
         lines.append(
             f"| {i} | {row['op_sign']} | {row['rhs_cross']} | {row['rhs_sign']:.1f} | "
-            f"{row['phase_sign']} | {row['zs_scale']:.8f} | {row['rmse_db']:.4f} | "
-            f"{row['near_target_mean_abs_db']:.4f} | {row['max_abs_db']:.4f} | {row['score']:.4f} |"
+            f"{row['phase_sign']} | {row['zs_scale']:.8f} | {row['main_theta_abs_diff_deg']:.4f} | "
+            f"{row['main_level_abs_diff_db']:.4f} | {row['sll_abs_diff_db']:.4f} | {row['score']:.4f} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
@@ -188,10 +188,11 @@ def main() -> None:
             continue
 
         report = load_json(data_dir / f"bempp_{prefix}_cross_validation_report.json")
-        rmse = float(report["global"]["rmse_db"])
-        near_target = float(report["near_target"]["mean_abs_diff_db"])
-        max_abs = float(report["global"]["max_abs_diff_db"])
-        score = rmse + near_target
+        pf = report.get("pattern_features", {})
+        main_theta_abs_diff = abs(float(pf.get("main_theta_abs_diff_deg", float("inf"))))
+        main_level_abs_diff = abs(float(pf.get("main_level_diff_db", float("inf"))))
+        sll_abs_diff = abs(float(pf.get("sll_down_diff_db", float("inf"))))
+        score = main_theta_abs_diff + main_level_abs_diff + sll_abs_diff
         rows.append(
             {
                 "prefix": prefix,
@@ -200,9 +201,9 @@ def main() -> None:
                 "rhs_sign": rhs_sign,
                 "phase_sign": phase_sign,
                 "zs_scale": zs_scale,
-                "rmse_db": rmse,
-                "near_target_mean_abs_db": near_target,
-                "max_abs_db": max_abs,
+                "main_theta_abs_diff_deg": main_theta_abs_diff,
+                "main_level_abs_diff_db": main_level_abs_diff,
+                "sll_abs_diff_db": sll_abs_diff,
                 "score": score,
             }
         )
@@ -252,7 +253,9 @@ def main() -> None:
             f"op={best['op_sign']}, rhs_cross={best['rhs_cross']}, "
             f"rhs_sign={best['rhs_sign']}, phase={best['phase_sign']}, "
             f"zs_scale={best['zs_scale']}, "
-            f"rmse={best['rmse_db']:.4f}, near_target={best['near_target_mean_abs_db']:.4f}"
+            f"|Δθ_main|={best['main_theta_abs_diff_deg']:.4f}, "
+            f"|ΔD_main|={best['main_level_abs_diff_db']:.4f}, "
+            f"|ΔSLL|={best['sll_abs_diff_db']:.4f}"
         )
 
 
