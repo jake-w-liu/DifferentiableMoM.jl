@@ -11,7 +11,10 @@ makedocs(
     authors = "Jake W. Liu",
     modules = [DifferentiableMoM],
     checkdocs = :none,
-    format = Documenter.HTML(prettyurls = get(ENV, "CI", "false") == "true"),
+    format = Documenter.HTML(
+        prettyurls = get(ENV, "CI", "false") == "true",
+        mathengine = Documenter.MathJax3(),
+    ),
     pages = [
         "Home" => "index.md",
         "Getting Started" => [
