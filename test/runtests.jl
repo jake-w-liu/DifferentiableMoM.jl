@@ -132,6 +132,77 @@ end
 mesh_obj = read_obj_mesh(obj_path)
 @assert nvertices(mesh_obj) == 4
 @assert ntriangles(mesh_obj) == 2
+
+report_obj = assert_mesh_quality(mesh_obj; allow_boundary=true)
+@assert report_obj.n_nonmanifold_edges == 0
+@assert report_obj.n_orientation_conflicts == 0
+@assert report_obj.n_degenerate_triangles == 0
+
+# Orientation-conflict negative test (shared interior edge has same orientation)
+tri_bad_orient = hcat([1, 2, 3], [1, 4, 3])
+mesh_bad_orient = TriMesh(mesh_obj.xyz, tri_bad_orient)
+thrown_orient = try
+    assert_mesh_quality(mesh_bad_orient; allow_boundary=true)
+    false
+catch
+    true
+end
+@assert thrown_orient
+
+# Degenerate-triangle negative test
+tri_bad_deg = hcat([1, 1, 2])
+mesh_bad_deg = TriMesh(mesh_obj.xyz, tri_bad_deg)
+thrown_deg = try
+    assert_mesh_quality(mesh_bad_deg; allow_boundary=true)
+    false
+catch
+    true
+end
+@assert thrown_deg
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 1c: Mesh repair utility
+# ─────────────────────────────────────────────────
+println("\n── Test 1c: Mesh repair utility ──")
+
+repair_orient = repair_mesh_for_simulation(mesh_bad_orient; allow_boundary=true)
+@assert repair_orient.after.n_orientation_conflicts == 0
+@assert !isempty(repair_orient.flipped_triangles)
+@assert mesh_quality_ok(repair_orient.after; allow_boundary=true, require_closed=false)
+
+xyz_bad_mixed = hcat(mesh_obj.xyz, mesh_obj.xyz[:, 1])
+tri_bad_mixed = hcat([1, 2, 5], [1, 2, 3], [1, 6, 3])
+mesh_bad_mixed = TriMesh(xyz_bad_mixed, tri_bad_mixed)
+repair_mixed = repair_mesh_for_simulation(
+    mesh_bad_mixed;
+    allow_boundary=true,
+    drop_invalid=true,
+    drop_degenerate=true,
+    fix_orientation=false,
+)
+@assert ntriangles(repair_mixed.mesh) == 1
+@assert length(repair_mixed.removed_invalid) == 1
+@assert length(repair_mixed.removed_degenerate) == 1
+
+repair_in_path = joinpath(DATADIR, "tmp_repair_in.obj")
+open(repair_in_path, "w") do io
+    println(io, "v 0 0 0")
+    println(io, "v 1 0 0")
+    println(io, "v 1 1 0")
+    println(io, "v 0 1 0")
+    println(io, "f 1 2 3")
+    println(io, "f 1 4 3")
+end
+repair_out_path = joinpath(DATADIR, "tmp_repair_out.obj")
+repair_obj_result = repair_obj_mesh(repair_in_path, repair_out_path; allow_boundary=true)
+@assert isfile(repair_obj_result.output_path)
+mesh_repair_out = read_obj_mesh(repair_out_path)
+report_repair_out = mesh_quality_report(mesh_repair_out)
+@assert report_repair_out.n_orientation_conflicts == 0
+@assert report_repair_out.n_nonmanifold_edges == 0
+
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────

@@ -3,12 +3,28 @@
 export build_rwg, eval_rwg, div_rwg, basis_triangles
 
 """
-    build_rwg(mesh::TriMesh)
+    build_rwg(mesh::TriMesh; precheck=true, allow_boundary=true, require_closed=false, area_tol_rel=1e-12)
 
 Construct RWG basis functions from interior edges of the triangle mesh.
 Each interior edge shared by two triangles defines one RWG basis function.
+
+When `precheck=true` (default), run mesh-quality checks before basis
+construction and error out on invalid/degenerate/non-manifold or
+orientation-inconsistent meshes.
 """
-function build_rwg(mesh::TriMesh)
+function build_rwg(mesh::TriMesh;
+                   precheck::Bool=true,
+                   allow_boundary::Bool=true,
+                   require_closed::Bool=false,
+                   area_tol_rel::Float64=1e-12)
+    if precheck
+        assert_mesh_quality(mesh;
+            allow_boundary=allow_boundary,
+            require_closed=require_closed,
+            area_tol_rel=area_tol_rel,
+        )
+    end
+
     Nt = ntriangles(mesh)
 
     # Map sorted edge (v_lo, v_hi) -> list of (triangle, local_edge_idx)

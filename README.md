@@ -12,6 +12,7 @@ julia --project=. examples/ex_beam_steer.jl
 julia --project=. examples/ex_auto_preconditioning.jl
 julia --project=. examples/ex_pec_sphere_rcs.jl
 julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
+julia --project=. examples/ex_repair_obj_mesh.jl path/to/input.obj [path/to/output.obj]
 julia --project=. plot.jl
 julia --project=. validation/paper/generate_consistency_report.jl
 ```
@@ -58,6 +59,24 @@ overrides the mode selection.
 
 See `examples/ex_auto_preconditioning.jl` for a runnable example with
 recommended `:auto` settings for large / iterative runs.
+
+## Automatic Mesh Precheck
+
+Before EFIE assembly / RWG basis use, the solver now performs mesh-quality
+prechecks (enabled by default) for:
+- non-manifold edges,
+- degenerate / invalid triangles,
+- orientation conflicts on interior edges.
+
+This is enforced through `build_rwg(...)` and `assemble_Z_efie(...)` unless
+explicitly disabled via keyword arguments.
+
+To auto-repair an OBJ mesh (drop invalid/degenerate triangles and fix winding
+conflicts), use:
+
+```bash
+julia --project=. examples/ex_repair_obj_mesh.jl input.obj [output.obj]
+```
 
 ## Paper Consistency Snapshot
 

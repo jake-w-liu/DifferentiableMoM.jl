@@ -1,6 +1,8 @@
 # Mesh.jl — Simple mesh generation and geometry utilities
 
 export make_rect_plate, read_obj_mesh, triangle_area, triangle_center, triangle_normal
+export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
+export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 
 """
     make_rect_plate(Lx, Ly, Nx, Ny)
@@ -54,6 +56,172 @@ function make_rect_plate(Lx::Real, Ly::Real, Nx::Int, Ny::Int)
     end
 
     return TriMesh(xyz, tri)
+end
+
+function _bbox_diagonal(mesh::TriMesh)
+    mins = map(i -> minimum(@view mesh.xyz[i, :]), 1:3)
+    maxs = map(i -> maximum(@view mesh.xyz[i, :]), 1:3)
+    return norm(Vec3(maxs...) - Vec3(mins...))
+end
+
+"""
+    mesh_quality_report(mesh; area_tol_rel=1e-12, check_orientation=true)
+
+Compute mesh-quality diagnostics for a triangle surface mesh.
+The report includes:
+- invalid triangles (index out of bounds or repeated vertices),
+- degenerate triangles (area below tolerance),
+- boundary-edge count,
+- non-manifold-edge count (>2 incident triangles),
+- orientation-conflict count on interior edges.
+"""
+function mesh_quality_report(mesh::TriMesh; area_tol_rel::Float64=1e-12, check_orientation::Bool=true)
+    Nv = nvertices(mesh)
+    Nt = ntriangles(mesh)
+
+    size(mesh.xyz, 1) == 3 || error("Mesh xyz must have size (3, Nv)")
+    size(mesh.tri, 1) == 3 || error("Mesh tri must have size (3, Nt)")
+
+    scale = max(_bbox_diagonal(mesh), 1.0)
+    area_tol_abs = area_tol_rel * scale^2
+
+    invalid_triangles = Int[]
+    degenerate_triangles = Int[]
+
+    # edge_map[(i,j)] = directions of edge traversal in each incident triangle
+    # direction +1 means (i->j) where i<j, -1 means (j->i)
+    edge_map = Dict{Tuple{Int,Int}, Vector{Int8}}()
+
+    for t in 1:Nt
+        i1 = mesh.tri[1, t]
+        i2 = mesh.tri[2, t]
+        i3 = mesh.tri[3, t]
+
+        valid_idx = (1 <= i1 <= Nv) && (1 <= i2 <= Nv) && (1 <= i3 <= Nv)
+        distinct = (i1 != i2) && (i2 != i3) && (i3 != i1)
+        if !(valid_idx && distinct)
+            push!(invalid_triangles, t)
+            continue
+        end
+
+        if triangle_area(mesh, t) <= area_tol_abs
+            push!(degenerate_triangles, t)
+        end
+
+        for (a, b) in ((i1, i2), (i2, i3), (i3, i1))
+            key = a < b ? (a, b) : (b, a)
+            dir = a < b ? Int8(1) : Int8(-1)
+            push!(get!(edge_map, key, Int8[]), dir)
+        end
+    end
+
+    n_boundary_edges = 0
+    n_nonmanifold_edges = 0
+    n_orientation_conflicts = 0
+
+    for dirs in values(edge_map)
+        nd = length(dirs)
+        if nd == 1
+            n_boundary_edges += 1
+        elseif nd == 2
+            if check_orientation && dirs[1] == dirs[2]
+                n_orientation_conflicts += 1
+            end
+        elseif nd > 2
+            n_nonmanifold_edges += 1
+        end
+    end
+
+    n_edges_total = length(edge_map)
+    n_interior_edges = n_edges_total - n_boundary_edges - n_nonmanifold_edges
+
+    return (
+        n_vertices = Nv,
+        n_triangles = Nt,
+        n_edges_total = n_edges_total,
+        n_interior_edges = n_interior_edges,
+        n_boundary_edges = n_boundary_edges,
+        n_nonmanifold_edges = n_nonmanifold_edges,
+        n_orientation_conflicts = n_orientation_conflicts,
+        n_invalid_triangles = length(invalid_triangles),
+        n_degenerate_triangles = length(degenerate_triangles),
+        invalid_triangles = invalid_triangles,
+        degenerate_triangles = degenerate_triangles,
+        area_tol_abs = area_tol_abs,
+    )
+end
+
+"""
+    mesh_quality_ok(report; allow_boundary=true, require_closed=false)
+
+Return `true` if a mesh-quality report passes hard checks:
+- no invalid triangles,
+- no degenerate triangles,
+- no non-manifold edges,
+- no orientation conflicts,
+- boundary edges allowed unless `allow_boundary=false` or `require_closed=true`.
+"""
+function mesh_quality_ok(report; allow_boundary::Bool=true, require_closed::Bool=false)
+    if report.n_invalid_triangles > 0
+        return false
+    end
+    if report.n_degenerate_triangles > 0
+        return false
+    end
+    if report.n_nonmanifold_edges > 0
+        return false
+    end
+    if report.n_orientation_conflicts > 0
+        return false
+    end
+    if require_closed && report.n_boundary_edges > 0
+        return false
+    end
+    if !allow_boundary && report.n_boundary_edges > 0
+        return false
+    end
+    return true
+end
+
+"""
+    assert_mesh_quality(mesh; allow_boundary=true, require_closed=false, area_tol_rel=1e-12)
+
+Run mesh-quality checks and throw a detailed error if the mesh is unsuitable.
+Returns the computed quality report on success.
+"""
+function assert_mesh_quality(mesh::TriMesh;
+                             allow_boundary::Bool=true,
+                             require_closed::Bool=false,
+                             area_tol_rel::Float64=1e-12)
+    report = mesh_quality_report(mesh; area_tol_rel=area_tol_rel, check_orientation=true)
+    problems = String[]
+
+    if report.n_invalid_triangles > 0
+        sample = join(report.invalid_triangles[1:min(end, 5)], ", ")
+        push!(problems, "invalid triangles: $(report.n_invalid_triangles) (sample: $sample)")
+    end
+    if report.n_degenerate_triangles > 0
+        sample = join(report.degenerate_triangles[1:min(end, 5)], ", ")
+        push!(problems, "degenerate triangles: $(report.n_degenerate_triangles) (sample: $sample), area_tol_abs=$(report.area_tol_abs)")
+    end
+    if report.n_nonmanifold_edges > 0
+        push!(problems, "non-manifold edges: $(report.n_nonmanifold_edges)")
+    end
+    if report.n_orientation_conflicts > 0
+        push!(problems, "orientation conflicts on interior edges: $(report.n_orientation_conflicts)")
+    end
+    if require_closed && report.n_boundary_edges > 0
+        push!(problems, "boundary edges present but closed surface required: $(report.n_boundary_edges)")
+    elseif !allow_boundary && report.n_boundary_edges > 0
+        push!(problems, "boundary edges not allowed: $(report.n_boundary_edges)")
+    end
+
+    if !isempty(problems)
+        msg = "Mesh quality precheck failed:\n  - " * join(problems, "\n  - ")
+        error(msg)
+    end
+
+    return report
 end
 
 """
@@ -128,6 +296,229 @@ function read_obj_mesh(path::AbstractString)
     end
 
     return TriMesh(xyz, tri)
+end
+
+"""
+    write_obj_mesh(path, mesh; header="...")
+
+Write a `TriMesh` to a Wavefront OBJ file using triangle faces.
+"""
+function write_obj_mesh(path::AbstractString, mesh::TriMesh; header::AbstractString="Exported by DifferentiableMoM")
+    open(path, "w") do io
+        println(io, "# $header")
+        for i in 1:nvertices(mesh)
+            println(io, "v $(mesh.xyz[1, i]) $(mesh.xyz[2, i]) $(mesh.xyz[3, i])")
+        end
+        for t in 1:ntriangles(mesh)
+            println(io, "f $(mesh.tri[1, t]) $(mesh.tri[2, t]) $(mesh.tri[3, t])")
+        end
+    end
+    return path
+end
+
+function _clean_mesh_triangles(mesh::TriMesh;
+                               drop_invalid::Bool=true,
+                               drop_degenerate::Bool=true,
+                               area_tol_rel::Float64=1e-12)
+    nv = nvertices(mesh)
+    nt = ntriangles(mesh)
+    tri = mesh.tri
+    xyz = mesh.xyz
+
+    scale = max(_bbox_diagonal(mesh), 1.0)
+    area_tol_abs = area_tol_rel * scale^2
+
+    keep_triangle = trues(nt)
+    removed_invalid = Int[]
+    removed_degenerate = Int[]
+
+    for t in 1:nt
+        i1 = tri[1, t]
+        i2 = tri[2, t]
+        i3 = tri[3, t]
+
+        valid_idx = (1 <= i1 <= nv) && (1 <= i2 <= nv) && (1 <= i3 <= nv)
+        distinct = (i1 != i2) && (i2 != i3) && (i3 != i1)
+
+        if !(valid_idx && distinct)
+            if drop_invalid
+                keep_triangle[t] = false
+                push!(removed_invalid, t)
+                continue
+            else
+                error("Triangle $t is invalid and `drop_invalid=false`.")
+            end
+        end
+
+        v1 = Vec3(xyz[:, i1])
+        v2 = Vec3(xyz[:, i2])
+        v3 = Vec3(xyz[:, i3])
+        area = 0.5 * norm(cross(v2 - v1, v3 - v1))
+
+        if area <= area_tol_abs
+            if drop_degenerate
+                keep_triangle[t] = false
+                push!(removed_degenerate, t)
+            else
+                error("Triangle $t is degenerate (area=$area <= $area_tol_abs) and `drop_degenerate=false`.")
+            end
+        end
+    end
+
+    tri_clean = copy(tri[:, keep_triangle])
+    cleaned_mesh = TriMesh(copy(xyz), tri_clean)
+    return cleaned_mesh, removed_invalid, removed_degenerate, area_tol_abs
+end
+
+function _edge_orientation_adjacency(mesh::TriMesh)
+    nt = ntriangles(mesh)
+    edge_map = Dict{Tuple{Int,Int}, Vector{Tuple{Int,Int8}}}()
+
+    for t in 1:nt
+        i1 = mesh.tri[1, t]
+        i2 = mesh.tri[2, t]
+        i3 = mesh.tri[3, t]
+        for (a, b) in ((i1, i2), (i2, i3), (i3, i1))
+            key = a < b ? (a, b) : (b, a)
+            dir = a < b ? Int8(1) : Int8(-1)
+            push!(get!(edge_map, key, Tuple{Int,Int8}[]), (t, dir))
+        end
+    end
+
+    adjacency = [Tuple{Int,Int8}[] for _ in 1:nt]
+    for refs in values(edge_map)
+        if length(refs) == 2
+            (t1, d1) = refs[1]
+            (t2, d2) = refs[2]
+            parity = d1 == d2 ? Int8(1) : Int8(0)
+            push!(adjacency[t1], (t2, parity))
+            push!(adjacency[t2], (t1, parity))
+        end
+    end
+
+    return adjacency
+end
+
+function _compute_orientation_flips(mesh::TriMesh)
+    nt = ntriangles(mesh)
+    adjacency = _edge_orientation_adjacency(mesh)
+
+    flip_flag = fill(Int8(-1), nt)
+    queue = Int[]
+
+    for start in 1:nt
+        if flip_flag[start] != -1
+            continue
+        end
+
+        flip_flag[start] = 0
+        empty!(queue)
+        push!(queue, start)
+        queue_index = 1
+
+        while queue_index <= length(queue)
+            t = queue[queue_index]
+            queue_index += 1
+
+            for (nbr, parity) in adjacency[t]
+                expected = Int8(mod(Int(flip_flag[t]) + Int(parity), 2))
+                if flip_flag[nbr] == -1
+                    flip_flag[nbr] = expected
+                    push!(queue, nbr)
+                elseif flip_flag[nbr] != expected
+                    error("Orientation repair failed: inconsistent winding constraints in triangle graph.")
+                end
+            end
+        end
+    end
+
+    return flip_flag
+end
+
+function _apply_orientation_flips(mesh::TriMesh, flip_flag::Vector{Int8})
+    tri = copy(mesh.tri)
+    flipped_triangles = Int[]
+    for t in 1:ntriangles(mesh)
+        if flip_flag[t] == 1
+            tri[2, t], tri[3, t] = tri[3, t], tri[2, t]
+            push!(flipped_triangles, t)
+        end
+    end
+    return TriMesh(copy(mesh.xyz), tri), flipped_triangles
+end
+
+"""
+    repair_mesh_for_simulation(mesh;
+        allow_boundary=true, require_closed=false, area_tol_rel=1e-12,
+        drop_invalid=true, drop_degenerate=true,
+        fix_orientation=true, strict_nonmanifold=true)
+
+Repair a triangle mesh so it can pass solver prechecks:
+- optionally remove invalid/degenerate triangles,
+- orient triangles consistently across manifold interior edges.
+
+Returns a named tuple containing the repaired mesh and before/after reports.
+"""
+function repair_mesh_for_simulation(mesh::TriMesh;
+                                    allow_boundary::Bool=true,
+                                    require_closed::Bool=false,
+                                    area_tol_rel::Float64=1e-12,
+                                    drop_invalid::Bool=true,
+                                    drop_degenerate::Bool=true,
+                                    fix_orientation::Bool=true,
+                                    strict_nonmanifold::Bool=true)
+    report_before = mesh_quality_report(mesh; area_tol_rel=area_tol_rel, check_orientation=true)
+
+    cleaned_mesh, removed_invalid, removed_degenerate, area_tol_abs = _clean_mesh_triangles(
+        mesh;
+        drop_invalid=drop_invalid,
+        drop_degenerate=drop_degenerate,
+        area_tol_rel=area_tol_rel,
+    )
+    report_cleaned = mesh_quality_report(cleaned_mesh; area_tol_rel=area_tol_rel, check_orientation=true)
+
+    if strict_nonmanifold && report_cleaned.n_nonmanifold_edges > 0
+        error("Mesh repair cannot continue with non-manifold edges ($(report_cleaned.n_nonmanifold_edges)).")
+    end
+
+    repaired_mesh = cleaned_mesh
+    flipped_triangles = Int[]
+    if fix_orientation && report_cleaned.n_orientation_conflicts > 0
+        flip_flag = _compute_orientation_flips(cleaned_mesh)
+        repaired_mesh, flipped_triangles = _apply_orientation_flips(cleaned_mesh, flip_flag)
+    end
+
+    report_after = mesh_quality_report(repaired_mesh; area_tol_rel=area_tol_rel, check_orientation=true)
+    assert_mesh_quality(
+        repaired_mesh;
+        allow_boundary=allow_boundary,
+        require_closed=require_closed,
+        area_tol_rel=area_tol_rel,
+    )
+
+    return (
+        mesh = repaired_mesh,
+        before = report_before,
+        cleaned = report_cleaned,
+        after = report_after,
+        removed_invalid = removed_invalid,
+        removed_degenerate = removed_degenerate,
+        flipped_triangles = flipped_triangles,
+        area_tol_abs = area_tol_abs,
+    )
+end
+
+"""
+    repair_obj_mesh(input_path, output_path; kwargs...)
+
+Read an OBJ mesh, repair it for solver prechecks, and write a repaired OBJ.
+Returns the same metadata as `repair_mesh_for_simulation`, plus `output_path`.
+"""
+function repair_obj_mesh(input_path::AbstractString, output_path::AbstractString; kwargs...)
+    mesh = read_obj_mesh(input_path)
+    result = repair_mesh_for_simulation(mesh; kwargs...)
+    write_obj_mesh(output_path, result.mesh; header="Repaired from $input_path by DifferentiableMoM")
+    return (; result..., output_path=output_path)
 end
 
 """

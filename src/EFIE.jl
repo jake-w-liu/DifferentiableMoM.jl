@@ -12,13 +12,25 @@
 export assemble_Z_efie
 
 """
-    assemble_Z_efie(mesh, rwg, k; quad_order=3)
+    assemble_Z_efie(mesh, rwg, k; quad_order=3, mesh_precheck=true, allow_boundary=true, require_closed=false)
 
 Assemble the dense EFIE matrix Z_efie ∈ C^{N×N}.
 `k` is the wavenumber (can be complex for complex-step).
 """
 function assemble_Z_efie(mesh::TriMesh, rwg::RWGData, k;
-                         quad_order::Int=3, eta0=376.730313668)
+                         quad_order::Int=3, eta0=376.730313668,
+                         mesh_precheck::Bool=true,
+                         allow_boundary::Bool=true,
+                         require_closed::Bool=false,
+                         area_tol_rel::Float64=1e-12)
+    if mesh_precheck
+        assert_mesh_quality(mesh;
+            allow_boundary=allow_boundary,
+            require_closed=require_closed,
+            area_tol_rel=area_tol_rel,
+        )
+    end
+
     N = rwg.nedges
     omega_mu0 = k * eta0   # ωμ₀ = k η₀
 
