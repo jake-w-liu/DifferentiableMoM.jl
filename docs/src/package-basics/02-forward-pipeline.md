@@ -3,8 +3,8 @@
 ## Purpose
 
 Show the exact sequence used to compute scattering from geometry and excitation:
-mesh $\rightarrow$ RWG $\rightarrow$ EFIE matrix $\rightarrow$ solve currents
-$\rightarrow$ far-field observables.
+mesh ``\rightarrow`` RWG ``\rightarrow`` EFIE matrix ``\rightarrow`` solve currents
+``\rightarrow`` far-field observables.
 
 ---
 

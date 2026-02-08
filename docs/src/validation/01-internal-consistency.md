@@ -22,9 +22,9 @@ After this chapter, you should be able to:
 
 Recommended minimum gates:
 
-1. **Linear residual**: $\|\mathbf Z\mathbf I-\mathbf v\|/\|\mathbf v\|$.
+1. **Linear residual**: ``\|\mathbf Z\mathbf I-\mathbf v\|/\|\mathbf v\|``.
 2. **Objective consistency**: direct angular integration vs
-   $\mathbf I^\dagger\mathbf Q\mathbf I$.
+   ``\mathbf I^\dagger\mathbf Q\mathbf I``.
 3. **Energy ratio**: `P_rad / P_in` near expected value for tested scenario.
 4. **Condition diagnostics**: finite and reasonable matrix condition estimate.
 

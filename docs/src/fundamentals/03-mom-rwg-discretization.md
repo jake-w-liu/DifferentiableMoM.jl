@@ -118,12 +118,12 @@ neighbor; no artificial charge pile-up is introduced at interior edges.
 
 ### Tiny geometric meaning of each symbol
 
-- $\ell_n$: length of the shared interior edge.
+- ``\ell_n``: length of the shared interior edge.
 - `A_n^+, A_n^-`: areas of the two support triangles.
-- $\mathbf r_{+,\mathrm{opp}}, \mathbf r_{-,\mathrm{opp}}$: vertices opposite
+- ``\mathbf r_{+,\mathrm{opp}}, \mathbf r_{-,\mathrm{opp}}``: vertices opposite
   the shared edge in `T+` and `T-`.
 
-The linear form in $\mathbf r$ means the basis varies smoothly over each
+The linear form in ``\mathbf r`` means the basis varies smoothly over each
 triangle, while the sign flip between `T+` and `T-` enforces continuity across
 the common edge.
 

@@ -20,7 +20,7 @@ After this chapter, you should be able to:
 
 ## 1) Far-Field Sampling Pipeline
 
-Given solved coefficients $\mathbf I$:
+Given solved coefficients ``\mathbf I``:
 
 1. Build spherical grid: `make_sph_grid(Ntheta,Nphi)`.
 2. Precompute radiation vectors: `radiation_vectors(...)`.
@@ -38,7 +38,7 @@ Form:
 
 ## 2) Build Quadratic Objective Matrix `Q`
 
-For chosen polarization vectors $\mathbf p_q$ and angular mask:
+For chosen polarization vectors ``\mathbf p_q`` and angular mask:
 
 ```math
 Q_{mn}
@@ -99,7 +99,7 @@ Jcap = compute_objective(I, Qcap)
 Keep these distinctions clear:
 
 1. `J` from `Q` is an objective-style integrated metric.
-2. `RCS` is a scattering metric in area units ($\mathrm m^2$), often shown in dBsm.
+2. `RCS` is a scattering metric in area units (``\mathrm m^2``), often shown in dBsm.
 3. Beam-centric comparisons (main lobe/sidelobe behavior) are usually better
    aligned with steering objectives than global null-dominated residuals.
 
@@ -117,5 +117,5 @@ Keep these distinctions clear:
 ## Exercises
 
 - Basic: compare `J` for two cone half-angles.
-- Challenge: compute one $\phi$-cut from `σ_bi` and identify main-lobe and
+- Challenge: compute one ``\phi``-cut from `σ_bi` and identify main-lobe and
   strongest sidelobe levels.
