@@ -12,6 +12,7 @@ julia --project=. examples/ex_beam_steer.jl
 julia --project=. examples/ex_auto_preconditioning.jl
 julia --project=. examples/ex_pec_sphere_rcs.jl
 julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
+julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
 julia --project=. examples/ex_repair_obj_mesh.jl path/to/input.obj [path/to/output.obj]
 julia --project=. plot.jl
 julia --project=. validation/paper/generate_consistency_report.jl

@@ -3,6 +3,8 @@
 export make_rect_plate, read_obj_mesh, triangle_area, triangle_center, triangle_normal
 export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
 export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
+export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles
+export coarsen_mesh_to_target_rwg
 
 """
     make_rect_plate(Lx, Ly, Nx, Ny)
@@ -314,6 +316,213 @@ function write_obj_mesh(path::AbstractString, mesh::TriMesh; header::AbstractStr
         end
     end
     return path
+end
+
+"""
+    estimate_dense_matrix_gib(N)
+
+Estimate memory (GiB) for a dense complex `N × N` matrix with `ComplexF64`
+entries (16 bytes per entry).
+"""
+estimate_dense_matrix_gib(N::Integer) = 16.0 * float(N) * float(N) / 1024.0^3
+
+"""
+    cluster_mesh_vertices(mesh, h)
+
+Voxel-cluster a mesh using cubic cell size `h`, replacing all vertices in each
+cell by their centroid and remapping triangles. Degenerate and duplicate
+triangles created by remapping are removed.
+"""
+function cluster_mesh_vertices(mesh::TriMesh, h::Float64)
+    h > 0 || error("cluster_mesh_vertices: h must be > 0, got $h")
+
+    nv = nvertices(mesh)
+    mins = (
+        minimum(@view mesh.xyz[1, :]),
+        minimum(@view mesh.xyz[2, :]),
+        minimum(@view mesh.xyz[3, :]),
+    )
+
+    key_to_id = Dict{NTuple{3,Int},Int}()
+    vmap = Vector{Int}(undef, nv)
+    sx = Float64[]
+    sy = Float64[]
+    sz = Float64[]
+    sc = Int[]
+
+    for i in 1:nv
+        x = mesh.xyz[1, i]
+        y = mesh.xyz[2, i]
+        z = mesh.xyz[3, i]
+        key = (
+            floor(Int, (x - mins[1]) / h),
+            floor(Int, (y - mins[2]) / h),
+            floor(Int, (z - mins[3]) / h),
+        )
+        id = get!(key_to_id, key) do
+            push!(sx, 0.0)
+            push!(sy, 0.0)
+            push!(sz, 0.0)
+            push!(sc, 0)
+            length(sx)
+        end
+        vmap[i] = id
+        sx[id] += x
+        sy[id] += y
+        sz[id] += z
+        sc[id] += 1
+    end
+
+    nnew = length(sx)
+    xyz_new = zeros(Float64, 3, nnew)
+    for i in 1:nnew
+        invc = 1.0 / sc[i]
+        xyz_new[1, i] = sx[i] * invc
+        xyz_new[2, i] = sy[i] * invc
+        xyz_new[3, i] = sz[i] * invc
+    end
+
+    tri_vec = Int[]
+    seen = Set{NTuple{3,Int}}()
+    for t in 1:ntriangles(mesh)
+        a = vmap[mesh.tri[1, t]]
+        b = vmap[mesh.tri[2, t]]
+        c = vmap[mesh.tri[3, t]]
+        if a == b || b == c || c == a
+            continue
+        end
+        ss = sort([a, b, c])
+        key = (ss[1], ss[2], ss[3])
+        if key in seen
+            continue
+        end
+        push!(seen, key)
+        push!(tri_vec, a, b, c)
+    end
+
+    isempty(tri_vec) && error("cluster_mesh_vertices: clustering removed all triangles.")
+    tri_new = reshape(tri_vec, 3, :)
+    return TriMesh(xyz_new, tri_new)
+end
+
+"""
+    drop_nonmanifold_triangles(mesh; max_passes=8)
+
+Iteratively remove triangles attached to non-manifold edges (edges with more
+than two incident triangles). Returns a mesh with only manifold/boundary edges.
+"""
+function drop_nonmanifold_triangles(mesh::TriMesh; max_passes::Int=8)
+    nt = ntriangles(mesh)
+    keep = trues(nt)
+
+    for _ in 1:max_passes
+        edge_to_tris = Dict{Tuple{Int,Int}, Vector{Int}}()
+        for t in 1:nt
+            keep[t] || continue
+            i1 = mesh.tri[1, t]
+            i2 = mesh.tri[2, t]
+            i3 = mesh.tri[3, t]
+            for (a, b) in ((i1, i2), (i2, i3), (i3, i1))
+                key = a < b ? (a, b) : (b, a)
+                push!(get!(edge_to_tris, key, Int[]), t)
+            end
+        end
+
+        bad = falses(nt)
+        nbad_edges = 0
+        for tris in values(edge_to_tris)
+            if length(tris) > 2
+                nbad_edges += 1
+                for t in tris
+                    bad[t] = true
+                end
+            end
+        end
+
+        nbad_edges == 0 && break
+        keep .&= .!bad
+    end
+
+    tri_new = copy(mesh.tri[:, keep])
+    isempty(tri_new) && error("drop_nonmanifold_triangles: empty mesh after cleanup.")
+    return TriMesh(copy(mesh.xyz), tri_new)
+end
+
+"""
+    coarsen_mesh_to_target_rwg(mesh, target_rwg; kwargs...)
+
+Auto-coarsen a mesh by voxel clustering to approach a target RWG count.
+Each candidate mesh is non-manifold cleaned and repaired before RWG counting.
+
+Returns a named tuple:
+`(mesh, rwg_count, target_rwg, best_gap, iterations)`.
+"""
+function coarsen_mesh_to_target_rwg(mesh::TriMesh, target_rwg::Int;
+                                    max_iters::Int=10,
+                                    allow_boundary::Bool=true,
+                                    require_closed::Bool=false,
+                                    area_tol_rel::Float64=1e-12,
+                                    strict_nonmanifold::Bool=true)
+    target_rwg > 0 || error("coarsen_mesh_to_target_rwg: target_rwg must be > 0")
+
+    mins = [minimum(@view mesh.xyz[i, :]) for i in 1:3]
+    maxs = [maximum(@view mesh.xyz[i, :]) for i in 1:3]
+    span = maxs .- mins
+    bbox_vol_raw = prod(span)
+    if bbox_vol_raw <= 1e-18
+        max_span = max(maximum(span), 1e-6)
+        bbox_vol = max_span^3
+    else
+        bbox_vol = bbox_vol_raw
+    end
+    target_vertices = max(80, Int(round(target_rwg / 3)))
+    h = cbrt(bbox_vol / target_vertices)
+
+    best_mesh = mesh
+    best_gap = typemax(Int)
+    best_rwg = build_rwg(mesh; precheck=true, allow_boundary=allow_boundary,
+                         require_closed=require_closed, area_tol_rel=area_tol_rel).nedges
+    niter = 0
+
+    for iter in 1:max_iters
+        cand = cluster_mesh_vertices(mesh, h)
+        cand = drop_nonmanifold_triangles(cand)
+        cand_rep = repair_mesh_for_simulation(
+            cand;
+            allow_boundary=allow_boundary,
+            require_closed=require_closed,
+            area_tol_rel=area_tol_rel,
+            drop_invalid=true,
+            drop_degenerate=true,
+            fix_orientation=true,
+            strict_nonmanifold=strict_nonmanifold,
+        )
+        cand_mesh = cand_rep.mesh
+        nrwg = build_rwg(
+            cand_mesh;
+            precheck=true,
+            allow_boundary=allow_boundary,
+            require_closed=require_closed,
+            area_tol_rel=area_tol_rel,
+        ).nedges
+
+        gap = abs(nrwg - target_rwg)
+        if gap < best_gap
+            best_gap = gap
+            best_mesh = cand_mesh
+            best_rwg = nrwg
+        end
+        niter = iter
+
+        ratio = nrwg / max(target_rwg, 1)
+        if 0.85 <= ratio <= 1.15
+            return (mesh=cand_mesh, rwg_count=nrwg, target_rwg=target_rwg, best_gap=gap, iterations=iter)
+        end
+
+        h *= ratio^(1 / 3)
+    end
+
+    return (mesh=best_mesh, rwg_count=best_rwg, target_rwg=target_rwg, best_gap=best_gap, iterations=niter)
 end
 
 function _clean_mesh_triangles(mesh::TriMesh;
