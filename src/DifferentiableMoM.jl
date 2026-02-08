@@ -20,5 +20,6 @@ include("Adjoint.jl")
 include("Verification.jl")
 include("Optimize.jl")
 include("Diagnostics.jl")
+include("Mie.jl")
 
 end # module

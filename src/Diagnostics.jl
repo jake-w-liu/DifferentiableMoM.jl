@@ -1,6 +1,7 @@
 # Diagnostics.jl — Energy conservation, condition number, and convergence utilities
 
 export radiated_power, projected_power, input_power, energy_ratio, condition_diagnostics
+export bistatic_rcs, backscatter_rcs
 
 """
     radiated_power(E_ff, grid; eta0=376.730313668)
@@ -84,4 +85,63 @@ function condition_diagnostics(Z::Matrix{<:Number})
     return (cond = svs[1] / svs[end],
             sv_max = svs[1],
             sv_min = svs[end])
+end
+
+"""
+    bistatic_rcs(E_ff; E0=1.0)
+
+Compute bistatic radar cross section samples from far-field amplitudes:
+  σ(r̂_q) = 4π |E∞(r̂_q)|² / |E0|²
+
+Returns a real vector of length `NΩ` in linear units (m²).
+"""
+function bistatic_rcs(E_ff::Matrix{<:Number}; E0::Real=1.0)
+    abs2(E0) > 0 || error("E0 must be nonzero for RCS normalization")
+    NΩ = size(E_ff, 2)
+    σ = zeros(Float64, NΩ)
+    scale = 4π / abs2(E0)
+    for q in 1:NΩ
+        Eq = E_ff[:, q]
+        σ[q] = scale * real(dot(Eq, Eq))
+    end
+    return σ
+end
+
+"""
+    backscatter_rcs(E_ff, grid, k_inc_hat; E0=1.0)
+
+Return monostatic/backscatter RCS for a plane-wave incidence direction
+`k_inc_hat` (unit propagation direction). The backscatter direction is
+`-k_inc_hat`, mapped to the nearest sample on `grid`.
+
+Returns a named tuple:
+`(sigma, index, theta, phi, angular_error_deg)`.
+"""
+function backscatter_rcs(E_ff::Matrix{<:Number}, grid::SphGrid,
+                         k_inc_hat::Vec3; E0::Real=1.0)
+    khat = k_inc_hat / norm(k_inc_hat)
+    r_back = -khat
+
+    best_idx = 1
+    best_dot = -Inf
+    NΩ = length(grid.w)
+    for q in 1:NΩ
+        rq = Vec3(grid.rhat[:, q])
+        d = dot(r_back, rq)
+        if d > best_dot
+            best_dot = d
+            best_idx = q
+        end
+    end
+
+    σ = bistatic_rcs(E_ff; E0=E0)
+    ang_err = acos(clamp(best_dot, -1.0, 1.0)) * 180 / π
+
+    return (
+        sigma = σ[best_idx],
+        index = best_idx,
+        theta = grid.theta[best_idx],
+        phi = grid.phi[best_idx],
+        angular_error_deg = ang_err,
+    )
 end
