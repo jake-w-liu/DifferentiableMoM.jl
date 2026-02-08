@@ -10,8 +10,16 @@ From this folder:
 julia --project=. test/runtests.jl
 julia --project=. examples/ex_beam_steer.jl
 julia --project=. examples/ex_auto_preconditioning.jl
+julia --project=. examples/ex_pec_sphere_rcs.jl
+julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
 julia --project=. plot.jl
 julia --project=. validation/paper/generate_consistency_report.jl
+```
+
+For an external sphere mesh:
+```bash
+julia --project=. examples/ex_pec_sphere_rcs.jl path/to/sphere.obj
+julia --project=. examples/ex_pec_sphere_mie_benchmark.jl path/to/sphere.obj 3.0
 ```
 
 ## Repository Layout
@@ -62,3 +70,14 @@ julia --project=. validation/paper/generate_consistency_report.jl
 This writes:
 - `data/paper_metrics_snapshot.csv`
 - `data/paper_consistency_report.md`
+
+## Sphere Mie CI Gate
+
+`test/runtests.jl` includes a dedicated PEC-sphere MoM-vs-Mie gate
+(Test 13) that enforces dB-threshold checks on:
+- `MAE`
+- `RMSE`
+- max absolute dB error on the cut
+- backscatter dB difference
+
+It also writes `data/sphere_mie_gate_metrics.csv`.

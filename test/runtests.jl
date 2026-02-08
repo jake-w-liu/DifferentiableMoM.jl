@@ -16,6 +16,62 @@ using .DifferentiableMoM
 const DATADIR = joinpath(@__DIR__, "..", "data")
 mkpath(DATADIR)
 
+function write_icosphere_obj(path::AbstractString; radius::Float64=0.05, subdivisions::Int=2)
+    ϕ = (1 + sqrt(5.0)) / 2
+    verts = [
+        (-1.0,  ϕ, 0.0), ( 1.0,  ϕ, 0.0), (-1.0, -ϕ, 0.0), ( 1.0, -ϕ, 0.0),
+        ( 0.0, -1.0, ϕ), ( 0.0,  1.0, ϕ), ( 0.0, -1.0,-ϕ), ( 0.0,  1.0,-ϕ),
+        (  ϕ, 0.0, -1.0), (  ϕ, 0.0,  1.0), ( -ϕ, 0.0, -1.0), ( -ϕ, 0.0,  1.0),
+    ]
+    verts = [Vec3(v...) / norm(Vec3(v...)) for v in verts]
+
+    faces = [
+        (1,12,6), (1,6,2), (1,2,8), (1,8,11), (1,11,12),
+        (2,6,10), (6,12,5), (12,11,3), (11,8,7), (8,2,9),
+        (4,10,5), (4,5,3), (4,3,7), (4,7,9), (4,9,10),
+        (5,10,6), (3,5,12), (7,3,11), (9,7,8), (10,9,2),
+    ]
+
+    for _ in 1:subdivisions
+        edge_mid = Dict{Tuple{Int,Int},Int}()
+        new_faces = NTuple{3,Int}[]
+
+        function midpoint_index(i::Int, j::Int)
+            key = i < j ? (i, j) : (j, i)
+            if haskey(edge_mid, key)
+                return edge_mid[key]
+            end
+            vmid = (verts[i] + verts[j]) / 2
+            vmid /= norm(vmid)
+            push!(verts, vmid)
+            idx = length(verts)
+            edge_mid[key] = idx
+            return idx
+        end
+
+        for (i, j, k) in faces
+            a = midpoint_index(i, j)
+            b = midpoint_index(j, k)
+            c = midpoint_index(k, i)
+            push!(new_faces, (i, a, c))
+            push!(new_faces, (j, b, a))
+            push!(new_faces, (k, c, b))
+            push!(new_faces, (a, b, c))
+        end
+        faces = new_faces
+    end
+
+    open(path, "w") do io
+        println(io, "# Icosphere mesh for test gate")
+        for v in verts
+            println(io, "v $(radius * v[1]) $(radius * v[2]) $(radius * v[3])")
+        end
+        for (i, j, k) in faces
+            println(io, "f $i $j $k")
+        end
+    end
+end
+
 println("="^60)
 println("DifferentiableMoM Test Suite")
 println("="^60)
@@ -60,6 +116,25 @@ CSV.write(joinpath(DATADIR, "mesh_triangles.csv"), df_tri)
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 1b: OBJ mesh import
+# ─────────────────────────────────────────────────
+println("\n── Test 1b: OBJ mesh import ──")
+
+obj_path = joinpath(DATADIR, "tmp_quad.obj")
+open(obj_path, "w") do io
+    println(io, "v 0 0 0")
+    println(io, "v 1 0 0")
+    println(io, "v 1 1 0")
+    println(io, "v 0 1 0")
+    println(io, "f 1 2 3 4")
+end
+
+mesh_obj = read_obj_mesh(obj_path)
+@assert nvertices(mesh_obj) == 4
+@assert ntriangles(mesh_obj) == 2
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Test 2: Green's Function
 # ─────────────────────────────────────────────────
 println("\n── Test 2: Green's function ──")
@@ -75,6 +150,73 @@ G_expected = exp(-1im * k0 * R) / (4π * R)
 
 # Check reciprocity: G(r,r') = G(r',r)
 @assert abs(greens(r1, r2, k0) - greens(r2, r1, k0)) < 1e-14
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 2b: PEC sphere Mie utilities
+# ─────────────────────────────────────────────────
+println("\n── Test 2b: PEC Mie-theory utilities ──")
+
+k_mie = 2π / 0.1
+a_mie = 0.03
+θ_mie = 60 * π / 180
+khat_mie = Vec3(0.0, 0.0, 1.0)
+pol_mie = Vec3(1.0, 0.0, 0.0)
+rhat_mie = Vec3(sin(θ_mie), 0.0, cos(θ_mie))
+μ_mie = dot(khat_mie, rhat_mie)
+
+S1_mie, S2_mie = mie_s1s2_pec(k_mie * a_mie, μ_mie)
+@assert isfinite(real(S1_mie)) && isfinite(imag(S1_mie))
+@assert isfinite(real(S2_mie)) && isfinite(imag(S2_mie))
+
+σ_formula = 4π * abs2(S2_mie) / (k_mie^2)   # φ=0 plane for x-pol
+σ_mie = mie_bistatic_rcs_pec(k_mie, a_mie, khat_mie, pol_mie, rhat_mie)
+@assert σ_mie >= 0
+@assert abs(σ_mie - σ_formula) / max(abs(σ_formula), 1e-30) < 1e-10
+
+# Independent energy-consistency check:
+# integrate differential cross section over sphere and compare to
+# coefficient-sum total scattering cross section Csca.
+function _mie_csca_coeff_pec(k::Float64, a::Float64; nmax::Int=80)
+    x = k * a
+    j = zeros(Float64, nmax + 1)  # j[n+1] = j_n
+    y = zeros(Float64, nmax + 1)  # y[n+1] = y_n
+    j[1] = sin(x) / x
+    y[1] = -cos(x) / x
+    j[2] = sin(x) / x^2 - cos(x) / x
+    y[2] = -cos(x) / x^2 - sin(x) / x
+    for n in 1:(nmax - 1)
+        j[n + 2] = ((2n + 1) / x) * j[n + 1] - j[n]
+        y[n + 2] = ((2n + 1) / x) * y[n + 1] - y[n]
+    end
+
+    psi = zeros(Float64, nmax + 1)
+    xi  = zeros(ComplexF64, nmax + 1)
+    for n in 0:nmax
+        psi[n + 1] = x * j[n + 1]
+        xi[n + 1]  = x * (j[n + 1] - 1im * y[n + 1])
+    end
+
+    csum = 0.0
+    for n in 1:nmax
+        psi_p = psi[n] - (n / x) * psi[n + 1]
+        xi_p  = xi[n] - (n / x) * xi[n + 1]
+        an = -psi_p / xi_p
+        bn = -psi[n + 1] / xi[n + 1]
+        csum += (2n + 1) * (abs2(an) + abs2(bn))
+    end
+    return (2π / (k^2)) * csum
+end
+
+grid_mie = make_sph_grid(181, 180)
+σ_mie_grid = [
+    mie_bistatic_rcs_pec(k_mie, a_mie, khat_mie, pol_mie, Vec3(grid_mie.rhat[:, q]))
+    for q in 1:length(grid_mie.w)
+]
+Csca_num = sum((σ_mie_grid ./ (4π)) .* grid_mie.w)
+Csca_ref = _mie_csca_coeff_pec(k_mie, a_mie; nmax=80)
+@assert abs(Csca_num - Csca_ref) / max(abs(Csca_ref), 1e-30) < 2e-3
 
 println("  PASS ✓")
 
@@ -231,6 +373,15 @@ df_ff = DataFrame(
     power_dB  = 10 .* log10.(max.(ff_power, 1e-30))
 )
 CSV.write(joinpath(DATADIR, "farfield_pec.csv"), df_ff)
+
+# RCS helper checks
+sigma = bistatic_rcs(E_ff; E0=1.0)
+@assert length(sigma) == NΩ
+@assert all(sigma .>= 0.0)
+
+bs = backscatter_rcs(E_ff, grid, Vec3(0.0, 0.0, -1.0); E0=1.0)
+@assert 1 <= bs.index <= NΩ
+@assert bs.sigma >= 0.0
 
 println("  PASS ✓")
 
@@ -580,6 +731,81 @@ g_fd_pre = fd_grad(J_of_theta_pre, theta_c, p_pre; h=1e-5)
 rel_g_pre = abs(g_pre[p_pre] - g_fd_pre) / max(abs(g_pre[p_pre]), 1e-30)
 println("  Preconditioned gradient rel. error (p=$p_pre): $rel_g_pre")
 @assert rel_g_pre < 1e-4
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 13: Sphere MoM-vs-Mie benchmark CI gate
+# ─────────────────────────────────────────────────
+println("\n── Test 13: Sphere Mie benchmark gate ──")
+
+obj_sphere = joinpath(DATADIR, "tmp_sphere_gate.obj")
+write_icosphere_obj(obj_sphere; radius=0.05, subdivisions=2)
+
+mesh_s = read_obj_mesh(obj_sphere)
+rwg_s = build_rwg(mesh_s)
+
+freq_s = 2.0e9
+c0_s = 299792458.0
+lambda_s = c0_s / freq_s
+k_s = 2π / lambda_s
+eta0_s = 376.730313668
+k_vec_s = Vec3(0.0, 0.0, -k_s)
+khat_s = k_vec_s / norm(k_vec_s)
+pol_s = Vec3(1.0, 0.0, 0.0)
+
+ctr_s = vec(sum(mesh_s.xyz, dims=2) ./ nvertices(mesh_s))
+radii_s = [norm(Vec3(mesh_s.xyz[:, i]) - Vec3(ctr_s)) for i in 1:nvertices(mesh_s)]
+a_s = sum(radii_s) / length(radii_s)
+
+Z_s = assemble_Z_efie(mesh_s, rwg_s, k_s; quad_order=3, eta0=eta0_s)
+v_s = assemble_v_plane_wave(mesh_s, rwg_s, k_vec_s, 1.0, pol_s; quad_order=3)
+I_s = solve_forward(Z_s, v_s)
+res_s = norm(Z_s * I_s - v_s) / max(norm(v_s), 1e-30)
+@assert res_s < 1e-10
+
+grid_s = make_sph_grid(181, 72)
+G_s = radiation_vectors(mesh_s, rwg_s, grid_s, k_s; quad_order=3, eta0=eta0_s)
+E_s = compute_farfield(G_s, I_s, length(grid_s.w))
+σ_mom_s = bistatic_rcs(E_s; E0=1.0)
+
+phi_target_s = grid_s.phi[argmin(grid_s.phi)]
+idx_cut_s = [q for q in 1:length(grid_s.w) if abs(grid_s.phi[q] - phi_target_s) < 1e-12]
+idx_cut_s = idx_cut_s[sortperm(grid_s.theta[idx_cut_s])]
+
+σ_mie_s = [
+    mie_bistatic_rcs_pec(k_s, a_s, khat_s, pol_s, Vec3(grid_s.rhat[:, q]))
+    for q in idx_cut_s
+]
+
+dB_mom_s = 10 .* log10.(max.(σ_mom_s[idx_cut_s], 1e-30))
+dB_mie_s = 10 .* log10.(max.(σ_mie_s, 1e-30))
+ΔdB_s = dB_mom_s .- dB_mie_s
+
+mae_s = sum(abs.(ΔdB_s)) / length(ΔdB_s)
+rmse_s = sqrt(sum(abs2, ΔdB_s) / length(ΔdB_s))
+maxabs_s = maximum(abs.(ΔdB_s))
+
+σ_bs_mom_s = backscatter_rcs(E_s, grid_s, khat_s; E0=1.0).sigma
+σ_bs_mie_s = mie_bistatic_rcs_pec(k_s, a_s, khat_s, pol_s, -khat_s)
+Δbs_s = 10 * log10(max(σ_bs_mom_s, 1e-30)) - 10 * log10(max(σ_bs_mie_s, 1e-30))
+
+println("  MAE(dB): $mae_s")
+println("  RMSE(dB): $rmse_s")
+println("  Max |Δ|(dB): $maxabs_s")
+println("  Backscatter Δ(dB): $Δbs_s")
+
+# Dedicated CI thresholds for the sphere benchmark
+@assert mae_s < 0.35 "Sphere Mie gate failed: MAE(dB)=$mae_s"
+@assert rmse_s < 0.40 "Sphere Mie gate failed: RMSE(dB)=$rmse_s"
+@assert maxabs_s < 0.80 "Sphere Mie gate failed: max |Δ|(dB)=$maxabs_s"
+@assert abs(Δbs_s) < 0.80 "Sphere Mie gate failed: |backscatter Δ(dB)|=$(abs(Δbs_s))"
+
+df_sphere_gate = DataFrame(
+    metric = ["mae_db", "rmse_db", "max_abs_db", "backscatter_delta_db", "solve_residual"],
+    value = [mae_s, rmse_s, maxabs_s, Δbs_s, res_s],
+)
+CSV.write(joinpath(DATADIR, "sphere_mie_gate_metrics.csv"), df_sphere_gate)
 
 println("  PASS ✓")
 
