@@ -82,7 +82,7 @@ Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
   ```bash
   julia --project=. test/runtests.jl
   ```
-- Paper-facing metrics snapshot:
+- Metrics snapshot:
   ```bash
   julia --project=. validation/paper/generate_consistency_report.jl
   ```
@@ -96,7 +96,7 @@ Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 - `src/` — solver, adjoint, optimization, verification, visualization
 - `examples/` — runnable examples and demos
 - `test/` — automated validation and gates
-- `validation/` — paper and external cross-validation scripts
+- `validation/` — external cross-validation scripts
 - `data/` — generated numeric outputs (not tracked)
 - `figs/` — generated figures (not tracked)
 
