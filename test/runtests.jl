@@ -206,6 +206,48 @@ report_repair_out = mesh_quality_report(mesh_repair_out)
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 1d: Mesh coarsening utilities
+# ─────────────────────────────────────────────────
+println("\n── Test 1d: Mesh coarsening utilities ──")
+
+@assert estimate_dense_matrix_gib(100) > 0
+
+mesh_cluster_in = make_rect_plate(1.0, 1.0, 6, 6)
+mesh_cluster_out = cluster_mesh_vertices(mesh_cluster_in, 0.35)
+@assert nvertices(mesh_cluster_out) > 0
+@assert ntriangles(mesh_cluster_out) > 0
+
+xyz_nm = [
+    0.0  1.0  0.0  0.0  0.0  2.0  2.0;
+    0.0  0.0  1.0 -1.0  0.0  0.0  1.0;
+    0.0  0.0  0.0  0.0  1.0  0.0  0.0
+]
+tri_nm = [
+    1  1  1  3;
+    2  2  2  6;
+    3  4  5  7
+]
+mesh_nm = TriMesh(xyz_nm, tri_nm)
+mesh_nm_clean = drop_nonmanifold_triangles(mesh_nm)
+report_nm = mesh_quality_report(mesh_nm_clean)
+@assert report_nm.n_nonmanifold_edges == 0
+
+mesh_coarse_in = make_rect_plate(1.0, 1.0, 12, 12)
+rwg_coarse_in = build_rwg(mesh_coarse_in; precheck=true, allow_boundary=true)
+@assert rwg_coarse_in.nedges > 60
+
+target_rwg = 60
+coarse_result = coarsen_mesh_to_target_rwg(mesh_coarse_in, target_rwg; max_iters=8)
+rwg_coarse_out = build_rwg(coarse_result.mesh; precheck=true, allow_boundary=true)
+@assert coarse_result.rwg_count == rwg_coarse_out.nedges
+@assert abs(coarse_result.rwg_count - target_rwg) <= target_rwg  # improved complexity scale
+@assert rwg_coarse_out.nedges < rwg_coarse_in.nedges
+report_coarse_out = mesh_quality_report(coarse_result.mesh)
+@assert mesh_quality_ok(report_coarse_out; allow_boundary=true, require_closed=false)
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Test 2: Green's Function
 # ─────────────────────────────────────────────────
 println("\n── Test 2: Green's function ──")
