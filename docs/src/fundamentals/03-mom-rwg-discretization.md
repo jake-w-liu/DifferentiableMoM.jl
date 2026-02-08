@@ -21,24 +21,148 @@ After this chapter, you should be able to:
 
 Before the derivation, here is the geometric intuition.
 
-An RWG basis function is attached to **one interior edge** shared by exactly two
-triangles:
+### Visual Description
 
-- one “plus” triangle `T+`,
-- one “minus” triangle `T-`.
+Imagine a mesh surface made of triangular patches. An RWG basis function is attached to **one interior edge** shared by exactly two triangles:
 
-So each basis coefficient `I_n` controls the strength of current flow associated
-with that shared edge pair. The current is nonzero only on those two triangles.
+- **"Plus" triangle `T+`**: current flows **away from** the shared edge toward the opposite vertex
+- **"Minus" triangle `T-`**: current flows **toward** the shared edge from the opposite vertex
 
-Why this is useful:
+**Picture this**: Think of the shared edge as a "bridge" between two triangles. Current flows across this bridge in a continuous manner - what leaves one triangle enters the other.
 
-1. It is local (compact support), so assembly is structured.
-2. It is tangential on the surface.
-3. It enforces normal-current continuity across the shared edge.
+### Geometric Construction
 
-In plain words, RWG turns a surface current field into a finite set of
-edge-associated amplitudes that are physically compatible with charge/current
-conservation on the mesh.
+For each interior edge with length `ℓ_n`:
+
+1. **Identify the two triangles**: `T+` and `T-` sharing this edge
+2. **Locate opposite vertices**: `r_{+,opp}` in `T+`, `r_{-,opp}` in `T-`
+3. **Current flow pattern**: 
+   - In `T+`: linear flow from edge toward `r_{+,opp}`
+   - In `T-`: linear flow from `r_{-,opp}` toward edge
+
+### Why This Design Works
+
+1. **Local support**: Each basis affects only its two triangles → sparse assembly structure
+2. **Tangentiality**: Current stays on surface (no normal component) → satisfies boundary conditions
+3. **Continuity**: Current leaving `T+` equals current entering `T-` → charge conservation
+4. **Linear variation**: Simple to integrate analytically → efficient quadrature
+
+### Physical Interpretation
+
+Each RWG coefficient `I_n` represents the **strength of current flow** through edge `n`. The complete surface current is a superposition of all edge flows:
+
+```math
+\mathbf J(\mathbf r) = \sum_{n=1}^{N} I_n \mathbf f_n(\mathbf r)
+```
+
+**Key insight**: Instead of describing current at every point, we describe it by how much flows through each edge. This is the discretization that makes MoM computationally tractable.
+
+### Concrete Example
+
+Consider a rectangular plate divided into 2×2 triangles (4 interior edges). Each edge will have:
+- One RWG basis function
+- One current coefficient `I_n`
+- Support on exactly 2 triangles
+
+The total current pattern is determined by these 4 coefficients, not by values at every point on the surface.
+
+### ASCII Diagram: RWG Basis Function Geometry
+
+```
+                        RWG Basis Function - Edge n
+                        Shared edge length = ℓ_n
+                      
+                        T+ triangle          T- triangle
+                           ▲                     ▼
+                          ╱ ╲                   ╱ ╲
+                         ╱   ╲                 ╱   ╲
+                        ╱     ╲               ╱     ╲
+                       ╱       ╲             ╱       ╲
+                      ╱         ╲           ╱         ╲
+                     ╱           ╲         ╱           ╲
+                    ╱             ╲       ╱             ╲
+                   ╱               ╲     ╱               ╲
+                  ╱                 ╲   ╱                 ╲
+                 ╱                   ╲ ╱                   ╲
+                ╱                     ●                     ╲
+               ╱                     ╱ ╲                     ╲
+              ╱                     ╱   ╲                     ╲
+             ╱                     ╱     ╲                     ╲
+            ╱                     ╱       ╲                     ╲
+           ╱                     ╱         ╲                     ╲
+          ╱                     ╱           ╲                     ╲
+         ▼─────────────────────●─────────────●─────────────────────►
+        p₁                    edge n         p₂                    Current
+         (vertex)             (length ℓ_n)    (vertex)             flow direction
+        
+        
+        Legend:
+        ● = Edge endpoints (p₁, p₂)
+        ▲ = Current flows AWAY from edge (T+ triangle)
+        ▼ = Current flows TOWARD edge (T- triangle)
+        ► = Linear current variation within triangle
+        T+ area = A_n^+, T- area = A_n^-
+```
+
+### Current Flow Visualization
+
+**Triangle T+ (plus triangle)**:
+```
+        Opposite vertex r_{+,opp}
+                 ▲
+                ╱ ╲
+               ╱   ╲
+              ╱     ╲   Current flows radially outward
+             ╱       ╲   from shared edge
+            ╱         ╲
+           ╱           ╲
+          ╱             ╲
+         ╱               ╲
+        ▼─────────────────►
+     edge n            edge n
+```
+
+**Triangle T- (minus triangle)**:
+```
+        Opposite vertex r_{-,opp}
+                 ▼
+                ╱ ╲
+               ╱   ╲
+              ╱     ╲   Current flows radially inward
+             ╱       ╲   toward shared edge
+            ╱         ╲
+           ╱           ╲
+          ╱             ╲
+         ╱               ╲
+        ►─────────────────▲
+     edge n            edge n
+```
+
+### Current Continuity at Shared Edge
+
+```
+    T+ triangle        |        T- triangle
+                       |
+        ▲              |              ▼
+       ╱ ╲             |             ╱ ╲
+      ╱   ╲            |            ╱   ╲
+     ╱     ╲           |           ╱     ╲
+    ╱       ╲          |          ╱       ╲
+   ╱         ╲         |         ╱         ╲
+  ╱           ╲        |        ╱           ╲
+ ╱             ╲       |       ╱             ╲
+╱               ╲      |      ╱               ╲
+▼───────────────►│◄─────────────►───────────────▲
+    edge n       │       edge n
+                 │
+    Current OUT  │  Current IN
+    of T+        │  to T-
+    equals       │  equals
+    Current IN   │  Current OUT
+    to T-        │  of T+
+```
+
+**Key insight**: The same current that leaves triangle T+ through edge n enters triangle T- through the same edge - ensuring charge conservation.
 
 ---
 
@@ -101,20 +225,45 @@ Each RWG basis is tied to one interior edge shared by triangles `T+` and `T-`.
 \end{cases}
 ```
 
-Here `ℓ_n` is common-edge length; `A_n^±` are triangle areas.
+### Geometric Interpretation of the Formula
 
-This piecewise-linear form enforces normal-current continuity across the shared
-edge, which is why RWG is standard for surface-current MoM.
+**Visual breakdown**:
+- `ℓ_n`: Edge length (the "bridge" width)
+- `A_n^±`: Triangle areas (affects current density)
+- `r - r_{+,opp}`: Vector from opposite vertex to current point in `T+`
+- `r_{-,opp} - r`: Vector from current point to opposite vertex in `T-`
 
-### Continuity sketch at the shared edge
+**Physical meaning**:
+- In `T+`: Current flows **radially outward** from the shared edge
+- In `T-`: Current flows **radially inward** toward the shared edge
+- The scaling `ℓ_n/(2A_n^±)` ensures proper current density
 
-On the common edge, both triangle-local expressions become linear functions
-whose normal component (within each triangle plane, normal to the edge)
-matches with opposite orientation conventions. The RWG construction is exactly
-scaled so the flux crossing the shared edge is continuous.
+### Continuity at the Shared Edge
 
-Intuitively, the same edge current leaves one triangle and enters its
-neighbor; no artificial charge pile-up is introduced at interior edges.
+**Why continuity matters**: Surface current cannot have discontinuous normal components across interior edges - that would imply infinite charge accumulation.
+
+**Mathematical proof**: At any point on the shared edge, the normal component of current from `T+` equals the normal component from `T-` (with opposite sign convention), ensuring zero net flux across the edge.
+
+**Intuitive picture**: Imagine water flowing through a pipe (the edge). What flows out one side must flow in the other side - no water can accumulate at the pipe junction.
+
+### Step-by-Step Construction
+
+1. **Pick an interior edge** with endpoints `p₁, p₂`
+2. **Identify the two triangles** sharing this edge
+3. **Find opposite vertices** `v₊` in `T+`, `v₋` in `T-`
+4. **Define current flow directions**:
+   - In `T+`: from edge toward `v₊`
+   - In `T-`: from `v₋` toward edge
+5. **Scale by geometry**: `ℓ_n/(2A_n^±)` ensures correct units
+
+### Concrete Numerical Example
+
+Consider an edge with:
+- Length: `ℓ_n = 0.01 m`
+- Triangle areas: `A_n^+ = 6×10⁻⁵ m²`, `A_n^- = 8×10⁻⁵ m²`
+- Scaling factors: `ℓ_n/(2A_n^+) = 83.3`, `ℓ_n/(2A_n^-) = 62.5`
+
+The current density is higher in the smaller triangle (conservation of current).
 
 ### Tiny geometric meaning of each symbol
 

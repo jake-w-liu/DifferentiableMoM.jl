@@ -56,6 +56,35 @@ Implementation helpers:
 - `make_mass_regularizer(Mp)`
 - `prepare_conditioned_system(...; regularization_alpha, regularization_R)`
 
+### ASCII Diagram: Regularization Concept
+
+```
+    Original system: Z I = v  (possibly ill-conditioned)
+    
+    Regularized system: Z_α I = v
+    
+    where Z_α = Z + αR
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │       Effect of regularization                          │
+    │                                                         │
+    │   α = 0:  Z_α = Z (original system)                     │
+    │   α > 0:  Z_α = Z + αR (regularized)                    │
+    │                                                         │
+    │   R is typically:                                       │
+    │   - Identity matrix (simple)                            │
+    │   - Patch mass matrix (physical)                        │
+    │   - Other positive definite matrix                      │
+    │                                                         │
+    │   Benefits:                                             │
+    │   - Improves condition number κ(Z_α)                    │
+    │   - Stabilizes numerical solves                         │
+    │   - Small α → minimal perturbation                      │
+    └─────────────────────────────────────────────────────────┘
+
+    Typical α values: 1e-6 to 1e-12 (small but nonzero)
+```
+
 Important rule: if you regularize forward solves, use the same effective
 operator in adjoint solves.
 
@@ -82,6 +111,37 @@ Adjoint consistency requires:
 \tilde{\mathbf Z}^{\dagger}\boldsymbol\lambda
 =
 \frac{\partial \Phi}{\partial \mathbf I^*}.
+```
+
+### ASCII Diagram: Left Preconditioning
+
+```
+    Original system: Z I = v
+    
+    Left preconditioner M (approximates Z⁻¹):
+    
+    Step 1: Compute M⁻¹ (or factor M)
+    Step 2: Form modified system:
+    
+        M⁻¹ Z I = M⁻¹ v
+        ˜Z I = ˜v
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │   Effect on matrix spectrum                             │
+    │                                                         │
+    │   Original Z: eigenvalues may be clustered near 0       │
+    │   Preconditioned ˜Z: eigenvalues better distributed     │
+    │                                                         │
+    │   Good preconditioner M satisfies:                      │
+    │   - M⁻¹ ≈ Z⁻¹                                           │
+    │   - M is easy to invert/factor                          │
+    │   - M preserves adjoint consistency                     │
+    └─────────────────────────────────────────────────────────┘
+
+    Common choices for M:
+    - Diagonal (Jacobi preconditioner)
+    - Mass matrix (patch-based)
+    - Incomplete LU factorization
 ```
 
 The package implements this through:

@@ -24,13 +24,40 @@ After this chapter, you should be able to:
 \mathbf Z(\theta)\mathbf I(\theta)=\mathbf v.
 ```
 
-Objective (quadratic form):
+### ASCII Diagram: Adjoint Method Flow
 
-```math
-J(\theta)=\mathbf I^\dagger \mathbf Q \mathbf I.
+```
+    Forward solve (1 time):       Z I = v
+                                  ↓
+    Compute objective:            J = I† Q I
+                                  ↓
+    Adjoint solve (1 time):       Z† λ = Q I  
+                                  ↓
+    Gradient computation (P times):
+                                  ∂J/∂θ_p = -2 Re{ λ† (∂Z/∂θ_p) I }
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │         Computational cost comparison                   │
+    │                                                         │
+    │   Method          | Forward | Gradient                  │
+    │   ────────────────┼─────────┼───────────────────────────┤
+    │   Finite diff.    | 1       | P+1 forward solves        │
+    │   Adjoint method  | 1       | 1 adjoint solve           │
+    │                   |         | + P matrix-vector products│
+    │                                                         │
+    │   Where P = number of design parameters                 │
+    │                                                         │
+    │   For large P (e.g., P = 1000):                         │
+    │   - Finite difference: ~1001 forward solves             │
+    │   - Adjoint method: 1 forward + 1 adjoint solve         │
+    └─────────────────────────────────────────────────────────┘
+
+    Key insight: Adjoint method cost is ~constant in P,
+    while finite difference scales linearly with P.
 ```
 
 ---
+
 
 ## 2) Adjoint System
 
