@@ -105,3 +105,7 @@ Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 If this package contributes to your work, please cite:
 - J. W. Liu, *DifferentiableMoM.jl: Open Differentiable EFIE-MoM Inverse-Design Pipeline*,
   GitHub repository, 2026.
+
+## License
+
+This project is released under the MIT License. See `LICENSE`.

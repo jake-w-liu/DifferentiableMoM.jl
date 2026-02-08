@@ -17,6 +17,9 @@ figs
 data/
 data
 
+# Generated documentation build artifacts
+docs/build/
+
 # Julia artifacts
 .julia/
 .julia_depot/
