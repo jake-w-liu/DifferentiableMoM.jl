@@ -5,6 +5,7 @@ export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
 export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles
 export coarsen_mesh_to_target_rwg
+export mesh_unique_edges, mesh_wireframe_segments
 
 """
     make_rect_plate(Lx, Ly, Nx, Ny)
@@ -765,4 +766,57 @@ function triangle_normal(mesh::TriMesh, t::Int)
     v3 = Vec3(mesh.xyz[:, mesh.tri[3, t]])
     n = cross(v2 - v1, v3 - v1)
     return n / norm(n)
+end
+
+"""
+    mesh_unique_edges(mesh)
+
+Return the unique undirected edges of a triangle mesh as a vector of
+`(i, j)` vertex-index pairs with `i < j`.
+"""
+function mesh_unique_edges(mesh::TriMesh)
+    edges = Set{Tuple{Int,Int}}()
+    for t in 1:ntriangles(mesh)
+        i1 = mesh.tri[1, t]
+        i2 = mesh.tri[2, t]
+        i3 = mesh.tri[3, t]
+        for (a, b) in ((i1, i2), (i2, i3), (i3, i1))
+            key = a < b ? (a, b) : (b, a)
+            push!(edges, key)
+        end
+    end
+    return collect(edges)
+end
+
+"""
+    mesh_wireframe_segments(mesh)
+
+Build line-segment arrays for lightweight 3D wireframe visualization.
+Returns a named tuple `(x, y, z, n_edges)` where each edge contributes
+`(p1, p2, NaN)` to each coordinate vector, suitable for `Plots.path3d`.
+"""
+function mesh_wireframe_segments(mesh::TriMesh)
+    edges = mesh_unique_edges(mesh)
+    n_edges = length(edges)
+    x = Vector{Float64}(undef, 3 * n_edges)
+    y = Vector{Float64}(undef, 3 * n_edges)
+    z = Vector{Float64}(undef, 3 * n_edges)
+
+    k = 1
+    for (i, j) in edges
+        x[k] = mesh.xyz[1, i]
+        y[k] = mesh.xyz[2, i]
+        z[k] = mesh.xyz[3, i]
+        k += 1
+        x[k] = mesh.xyz[1, j]
+        y[k] = mesh.xyz[2, j]
+        z[k] = mesh.xyz[3, j]
+        k += 1
+        x[k] = NaN
+        y[k] = NaN
+        z[k] = NaN
+        k += 1
+    end
+
+    return (x=x, y=y, z=z, n_edges=n_edges)
 end

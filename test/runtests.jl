@@ -217,6 +217,19 @@ mesh_cluster_out = cluster_mesh_vertices(mesh_cluster_in, 0.35)
 @assert nvertices(mesh_cluster_out) > 0
 @assert ntriangles(mesh_cluster_out) > 0
 
+mesh_edges_test = make_rect_plate(1.0, 1.0, 1, 1) # two triangles
+edges_test = mesh_unique_edges(mesh_edges_test)
+@assert length(edges_test) == 5
+segments_test = mesh_wireframe_segments(mesh_edges_test)
+@assert segments_test.n_edges == 5
+@assert length(segments_test.x) == 15
+@assert count(isnan, segments_test.x) == 5
+
+p_mesh = plot_mesh_wireframe(mesh_edges_test; title="Mesh preview test", linewidth=0.5)
+@assert p_mesh !== nothing
+p_cmp = plot_mesh_comparison(mesh_edges_test, mesh_edges_test; title_a="A", title_b="B", size=(600, 300))
+@assert p_cmp !== nothing
+
 xyz_nm = [
     0.0  1.0  0.0  0.0  0.0  2.0  2.0;
     0.0  0.0  1.0 -1.0  0.0  0.0  1.0;

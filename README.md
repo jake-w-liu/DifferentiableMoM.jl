@@ -13,6 +13,7 @@ julia --project=. examples/ex_auto_preconditioning.jl
 julia --project=. examples/ex_pec_sphere_rcs.jl
 julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
 julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/ex_visualize_simulation_mesh.jl
 julia --project=. examples/ex_repair_obj_mesh.jl path/to/input.obj [path/to/output.obj]
 julia --project=. plot.jl
 julia --project=. validation/paper/generate_consistency_report.jl
@@ -78,6 +79,17 @@ conflicts), use:
 ```bash
 julia --project=. examples/ex_repair_obj_mesh.jl input.obj [output.obj]
 ```
+
+To visualize repaired/coarsened meshes used in simulation:
+
+```bash
+julia --project=. examples/ex_visualize_simulation_mesh.jl [repaired.obj] [coarse.obj] [output_prefix]
+```
+
+Package-level plotting APIs are also available:
+- `plot_mesh_wireframe(mesh; ...)`
+- `plot_mesh_comparison(mesh_a, mesh_b; ...)`
+- `save_mesh_preview(mesh_a, mesh_b, out_prefix; ...)`
 
 ## Paper Consistency Snapshot
 
