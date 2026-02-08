@@ -48,6 +48,37 @@ g\,\frac{\partial f}{\partial\theta_p}
 }{g^2}.
 ```
 
+### ASCII Diagram: Ratio Objective Gradient Computation
+
+```
+    Ratio objective: J(θ) = f(θ)/g(θ)
+    
+    where:
+    f(θ) = I† Q_t I      (numerator - target region)
+    g(θ) = I† Q_tot I    (denominator - total region)
+    
+    Gradient via quotient rule:
+    
+    ∂J/∂θ_p = [g·∂f/∂θ_p - f·∂g/∂θ_p] / g²
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │         Two adjoint solves required                    │
+    │                                                         │
+    │   Solve 1: Z† λ_f = Q_t I      → gives ∂f/∂θ_p         │
+    │                                                         │
+    │   Solve 2: Z† λ_g = Q_tot I    → gives ∂g/∂θ_p         │
+    │                                                         │
+    │   Then combine using quotient rule formula              │
+    └─────────────────────────────────────────────────────────┘
+
+    Why not combine into one adjoint solve?
+    
+    Single solve approach: Z† λ = (Q_t - J Q_tot) I
+    
+    Problem: When J ≈ f/g, cancellation makes RHS numerically unstable.
+    Two-solve approach avoids this cancellation issue.
+```
+
 Each derivative term is computed adjointly:
 
 ```math

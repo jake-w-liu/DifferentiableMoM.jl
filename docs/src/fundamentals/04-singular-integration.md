@@ -54,9 +54,61 @@ G
 \underbrace{\frac{1}{4\pi R}}_{G_{\mathrm{sing}}}.
 ```
 
-Why this helps:
+### Why This Split Works
 
-- `G_smooth` is bounded as `R -> 0`:
+**Problem**: Direct quadrature fails when `R → 0` because `1/R` becomes infinite.
+
+**Solution**: Separate the kernel into:
+- `G_smooth`: Bounded (finite) at `R = 0`
+- `G_sing`: Pure `1/R` singularity that we can treat analytically
+
+### Numerical Example
+
+Consider frequency `f = 3 GHz` (so `k ≈ 62.8 rad/m`):
+
+**At R = 1 mm = 0.001 m**:
+- `G_sing = 1/(4π × 0.001) ≈ 79.6`
+- `G_smooth = (e^{-ik×0.001} - 1)/(4π × 0.001) ≈ -ik/(4π) ≈ -5.0i`
+
+**At R = 0.01 mm = 1×10⁻⁵ m**:
+- `G_sing = 1/(4π × 1×10⁻⁵) ≈ 7958`
+- `G_smooth ≈ -5.0i` (essentially unchanged!)
+
+**Key insight**: `G_smooth` stays bounded while `G_sing` grows without bound.
+
+### ASCII Diagram: Kernel Split Visualization
+
+```
+    Original Green's function G(R) = e^{-ikR}/(4πR)
+    
+    As R → 0:
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │                         G(R)                            │
+    │        = G_smooth(R) + G_sing(R)                        │
+    │                                                         │
+    │  G_smooth(R) = (e^{-ikR} - 1)/(4πR)                     │
+    │              ≈ -ik/(4π) when R is small                 │
+    │              (BOUNDED - finite value at R=0)            │
+    │                                                         │
+    │  G_sing(R) = 1/(4πR)                                    │
+    │            → ∞ as R → 0                                 │
+    │            (SINGULAR - analytical treatment needed)     │
+    └─────────────────────────────────────────────────────────┘
+
+    Numerical behavior near R=0:
+    
+    R (m)       G_sing(R)      G_smooth(R)      G(R)
+    ─────────────────────────────────────────────────────
+    0.001       79.6           -5.0i            ~74.6 - 5.0i
+    0.0001      795.8          -5.0i           ~790.8 - 5.0i  
+    0.00001     7957.7         -5.0i          ~7952.7 - 5.0i
+    0            ∞             -5.0i               ∞
+```
+
+### Mathematical Verification
+
+`G_smooth` is bounded as `R -> 0`:
 
 ```math
 \lim_{R\to 0}\frac{e^{-ikR}-1}{R}=-ik
@@ -64,24 +116,26 @@ Why this helps:
 \lim_{R\to 0}G_{\mathrm{smooth}}=-\frac{ik}{4\pi}.
 ```
 
-- The explicit `1/R` part is isolated for special treatment.
-
-Implementation:
-
-- `greens_smooth` in `src/Greens.jl`
-- self branch in `self_cell_contribution` (`src/SingularIntegrals.jl`)
-
 ### Small-series check (why the limit is finite)
 
 Using ``e^{-ikR}=1-ikR-\tfrac{k^2R^2}{2}+O(R^3)``,
-
 ```math
 \frac{e^{-ikR}-1}{R}
 =
 -ik-\frac{k^2R}{2}+O(R^2),
 ```
-
 so no ``1/R`` singularity remains in ``G_{\mathrm{smooth}}``.
+
+### Practical Consequence
+
+When implementing quadrature:
+- **Smooth part**: Use standard Gaussian quadrature (integrand is well-behaved)
+- **Singular part**: Use analytical integration (avoid quadrature near singularity)
+
+Implementation:
+
+- `greens_smooth` in `src/Greens.jl`
+- self branch in `self_cell_contribution` (`src/SingularIntegrals.jl`)
 
 ---
 
@@ -93,6 +147,14 @@ For each outer point `P` on a triangle `T`, define
 S(P)=\int_T\frac{1}{|P-r'|}dS'.
 ```
 
+### Why We Need This
+
+When computing `∫∫ f(P)·f(r')·G(P,r') dS dS'`, the inner integral becomes singular when `P` and `r'` are on the same triangle.
+
+**Direct quadrature fails**: If `P` is a quadrature point and we integrate over the same triangle, some integrand samples will have `R ≈ 0`, causing numerical overflow.
+
+### Semi-Analytical Solution
+
 The code evaluates `S(P)` with an edge-log closed form
 (`analytical_integral_1overR`):
 
@@ -100,7 +162,86 @@ The code evaluates `S(P)` with an edge-log closed form
 S(P)=\sum_{i=1}^{3} d_i\,\log\!\frac{\ell_{B_i}+R_{B_i}}{\ell_{A_i}+R_{A_i}}.
 ```
 
-This avoids brute-force quadrature on a singular integrand.
+### Step-by-Step Geometry
+
+**For each triangle edge**:
+1. **Project point `P`** onto the edge line
+2. **Measure distances**:
+   - `d_i`: Perpendicular distance from `P` to edge `i`
+   - `ℓ_{A_i}, ℓ_{B_i}`: Distances along edge from projection to vertices
+   - `R_{A_i}, R_{B_i}`: 3D distances from `P` to edge vertices
+3. **Compute logarithmic contribution** for that edge
+4. **Sum over all 3 edges**
+
+### ASCII Diagram: Geometry for Analytical 1/R Integration
+
+```
+    Triangle edge i with vertices A and B
+    Point P projected onto edge line at point P_proj
+    
+           P (observation point)
+           │
+           │ d_i (perpendicular distance)
+           │
+    A┼─────┼─────┼B
+     │     │     │
+     │ ℓ_Ai│     │ ℓ_Bi
+     │     │     │
+     ◄─────►     ◄─────►
+     
+    Where:
+    - A, B: edge vertices
+    - P: observation point on triangle (or nearby)
+    - P_proj: projection of P onto edge line
+    - d_i = distance(P, edge line) = |P - P_proj|
+    - ℓ_Ai = distance(P_proj, A) along edge
+    - ℓ_Bi = distance(P_proj, B) along edge  
+    - R_Ai = distance(P, A) = √(d_i² + ℓ_Ai²)
+    - R_Bi = distance(P, B) = √(d_i² + ℓ_Bi²)
+    
+    Contribution from edge i:
+    d_i × log[(ℓ_Bi + R_Bi)/(ℓ_Ai + R_Ai)]
+```
+
+### Complete Triangle Integration
+
+```
+          P
+          │
+          │
+          │
+     ┌────┼────┐
+     │    │    │
+     │    │    │
+     │    │    │
+    A●────┼────●B
+     │    │    │
+     │    │    │
+     │    │    │
+     └────┼────┘
+          │
+          │
+          │
+          ●C (third vertex)
+          
+    Total S(P) = sum over edges (A-B, B-C, C-A)
+```
+
+### Numerical Example
+
+Consider a right triangle with vertices at (0,0,0), (1,0,0), (0,1,0), and point `P = (0.2, 0.2, 0)`:
+
+**Edge 1**: from (0,0,0) to (1,0,0)
+- `d₁ = 0.2` (distance to x-axis)
+- `ℓ_{A₁} = 0.2`, `ℓ_{B₁} = 0.8`
+- `R_{A₁} = √(0.2² + 0.2²) ≈ 0.283`, `R_{B₁} = √(0.8² + 0.2²) ≈ 0.825`
+- Contribution: `0.2 × log((0.8+0.825)/(0.2+0.283)) ≈ 0.2 × log(1.625/0.483) ≈ 0.2 × 1.22 ≈ 0.244`
+
+**Repeat for other edges and sum** to get `S(P)`.
+
+### Why This Works
+
+The logarithmic form comes from integrating `1/R` over a line segment, which has a known analytical solution. By decomposing the triangle integral into edge contributions, we avoid the singularity entirely.
 
 ### Geometry meaning of the logarithmic terms
 

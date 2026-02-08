@@ -16,6 +16,44 @@
 - ``\theta``: polar angle from +z (`0` to `π`)
 - ``\phi``: azimuth (`0` to `2π`)
 
+### ASCII Diagram: Spherical Coordinate System
+
+```
+    Spherical coordinates (r, θ, φ):
+    
+              +z (θ=0)
+               │
+               │
+               │
+               │
+               ●─────→ +y (φ=π/2)
+              ╱
+             ╱
+            ╱
+           ╱
+          +x (φ=0)
+    
+    Definitions:
+    - r = radial distance from origin
+    - θ = polar angle from +z axis (0 ≤ θ ≤ π)
+    - φ = azimuthal angle in x-y plane (0 ≤ φ < 2π)
+    
+    Conversion to Cartesian:
+    x = r sinθ cosφ
+    y = r sinθ sinφ  
+    z = r cosθ
+    
+    Unit vector directions:
+    - ˆr points radially outward
+    - ˆθ points "south" (increasing θ)
+    - ˆφ points "east" (increasing φ)
+    
+    For far-field calculations:
+    - r → ∞ (far-field approximation)
+    - Only θ, φ matter (angular dependence)
+    - E∞(θ,φ) is complex vector amplitude
+```
+
 Spherical grids use midpoint quadrature with
 ``w_q=\sin\theta_q\,\Delta\theta\,\Delta\phi``.
 

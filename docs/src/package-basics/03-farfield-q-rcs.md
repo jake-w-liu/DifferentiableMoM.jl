@@ -34,6 +34,39 @@ Form:
 \sum_{n=1}^{N} I_n\,\mathbf g_n(\hat{\mathbf r}_q).
 ```
 
+### ASCII Diagram: Far-Field Computation Pipeline
+
+```
+    Current coefficients I → Far-field E∞ at direction (θ,φ)
+    
+    Steps:
+    
+    1. Define spherical grid: (θ_q, φ_q), q = 1..NΩ
+       with weights w_q = sinθ_q Δθ Δφ
+    
+    2. Precompute radiation vectors g_n(θ_q, φ_q):
+       g_n = radiation pattern of RWG basis n
+    
+    3. Compute far field via superposition:
+    
+       E∞(θ_q, φ_q) = Σ_n I_n · g_n(θ_q, φ_q)
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │         Matrix form representation                      │
+    │                                                         │
+    │   G = [g_1(θ_1) ... g_N(θ_1);                          │
+    │        ...         ...        ;                         │
+    │        g_1(θ_NΩ) ... g_N(θ_NΩ)]  (size: 3NΩ × N)        │
+    │                                                         │
+    │   E∞ = G I                                             │
+    └─────────────────────────────────────────────────────────┘
+
+    Physical interpretation:
+    - Each RWG basis has characteristic radiation pattern
+    - Total far field = weighted sum of basis patterns
+    - Linear in current coefficients I
+```
+
 ---
 
 ## 2) Build Quadratic Objective Matrix `Q`
@@ -46,6 +79,41 @@ Q_{mn}
 \sum_q w_q\,
 \big(\mathbf p_q^\dagger\mathbf g_m(\hat{\mathbf r}_q)\big)^*
 \big(\mathbf p_q^\dagger\mathbf g_n(\hat{\mathbf r}_q)\big).
+```
+
+### ASCII Diagram: Q Matrix Construction
+
+```
+    Q matrix for directional objective J = I† Q I
+    
+    Construction steps:
+    
+    1. Choose polarization vector p_q for each direction (θ_q, φ_q)
+       Example: p_q = (1,0,0) for x-polarized far field
+    
+    2. Apply angular mask to select directions of interest
+       Example: cap_mask selects θ ≤ 30° (main beam region)
+    
+    3. Compute weighted outer product:
+    
+       Q = Σ_q w_q · (G†·p_q) (G†·p_q)†
+    
+       where G = radiation matrix from before
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │         Physical interpretation                         │
+    │                                                         │
+    │   Q measures "how much" current pattern I               │
+    │   radiates into target region with target polarization  │
+    │                                                         │
+    │   J = I† Q I = total power radiated into                │
+    │       target region with specified polarization         │
+    └─────────────────────────────────────────────────────────┘
+
+    Properties:
+    - Q is Hermitian (Q = Q†)
+    - Q is positive semidefinite (I† Q I ≥ 0)
+    - Size: N × N (same as number of RWG unknowns)
 ```
 
 Package calls:

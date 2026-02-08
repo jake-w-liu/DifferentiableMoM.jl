@@ -117,6 +117,61 @@ Project/test with tangential basis and integrate by parts on the surface:
 This is why assembly naturally separates into a vector term and a scalar
 charge-related term.
 
+### ASCII Diagram: EFIE Operator Structure
+
+```
+    Complete EFIE operator: E^sca(r) = T[J](r)
+    
+    T[J] = -iωμ₀ ∫ [I + (1/k²)∇∇] G(r,r') J(r') dS'
+    
+    After Galerkin testing with RWG basis:
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │              Matrix element Z_{mn}                      │
+    │  = -iωμ₀ [ VECTOR_PART - SCALAR_PART ]                  │
+    │                                                         │
+    │  VECTOR_PART = ∫∫ f_m(r)·f_n(r') G(r,r') dS dS'         │
+    │               (Current-current coupling)                │
+    │                                                         │
+    │  SCALAR_PART = (1/k²) ∫∫ [∇·f_m(r)] [∇'·f_n(r')]        │
+    │               × G(r,r') dS dS'                          │
+    │               (Charge-charge coupling)                  │
+    └─────────────────────────────────────────────────────────┘
+    
+    Physical interpretation:
+    
+    Vector part ↔ Magnetic vector potential (A field)
+    Scalar part ↔ Electric scalar potential (φ field)
+    
+    Implementation in assemble_Z_efie:
+    Z[m,n] = -1im * omega_mu0 * (vec_part - scl_part)
+```
+
+### Matrix Assembly Visualization
+
+```
+    For basis pair (m,n):
+    
+    Test basis f_m            Source basis f_n
+         ▲                         ▲
+         │                         │
+         │                         │
+    ┌────┼────┐               ┌────┼────┐
+    │    │    │               │    │    │
+    │ T+ │ T- │               │ T+ │ T- │
+    │    │    │               │    │    │
+    └────┼────┘               └────┼────┘
+         │                         │
+         │                         │
+         ▼                         ▼
+    
+    Z_{mn} = sum over triangle pairs:
+    - For each test triangle (T+_m or T-_m)
+    - For each source triangle (T+_n or T-_n)
+    - Compute quadrature over both triangles
+    - Accumulate vector and scalar parts
+```
+
 ---
 
 ## Step 4: PEC Boundary Condition
@@ -195,6 +250,52 @@ In patch form,
 \qquad\text{or}\qquad
 -\sum_{p=1}^{P} (i\theta_p)\mathbf M_p
 \quad\text{(reactive)}.
+```
+
+### ASCII Diagram: Impedance Boundary Condition
+
+```
+    Impedance surface: E_t^tot = Z_s J
+    
+    Field decomposition:
+    
+    E_t^tot = E_t^inc + E_t^sca = Z_s J
+    
+    Rearranged:
+    
+    E_t^sca - Z_s J = -E_t^inc
+    
+    After Galerkin testing:
+    
+    ┌─────────────────────────────────────────────────────────┐
+    │         Complete linear system                          │
+    │                                                         │
+    │   [Z_EFIE + Z_imp] I = v                                │
+    │                                                         │
+    │   where:                                                │
+    │   - Z_EFIE = standard EFIE operator                     │
+    │   - Z_imp = impedance matrix                            │
+    │   - v = -⟨f_m, E_t^inc⟩ (excitation)                   │
+    │                                                         │
+    │   Impedance matrix for patch p:                         │
+    │   (Z_imp)_mn = -θ_p ⟨f_m, f_n⟩ over patch p            │
+    │            = -θ_p (M_p)_mn                              │
+    └─────────────────────────────────────────────────────────┘
+
+    Patch-based parameterization:
+    
+    Surface divided into P patches:
+    
+    ┌─────┬─────┬─────┐
+    │ θ₁  │ θ₂  │ θ₃  │
+    ├─────┼─────┼─────┤
+    │ θ₄  │ θ₅  │ θ₆  │
+    ├─────┼─────┼─────┤
+    │ θ₇  │ θ₈  │ θ₉  │
+    └─────┴─────┴─────┘
+    
+    Each patch has uniform impedance θ_p
+    Mass matrix M_p precomputed for each patch
 ```
 
 This is assembled in `assemble_full_Z` (`src/Solve.jl`) using patch mass
