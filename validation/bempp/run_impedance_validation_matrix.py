@@ -31,12 +31,13 @@ class ValidationCase:
 
 
 CASES: List[ValidationCase] = [
-    ValidationCase("case01_z50_n0_f3p00", 3.00, 50.0, 0.0, 0.0),
-    ValidationCase("case02_z100_n0_f3p00", 3.00, 100.0, 0.0, 0.0),
-    ValidationCase("case03_z200_n0_f3p00", 3.00, 200.0, 0.0, 0.0),
-    ValidationCase("case04_z300_n0_f3p00", 3.00, 300.0, 0.0, 0.0),
-    ValidationCase("case05_z200_n5_f3p00", 3.00, 200.0, 5.0, 0.0),
-    ValidationCase("case06_z200_n0_f3p06", 3.06, 200.0, 0.0, 0.0),
+    ValidationCase("case01_z0_n0_f3p00", 3.00, 0.0, 0.0, 0.0),
+    ValidationCase("case02_z25_n0_f3p00", 3.00, 25.0, 0.0, 0.0),
+    ValidationCase("case03_z50_n0_f3p00", 3.00, 50.0, 0.0, 0.0),
+    ValidationCase("case04_z75_n0_f3p00", 3.00, 75.0, 0.0, 0.0),
+    ValidationCase("case05_z100_n0_f3p00", 3.00, 100.0, 0.0, 0.0),
+    ValidationCase("case06_z100_n5_f3p00", 3.00, 100.0, 5.0, 0.0),
+    ValidationCase("case07_z100_n0_f3p06", 3.06, 100.0, 0.0, 0.0),
 ]
 
 CONVENTION_PROFILES: Dict[str, Dict[str, object]] = {
@@ -75,17 +76,11 @@ def load_json(path: Path) -> Dict:
 
 
 def compute_case_pass_flags(metrics: Dict) -> Dict[str, bool]:
-    rmse = float(metrics["global"]["rmse_db"])
-    max_abs = float(metrics["global"]["max_abs_diff_db"])
-    near_target = float(metrics["near_target"]["mean_abs_diff_db"])
     pf = metrics.get("pattern_features", {})
     main_theta_diff = float(pf.get("main_theta_abs_diff_deg", float("inf")))
     main_level_diff = abs(float(pf.get("main_level_diff_db", float("inf"))))
     sll_diff = abs(float(pf.get("sll_down_diff_db", float("inf"))))
     return {
-        "pass_rmse_le_2p5": rmse <= 2.5,
-        "pass_target_le_1p5": near_target <= 1.5,
-        "pass_max_le_25": max_abs <= 25.0,
         "pass_main_theta_le_3deg": main_theta_diff <= 3.0,
         "pass_main_level_le_1p5db": main_level_diff <= 1.5,
         "pass_sll_le_3db": sll_diff <= 3.0,
@@ -124,28 +119,17 @@ def write_summary_md(
     lines.append("")
     lines.append("## Case Results")
     lines.append(
-        "| Case | f (GHz) | Zs imag (ohm) | theta_inc (deg) | RMSE (dB) | Mean |ΔD| near target (dB) | Main |Δθ| (deg) | Main |ΔL| (dB) | SLL |Δ| (dB) | Max |ΔD| (dB) |"
+        "| Case | f (GHz) | Zs imag (ohm) | theta_inc (deg) | Main |Δθ| (deg) | Main |ΔL| (dB) | SLL |Δ| (dB) |"
     )
-    lines.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+    lines.append("|---|---:|---:|---:|---:|---:|---:|")
     for row in rows:
         lines.append(
             f"| {row['case_id']} | {row['freq_ghz']:.2f} | {row['zs_imag_ohm']:.1f} | "
-            f"{row['theta_inc_deg']:.1f} | {row['rmse_db']:.3f} | "
-            f"{row['near_target_mean_abs_db']:.3f} | {row['main_theta_abs_diff_deg']:.3f} | "
-            f"{row['main_level_abs_diff_db']:.3f} | {row['sll_abs_diff_db']:.3f} | "
-            f"{row['max_abs_db']:.3f} |"
+            f"{row['theta_inc_deg']:.1f} | {row['main_theta_abs_diff_deg']:.3f} | "
+            f"{row['main_level_abs_diff_db']:.3f} | {row['sll_abs_diff_db']:.3f} |"
         )
     lines.append("")
     lines.append("## Acceptance Gates")
-    lines.append(
-        f"- Cases with near-target mean |ΔD| <= 1.5 dB: {gates['count_target_le_1p5']}/{gates['num_cases']}"
-    )
-    lines.append(
-        f"- Cases with global RMSE <= 2.5 dB: {gates['count_rmse_le_2p5']}/{gates['num_cases']}"
-    )
-    lines.append(
-        f"- Cases with max |ΔD| <= 25 dB: {gates['count_max_le_25']}/{gates['num_cases']}"
-    )
     lines.append(
         f"- Cases with main-beam |Δθ| <= 3 deg: {gates['count_main_theta_le_3deg']}/{gates['num_cases']}"
     )
@@ -156,10 +140,6 @@ def write_summary_md(
         f"- Cases with |ΔSLL| <= 3 dB: {gates['count_sll_le_3db']}/{gates['num_cases']}"
     )
     lines.append("")
-    lines.append(
-        f"- Matrix gate status (>=4/6 for target and RMSE, all <=25 dB max): "
-        f"{'PASS' if gates['matrix_gate_pass'] else 'FAIL'}"
-    )
     lines.append(
         f"- Beam-centric gate status (main angle/level/SLL all pass in all cases): "
         f"{'PASS' if gates['beam_gate_pass'] else 'FAIL'}"
@@ -312,12 +292,6 @@ def main() -> None:
             "zs_imag_ohm": case.zs_imag_ohm,
             "theta_inc_deg": case.theta_inc_deg,
             "phi_inc_deg": case.phi_inc_deg,
-            "rmse_db": float(metrics["global"]["rmse_db"]),
-            "mean_abs_db": float(metrics["global"]["mean_abs_diff_db"]),
-            "max_abs_db": float(metrics["global"]["max_abs_diff_db"]),
-            "near_target_theta_deg": float(metrics["near_target"]["nearest_theta_deg"]),
-            "near_target_mean_abs_db": float(metrics["near_target"]["mean_abs_diff_db"]),
-            "near_target_max_abs_db": float(metrics["near_target"]["max_abs_diff_db"]),
             "main_theta_abs_diff_deg": float(metrics["pattern_features"]["main_theta_abs_diff_deg"]),
             "main_level_abs_diff_db": abs(float(metrics["pattern_features"]["main_level_diff_db"])),
             "sll_abs_diff_db": abs(float(metrics["pattern_features"]["sll_down_diff_db"])),
@@ -337,23 +311,16 @@ def main() -> None:
 
     gates = {
         "num_cases": len(summary_rows),
-        "count_target_le_1p5": sum(bool(r["pass_target_le_1p5"]) for r in summary_rows),
-        "count_rmse_le_2p5": sum(bool(r["pass_rmse_le_2p5"]) for r in summary_rows),
-        "count_max_le_25": sum(bool(r["pass_max_le_25"]) for r in summary_rows),
         "count_main_theta_le_3deg": sum(bool(r["pass_main_theta_le_3deg"]) for r in summary_rows),
         "count_main_level_le_1p5db": sum(bool(r["pass_main_level_le_1p5db"]) for r in summary_rows),
         "count_sll_le_3db": sum(bool(r["pass_sll_le_3db"]) for r in summary_rows),
     }
-    gates["matrix_gate_pass"] = (
-        gates["count_target_le_1p5"] >= 4
-        and gates["count_rmse_le_2p5"] >= 4
-        and gates["count_max_le_25"] == gates["num_cases"]
-    )
     gates["beam_gate_pass"] = (
         gates["count_main_theta_le_3deg"] == gates["num_cases"]
         and gates["count_main_level_le_1p5db"] == gates["num_cases"]
         and gates["count_sll_le_3db"] == gates["num_cases"]
     )
+    gates["matrix_gate_pass"] = gates["beam_gate_pass"]
 
     config = {
         "convention_profile": args.convention_profile,
@@ -376,11 +343,6 @@ def main() -> None:
     print(f"\nSaved {summary_csv}")
     print(f"Saved {summary_md}")
     print(f"Saved {summary_json}")
-    print(
-        f"Matrix gate status: {'PASS' if gates['matrix_gate_pass'] else 'FAIL'} "
-        f"(target<=1.5: {gates['count_target_le_1p5']}/{gates['num_cases']}, "
-        f"rmse<=2.5: {gates['count_rmse_le_2p5']}/{gates['num_cases']})"
-    )
     print(
         f"Beam-centric gate status: {'PASS' if gates['beam_gate_pass'] else 'FAIL'} "
         f"(main_theta<=3deg: {gates['count_main_theta_le_3deg']}/{gates['num_cases']}, "

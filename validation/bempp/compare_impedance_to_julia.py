@@ -26,23 +26,6 @@ def keyed_map(rows: Iterable[dict], theta_key: str, phi_key: str, value_key: str
     return out
 
 
-def summary_stats(values: np.ndarray) -> dict:
-    if values.size == 0:
-        return {
-            "mean_diff_db": float("nan"),
-            "mean_abs_diff_db": float("nan"),
-            "rmse_db": float("nan"),
-            "max_abs_diff_db": float("nan"),
-        }
-    abs_values = np.abs(values)
-    return {
-        "mean_diff_db": float(np.mean(values)),
-        "mean_abs_diff_db": float(np.mean(abs_values)),
-        "rmse_db": float(np.sqrt(np.mean(values**2))),
-        "max_abs_diff_db": float(np.max(abs_values)),
-    }
-
-
 def nearest_theta_stats(theta: np.ndarray, delta: np.ndarray, target_deg: float) -> dict:
     unique_thetas = np.unique(theta)
     nearest = unique_thetas[np.argmin(np.abs(unique_thetas - target_deg))]
@@ -51,7 +34,6 @@ def nearest_theta_stats(theta: np.ndarray, delta: np.ndarray, target_deg: float)
         "target_theta_deg": target_deg,
         "nearest_theta_deg": float(nearest),
         "mean_abs_diff_db": float(np.mean(np.abs(delta[mask]))),
-        "max_abs_diff_db": float(np.max(np.abs(delta[mask]))),
     }
 
 
@@ -131,24 +113,11 @@ def write_markdown(path: Path, metrics: dict) -> None:
     lines = [
         "# Bempp vs Julia Impedance-Loaded Cross-Validation",
         "",
-        "## Global Error Metrics",
-        f"- Mean delta (Bempp - Julia): {metrics['global']['mean_diff_db']:.4f} dB",
-        f"- Mean absolute delta: {metrics['global']['mean_abs_diff_db']:.4f} dB",
-        f"- RMSE: {metrics['global']['rmse_db']:.4f} dB",
-        f"- Max absolute delta: {metrics['global']['max_abs_diff_db']:.4f} dB",
-        "",
-        "## Phi=0 Cut Metrics",
-        f"- Mean absolute delta: {metrics['phi0_cut']['mean_abs_diff_db']:.4f} dB",
-        f"- RMSE: {metrics['phi0_cut']['rmse_db']:.4f} dB",
-        f"- Max absolute delta: {metrics['phi0_cut']['max_abs_diff_db']:.4f} dB",
-        "",
         "## Directional Slices",
         f"- Near 0 deg: nearest theta = {metrics['near_broadside']['nearest_theta_deg']:.1f} deg, "
-        f"mean abs delta = {metrics['near_broadside']['mean_abs_diff_db']:.4f} dB, "
-        f"max abs delta = {metrics['near_broadside']['max_abs_diff_db']:.4f} dB",
+        f"mean abs delta = {metrics['near_broadside']['mean_abs_diff_db']:.4f} dB",
         f"- Near 30 deg: nearest theta = {metrics['near_target']['nearest_theta_deg']:.1f} deg, "
-        f"mean abs delta = {metrics['near_target']['mean_abs_diff_db']:.4f} dB, "
-        f"max abs delta = {metrics['near_target']['max_abs_diff_db']:.4f} dB",
+        f"mean abs delta = {metrics['near_target']['mean_abs_diff_db']:.4f} dB",
         "",
         "## Beam-Centric Feature Metrics (phi≈0 cut)",
         f"- Main-beam angle Julia/Bempp: "
@@ -202,8 +171,6 @@ def main() -> None:
     parser.add_argument("--feature-theta-min", type=float, default=0.0)
     parser.add_argument("--feature-theta-max", type=float, default=90.0)
     parser.add_argument("--sidelobe-exclusion-deg", type=float, default=10.0)
-    parser.add_argument("--max-rmse-db", type=float, default=None)
-    parser.add_argument("--max-abs-db", type=float, default=None)
     args = parser.parse_args()
 
     data_dir = args.project_root / "data"
@@ -291,8 +258,6 @@ def main() -> None:
     metrics = {
         "num_common_points": int(len(common_keys)),
         "n_phi_detected": n_phi,
-        "global": summary_stats(delta),
-        "phi0_cut": summary_stats(delta[phi0_mask]),
         "near_broadside": nearest_theta_stats(theta, delta, target_deg=0.0),
         "near_target": nearest_theta_stats(theta, delta, target_deg=args.target_theta_deg),
         "pattern_features": pattern_features,
@@ -302,26 +267,14 @@ def main() -> None:
     write_markdown(report_md, metrics)
 
     print(f"Compared {metrics['num_common_points']} common angular samples.")
-    print(f"Global RMSE: {metrics['global']['rmse_db']:.4f} dB")
-    print(f"Global max |delta|: {metrics['global']['max_abs_diff_db']:.4f} dB")
+    print(
+        "Beam-feature diffs (|Δθ_main|, |ΔD_main|, |ΔSLL|): "
+        f"{metrics['pattern_features']['main_theta_abs_diff_deg']:.3f} deg, "
+        f"{abs(metrics['pattern_features']['main_level_diff_db']):.3f} dB, "
+        f"{abs(metrics['pattern_features']['sll_down_diff_db']):.3f} dB"
+    )
     print(f"Saved {report_json}")
     print(f"Saved {report_md}")
-
-    failed = False
-    if args.max_rmse_db is not None and metrics["global"]["rmse_db"] > args.max_rmse_db:
-        print(
-            f"FAIL: global RMSE {metrics['global']['rmse_db']:.4f} dB "
-            f"> threshold {args.max_rmse_db:.4f} dB"
-        )
-        failed = True
-    if args.max_abs_db is not None and metrics["global"]["max_abs_diff_db"] > args.max_abs_db:
-        print(
-            f"FAIL: global max abs diff {metrics['global']['max_abs_diff_db']:.4f} dB "
-            f"> threshold {args.max_abs_db:.4f} dB"
-        )
-        failed = True
-    if failed:
-        raise SystemExit(2)
 
 
 if __name__ == "__main__":

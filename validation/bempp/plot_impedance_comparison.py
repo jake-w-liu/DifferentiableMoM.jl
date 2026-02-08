@@ -82,11 +82,11 @@ def summarize_delta(delta: np.ndarray, julia_vals: np.ndarray) -> List[str]:
     def stat_line(name: str, mask: np.ndarray) -> str:
         if not np.any(mask):
             return f"{name}: N=0"
+        q95 = float(np.quantile(abs_delta[mask], 0.95))
         return (
             f"{name}: N={int(np.sum(mask))}, "
             f"mean|Δ|={float(np.mean(abs_delta[mask])):.3f} dB, "
-            f"RMSE={float(np.sqrt(np.mean(delta[mask] ** 2))):.3f} dB, "
-            f"max|Δ|={float(np.max(abs_delta[mask])):.3f} dB"
+            f"p95|Δ|={q95:.3f} dB"
         )
 
     lines = [

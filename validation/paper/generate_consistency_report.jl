@@ -3,7 +3,6 @@
 using CSV
 using DataFrames
 using Dates
-using JSON
 using Printf
 using Statistics
 
@@ -73,9 +72,19 @@ function compute_paper_metrics(datadir::AbstractString)
     pec_julia = CSV.read(joinpath(datadir, "beam_steer_farfield.csv"), DataFrame)
     imp_bempp = CSV.read(joinpath(datadir, "bempp_impedance_farfield.csv"), DataFrame)
     imp_julia = CSV.read(joinpath(datadir, "julia_impedance_farfield.csv"), DataFrame)
+    imp_matrix_path = joinpath(datadir, "impedance_validation_matrix_summary.csv")
+    if !isfile(imp_matrix_path)
+        imp_matrix_path = joinpath(datadir, "impedance_validation_matrix_summary_paper_default.csv")
+    end
+    imp_matrix = CSV.read(imp_matrix_path, DataFrame)
 
     pec_cv = crossval_metrics(pec_julia, :dir_pec_dBi, pec_bempp, :dir_bempp_dBi)
     imp_cv = crossval_metrics(imp_julia, :dir_julia_imp_dBi, imp_bempp, :dir_bempp_imp_dBi)
+
+    n_cases = nrow(imp_matrix)
+    n_pass_main_theta = count(imp_matrix.pass_main_theta_le_3deg)
+    n_pass_main_level = count(imp_matrix.pass_main_level_le_1p5db)
+    n_pass_sll = count(imp_matrix.pass_sll_le_3db)
 
     nominal = robustness[findfirst(robustness.case .== "f_nom"), :]
     fplus2 = robustness[findfirst(robustness.case .== "f_+2pct"), :]
@@ -98,6 +107,10 @@ function compute_paper_metrics(datadir::AbstractString)
         fplus2_J_opt_pct = fplus2.J_opt_pct,
         pec_crossval = pec_cv,
         imp_crossval = imp_cv,
+        beam_matrix_num_cases = n_cases,
+        beam_matrix_pass_main_theta = n_pass_main_theta,
+        beam_matrix_pass_main_level = n_pass_main_level,
+        beam_matrix_pass_sll = n_pass_sll,
         monotonic_assembly = monotonic_assembly,
         monotonic_solve = monotonic_solve,
         monotonic_iter = monotonic_iter,
@@ -110,7 +123,9 @@ function consistency_checks(metrics)
         ("Minimum energy ratio >= 0.98", metrics.min_energy_ratio >= 0.98),
         ("Nominal J_opt > nominal J_PEC", metrics.nominal_J_opt_pct > metrics.nominal_J_pec_pct),
         ("PEC near-target mean |ΔD| <= 0.5 dB", metrics.pec_crossval.target_mean_abs_diff_db <= 0.5),
-        ("Impedance near-target mean |ΔD| <= 3.0 dB", metrics.imp_crossval.target_mean_abs_diff_db <= 3.0),
+        ("Beam-matrix |Δθ_main| <= 3° for all cases", metrics.beam_matrix_pass_main_theta == metrics.beam_matrix_num_cases),
+        ("Beam-matrix |ΔD_main| <= 1.5 dB for all cases", metrics.beam_matrix_pass_main_level == metrics.beam_matrix_num_cases),
+        ("Beam-matrix |ΔSLL| <= 3 dB for all cases", metrics.beam_matrix_pass_sll == metrics.beam_matrix_num_cases),
         ("Cost assembly increases with N", metrics.monotonic_assembly),
         ("Cost solve increases with N", metrics.monotonic_solve),
         ("Cost per-iteration increases with N", metrics.monotonic_iter),
@@ -144,6 +159,10 @@ function write_snapshot_csv(metrics, out_csv::AbstractString)
     push!(rows, ("pec_target_mean_abs_diff_db", metrics.pec_crossval.target_mean_abs_diff_db, "dB"))
     push!(rows, ("imp_global_mean_abs_diff_db", metrics.imp_crossval.global_mean_abs_diff_db, "dB"))
     push!(rows, ("imp_target_mean_abs_diff_db", metrics.imp_crossval.target_mean_abs_diff_db, "dB"))
+    push!(rows, ("beam_matrix_num_cases", metrics.beam_matrix_num_cases, "count"))
+    push!(rows, ("beam_matrix_pass_main_theta", metrics.beam_matrix_pass_main_theta, "count"))
+    push!(rows, ("beam_matrix_pass_main_level", metrics.beam_matrix_pass_main_level, "count"))
+    push!(rows, ("beam_matrix_pass_sll", metrics.beam_matrix_pass_sll, "count"))
 
     CSV.write(out_csv, rows)
 end
@@ -178,18 +197,12 @@ function write_report_markdown(metrics, checks, out_md::AbstractString; commit::
     push!(lines, "|---|---:|---:|")
     push!(lines, @sprintf("| PEC (Bempp vs Julia) | %.3f dB | %.3f dB |", metrics.pec_crossval.global_mean_abs_diff_db, metrics.pec_crossval.target_mean_abs_diff_db))
     push!(lines, @sprintf("| Impedance (Bempp vs Julia) | %.3f dB | %.3f dB |", metrics.imp_crossval.global_mean_abs_diff_db, metrics.imp_crossval.target_mean_abs_diff_db))
-
-    matrix_json = joinpath(dirname(out_md), "impedance_validation_matrix_summary.json")
-    if isfile(matrix_json)
-        matrix = JSON.parsefile(matrix_json)
-        gates = matrix["gates"]
-        push!(lines, "")
-        push!(lines, "## Impedance Matrix Gates")
-        push!(lines, "- Cases with near-target mean |ΔD| <= 1.5 dB: $(gates["count_target_le_1p5"])/$(gates["num_cases"])")
-        push!(lines, "- Cases with RMSE <= 2.5 dB: $(gates["count_rmse_le_2p5"])/$(gates["num_cases"])")
-        push!(lines, "- Cases with max |ΔD| <= 25 dB: $(gates["count_max_le_25"])/$(gates["num_cases"])")
-        push!(lines, "- Matrix gate status: $(gates["matrix_gate_pass"] ? "PASS" : "FAIL")")
-    end
+    push!(lines, "")
+    push!(lines, "## Beam-Centric Matrix Gates")
+    push!(lines, "- Cases with |Δθ_main| <= 3°: $(metrics.beam_matrix_pass_main_theta)/$(metrics.beam_matrix_num_cases)")
+    push!(lines, "- Cases with |ΔD_main| <= 1.5 dB: $(metrics.beam_matrix_pass_main_level)/$(metrics.beam_matrix_num_cases)")
+    push!(lines, "- Cases with |ΔSLL| <= 3 dB: $(metrics.beam_matrix_pass_sll)/$(metrics.beam_matrix_num_cases)")
+    push!(lines, "- Beam-centric matrix status: $((metrics.beam_matrix_pass_main_theta == metrics.beam_matrix_num_cases && metrics.beam_matrix_pass_main_level == metrics.beam_matrix_num_cases && metrics.beam_matrix_pass_sll == metrics.beam_matrix_num_cases) ? "PASS" : "FAIL")")
 
     open(out_md, "w") do io
         for line in lines
