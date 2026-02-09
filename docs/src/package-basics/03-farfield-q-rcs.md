@@ -27,10 +27,10 @@ After this chapter, you should be able to:
 The electric far-field $\mathbf{E}^\infty(\hat{\mathbf{r}})$ at direction $\hat{\mathbf{r}}$ (unit vector) produced by surface current $\mathbf{J}(\mathbf{r}')$ is:
 
 ```math
-\mathbf{E}^\infty(\hat{\mathbf{r}}) = \frac{i k \eta_0}{4\pi} \frac{e^{ikr}}{r} \int_\Gamma \left[ \hat{\mathbf{r}} \times \left( \hat{\mathbf{r}} \times \mathbf{J}(\mathbf{r}') \right) \right] e^{-i k \hat{\mathbf{r}} \cdot \mathbf{r}'} d\Gamma'
+\mathbf{E}^\infty(\hat{\mathbf{r}}) = \frac{i k \eta_0}{4\pi} \int_\Gamma \left[ \hat{\mathbf{r}} \times \left( \hat{\mathbf{r}} \times \mathbf{J}(\mathbf{r}') \right) \right] e^{+i k \hat{\mathbf{r}} \cdot \mathbf{r}'} d\Gamma'
 ```
 
-where $k = 2\pi/\lambda$ is the wavenumber, $\eta_0 = \sqrt{\mu_0/\epsilon_0} \approx 376.73\,\Omega$ is free-space impedance, and $r$ is the distance from origin. This matches Equation (16) in `bare_jrnl.tex` (far‑field operator).
+where $k = 2\pi/\lambda$ is the wavenumber and $\eta_0 = \sqrt{\mu_0/\epsilon_0} \approx 376.73\,\Omega$ is free-space impedance. This matches Equation (17) in `bare_jrnl.tex` (far‑field operator). Note that the factor $e^{ikr}/r$ describing spherical wave decay is omitted because $\mathbf{E}^\infty$ denotes the **far-field pattern** (amplitude and phase) independent of distance $r$. The complete far-field at large distance is $\mathbf{E}(\mathbf{r}) \approx \mathbf{E}^\infty(\hat{\mathbf{r}}) e^{ikr}/r$.
 
 ### 1.2 RWG Basis Expansion
 
@@ -49,7 +49,7 @@ yields a linear superposition:
 where the **radiation vector** of basis $n$ is:
 
 ```math
-\mathbf{g}_n(\hat{\mathbf{r}}) = \frac{i k \eta_0}{4\pi} \int_\Gamma \left[ \hat{\mathbf{r}} \times \left( \hat{\mathbf{r}} \times \mathbf{f}_n(\mathbf{r}') \right) \right] e^{-i k \hat{\mathbf{r}} \cdot \mathbf{r}'} d\Gamma'
+\mathbf{g}_n(\hat{\mathbf{r}}) = \frac{i k \eta_0}{4\pi} \int_\Gamma \left[ \hat{\mathbf{r}} \times \left( \hat{\mathbf{r}} \times \mathbf{f}_n(\mathbf{r}') \right) \right] e^{+i k \hat{\mathbf{r}} \cdot \mathbf{r}'} d\Gamma'
 ```
 
 ### 1.3 Power and Directivity
@@ -188,10 +188,10 @@ G_mat = radiation_vectors(mesh, rwg, grid, k;
 **Algorithm (see `src/FarField.jl`):** For each RWG basis function $\mathbf{f}_n$ with support triangles $T_n^+$ and $T_n^-$, compute
 
 ```math
-\mathbf{g}_n(\hat{\mathbf{r}}_q) = \frac{i k \eta_0}{4\pi} \sum_{t \in \{T_n^+, T_n^-\}} \int_{T_t} \left[ \hat{\mathbf{r}}_q \times \left( \hat{\mathbf{r}}_q \times \mathbf{f}_n(\mathbf{r}') \right) \right] e^{-i k \hat{\mathbf{r}}_q \cdot \mathbf{r}'} d\Gamma'
+\mathbf{g}_n(\hat{\mathbf{r}}_q) = \frac{i k \eta_0}{4\pi} \sum_{t \in \{T_n^+, T_n^-\}} \int_{T_t} \left[ \hat{\mathbf{r}}_q \times \left( \hat{\mathbf{r}}_q \times \mathbf{f}_n(\mathbf{r}') \right) \right] e^{+i k \hat{\mathbf{r}}_q \cdot \mathbf{r}'} d\Gamma'
 ```
 
-using the same triangular quadrature rule (order `quad_order`) as EFIE assembly. The integral is evaluated at quadrature points $\mathbf{r}_p'$ with weights $w_p$, and the phase factor $e^{-i k \hat{\mathbf{r}}_q \cdot \mathbf{r}_p'}$ is applied per direction. The outer product $\hat{\mathbf{r}} \times (\hat{\mathbf{r}} \times \mathbf{f}_n)$ simplifies to $(\hat{\mathbf{r}} \cdot \mathbf{f}_n) \hat{\mathbf{r}} - \mathbf{f}_n$.
+using the same triangular quadrature rule (order `quad_order`) as EFIE assembly. The integral is evaluated at quadrature points $\mathbf{r}_p'$ with weights $w_p$, and the phase factor $e^{+i k \hat{\mathbf{r}}_q \cdot \mathbf{r}_p'}$ is applied per direction. The outer product $\hat{\mathbf{r}} \times (\hat{\mathbf{r}} \times \mathbf{f}_n)$ simplifies to $(\hat{\mathbf{r}} \cdot \mathbf{f}_n) \hat{\mathbf{r}} - \mathbf{f}_n$.
 
 **Implementation details:** The function `radiation_vectors` loops over basis functions $n$, over their two support triangles, over quadrature points within each triangle, and over all directions $\hat{\mathbf{r}}_q$. For performance, the direction loop is innermost, allowing vectorization across directions. The result is stored as a dense matrix `G_mat` of size $(3 N_\Omega) \times N$, where each column $n$ contains the three Cartesian components of $\mathbf{g}_n$ for all directions concatenated.
 

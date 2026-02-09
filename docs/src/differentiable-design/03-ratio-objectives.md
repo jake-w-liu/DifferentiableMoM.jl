@@ -132,7 +132,46 @@ Substituting \eqref{eq:deriv_fg} into \eqref{eq:quotient_rule} yields the comple
 
 ### 2.3 Efficient Gradient Assembly
 
-Because $\partial \mathbf{Z}/\partial \theta_p = -\mathbf{M}_p$ (resistive) or $-i\mathbf{M}_p$ (reactive), the contractions in \eqref{eq:deriv_fg} reduce to inner products involving $\mathbf{M}_p$. Define the scalar overlaps
+Because $\partial \mathbf{Z}/\partial \theta_p = -\mathbf{M}_p$ (resistive) or $-i\mathbf{M}_p$ (reactive), the contractions in \eqref{eq:deriv_fg} reduce to inner products involving $\mathbf{M}_p$. Let's derive these expressions step by step.
+
+First, recall the adjoint gradient formula from Chapter 1:
+```math
+\frac{\partial f}{\partial \theta_p} = -2\,\Re\!\left\{
+\boldsymbol{\lambda}_f^\dagger
+\left(
+\frac{\partial \mathbf{Z}}{\partial \theta_p}
+\right)
+\mathbf{I}
+\right\}.
+```
+
+**Resistive case** ($\partial \mathbf{Z}/\partial \theta_p = -\mathbf{M}_p$):
+```math
+\frac{\partial f}{\partial \theta_p}
+= -2\,\Re\!\left\{
+\boldsymbol{\lambda}_f^\dagger (-\mathbf{M}_p) \mathbf{I}
+\right\}
+= +2\,\Re\!\left\{
+\boldsymbol{\lambda}_f^\dagger \mathbf{M}_p \mathbf{I}
+\right\}.
+```
+
+**Reactive case** ($\partial \mathbf{Z}/\partial \theta_p = -i\mathbf{M}_p$):
+```math
+\frac{\partial f}{\partial \theta_p}
+= -2\,\Re\!\left\{
+\boldsymbol{\lambda}_f^\dagger (-i\mathbf{M}_p) \mathbf{I}
+\right\}
+= +2\,\Re\!\left\{
+i\,\boldsymbol{\lambda}_f^\dagger \mathbf{M}_p \mathbf{I}
+\right\}
+= -2\,\Im\!\left\{
+\boldsymbol{\lambda}_f^\dagger \mathbf{M}_p \mathbf{I}
+\right\},
+```
+where we used the identity $\Re\{i z\} = -\Im\{z\}$. The same steps apply to $\partial g/\partial \theta_p$ with $\boldsymbol{\lambda}_g$.
+
+Define the scalar overlaps
 
 ```math
 l_p^{(f)} = \boldsymbol{\lambda}_f^\dagger \mathbf{M}_p \mathbf{I},
@@ -140,36 +179,52 @@ l_p^{(f)} = \boldsymbol{\lambda}_f^\dagger \mathbf{M}_p \mathbf{I},
 l_p^{(g)} = \boldsymbol{\lambda}_g^\dagger \mathbf{M}_p \mathbf{I}.
 ```
 
-Then, for reactive sheets,
+Then we can summarize:
 
+**Resistive sheets**:
 ```math
 \frac{\partial f}{\partial \theta_p} = +2\,\Re\{l_p^{(f)}\},\quad
-\frac{\partial g}{\partial \theta_p} = +2\,\Re\{l_p^{(g)}\} \quad\text{(resistive)},
+\frac{\partial g}{\partial \theta_p} = +2\,\Re\{l_p^{(g)}\}.
 ```
 
+**Reactive sheets**:
 ```math
 \frac{\partial f}{\partial \theta_p} = -2\,\Im\{l_p^{(f)}\},\quad
-\frac{\partial g}{\partial \theta_p} = -2\,\Im\{l_p^{(g)}\} \quad\text{(reactive)}.
+\frac{\partial g}{\partial \theta_p} = -2\,\Im\{l_p^{(g)}\}.
 ```
 
-The ratio gradient is assembled as
+Now substitute these into the quotient rule \eqref{eq:quotient_rule}:
 
+**Resistive case**:
 ```math
 \frac{\partial J}{\partial \theta_p}
+=
+\frac{1}{g^2}
+\Bigl(
+g \bigl[+2\Re\{l_p^{(f)}\}\bigr]
+- f \bigl[+2\Re\{l_p^{(g)}\}\bigr]
+\Bigr)
 =
 \frac{2}{g^2}
 \Bigl(
 g \,\Re\{l_p^{(f)}\} - f \,\Re\{l_p^{(g)}\}
-\Bigr) \quad\text{(resistive)},
+\Bigr).
 ```
 
+**Reactive case**:
 ```math
 \frac{\partial J}{\partial \theta_p}
+=
+\frac{1}{g^2}
+\Bigl(
+g \bigl[-2\Im\{l_p^{(f)}\}\bigr]
+- f \bigl[-2\Im\{l_p^{(g)}\}\bigr]
+\Bigr)
 =
 -\frac{2}{g^2}
 \Bigl(
 g \,\Im\{l_p^{(f)}\} - f \,\Im\{l_p^{(g)}\}
-\Bigr) \quad\text{(reactive)}.
+\Bigr).
 ```
 
 These formulas are implemented in `optimize_directivity` (Section 5).
