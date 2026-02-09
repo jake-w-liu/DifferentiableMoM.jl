@@ -19,7 +19,7 @@ After this chapter, you should be able to:
 
 ---
 
-## 1) Why Plotting Is a Technical Check
+## 1) Importance of Visualization in MoM Pipeline
 
 Many forward-solve failures are geometry failures in disguise:
 
@@ -32,29 +32,57 @@ A mesh preview often reveals these issues faster than matrix diagnostics.
 
 ---
 
-## 2) What the Visualization Utilities Actually Do
+## 2) Implementation in `DifferentiableMoM.jl`
 
-Package-level APIs:
+### 2.1 Core Functions
 
-- `plot_mesh_wireframe(mesh; ...)`
-- `plot_mesh_comparison(mesh_a, mesh_b; ...)`
-- `save_mesh_preview(mesh_a, mesh_b, out_prefix; ...)`
+The visualization module (`src/Visualization.jl`) provides three main user‑facing functions:
 
-Internally:
+- **`plot_mesh_wireframe(mesh; kwargs...)`** – 3D wireframe plot of a single mesh with consistent axis scaling and physical units (meters).
+- **`plot_mesh_comparison(mesh_a, mesh_b; kwargs...)`** – Side‑by‑side wireframe plots with **shared axis limits** and **equal aspect ratio** for reliable visual comparison.
+- **`save_mesh_preview(mesh_a, mesh_b, out_prefix; kwargs...)`** – Generate and save comparison plots as PNG and PDF files, returning paths for logging.
 
-1. `mesh_wireframe_segments(mesh)` converts unique edges into line segments
-   `(p1, p2, NaN)` for robust 3D path plotting.
-2. `_realistic_axis_limits([mesh_a, mesh_b])` computes a **shared cubic frame**:
-   - gather global min/max per axis,
-   - take `max_span = maximum(maxs - mins)`,
-   - set all axes to center ± `max_span/2` (plus padding).
-3. `plot_mesh_comparison` uses `aspect_ratio=:equal` on both panels.
+### 2.2 Underlying Algorithms
 
-This prevents false visual distortion from independent axis autoscaling.
+**Wireframe segment extraction (`mesh_wireframe_segments` in `src/Mesh.jl`):** For each interior edge (shared by two triangles) and each boundary edge (belonging to one triangle), the function creates a line segment between the two edge vertices. Segments are concatenated with `NaN` separators to produce a single continuous path for efficient plotting with `Plots.jl`. This avoids duplicate lines and ensures manifold edges are drawn once.
+
+**Shared axis limits (`_realistic_axis_limits`):** To prevent visual distortion when comparing two meshes, the function computes a common cubic bounding box:
+
+1. Compute global minima and maxima across **all** input meshes for each coordinate axis.
+2. Determine the maximum span $s = \max(x_{\max} - x_{\min}, y_{\max} - y_{\min}, z_{\max} - z_{\min})$.
+3. Define a cube centered at the global centroid with half‑side length $s/2 \times (1 + \epsilon)$ where $\epsilon$ is a small padding fraction (`pad_frac`).
+4. Set identical `xlims`, `ylims`, `zlims` for all subplots.
+
+This guarantees that geometric differences reflect true shape changes, not arbitrary axis scaling.
+
+**Aspect ratio enforcement:** Both subplots in `plot_mesh_comparison` use `aspect_ratio = :equal`, ensuring that a unit length in the $x$, $y$, and $z$ directions occupies the same screen distance. Combined with shared limits, this makes visual comparison trustworthy.
+
+### 2.3 Keyword Arguments and Customization
+
+Each function accepts standard `Plots.jl` keywords (e.g., `color`, `linewidth`, `camera`, `title`) plus package‑specific options:
+
+- **`camera = (30, 30)`** – azimuth and elevation angles in degrees.
+- **`pad_frac = 0.04`** – fractional padding added to the cubic bounding box.
+- **`size = (1200, 520)`** – total figure size in pixels (width × height).
+- **`color_a`, `color_b`** – distinct colors for the two meshes in comparison plots.
+
+All functions return a `Plots.jl` plot object that can be further modified with `plot!` or saved with `savefig`.
+
+### 2.4 Integration with the MoM Pipeline
+
+Visualization is designed to be inserted at critical points in the mesh‑processing workflow:
+
+1. **After repair** – verify topology corrections and orientation consistency.
+2. **After coarsening** – assess geometric fidelity relative to the original mesh.
+3. **Before RWG assembly** – confirm scale and overall shape are physically plausible.
+
+The `save_mesh_preview` function produces reproducible artifacts for reports, experiment logs, and continuous‑integration checks.
 
 ---
 
-## 3) Step-by-Step: Single-Mesh Sanity View
+## 3) Practical Workflow Examples
+
+### 3.1 Single-Mesh Sanity View
 
 ```julia
 using DifferentiableMoM
@@ -79,7 +107,7 @@ What to check visually:
 
 ---
 
-## 4) Step-by-Step: Repaired vs Simulation Mesh
+### 3.2 Repaired vs Simulation Mesh Comparison
 
 This is the most useful diagnostic before a large run.
 
@@ -109,7 +137,7 @@ Because limits are shared and aspect ratio is equal, you can reliably answer:
 
 ---
 
-## 5) Save Artifacts for Reproducibility
+### 3.3 Saving Artifacts for Reproducibility
 
 ```julia
 preview = save_mesh_preview(
@@ -129,7 +157,7 @@ The returned paths make it easy to log generated assets in scripts/CI.
 
 ---
 
-## 6) Annotated Workflow Before Running EFIE
+### 3.4 Annotated Workflow Before EFIE Assembly
 
 ```julia
 using DifferentiableMoM
@@ -158,7 +186,7 @@ This ordering avoids expensive solves on obviously bad meshes.
 
 ---
 
-## 7) Practical Interpretation Tips
+### 3.5 Practical Interpretation Tips
 
 1. **“Broken-looking” coarsened mesh** can be acceptable if global scattering
    observables are your target and topology remains valid.
@@ -169,7 +197,51 @@ This ordering avoids expensive solves on obviously bad meshes.
 
 ---
 
-## Code Mapping
+## 4) Troubleshooting Common Visualization Issues
+
+### 4.1 Empty or Incomplete Wireframe
+
+**Symptoms:** The plot appears empty, shows only a few edges, or lacks expected detail.
+
+**Possible causes and remedies:**
+
+1. **Mesh scale mismatch:** If the mesh coordinates are in millimeters but the axis limits are set for meters, the geometry may be outside the viewport. Use `plot_mesh_wireframe` with default limits (automatically computed) or check `_realistic_axis_limits` output.
+2. **Non‑manifold edges:** The wireframe extraction routine `mesh_wireframe_segments` only draws manifold edges (each interior edge appears once). If the mesh contains non‑manifold edges (shared by three or more triangles), those edges may be omitted. Run `mesh_quality_report` to identify non‑manifold topology.
+3. **Camera orientation:** The default camera `(30, 30)` may be looking from a direction that hides features. Adjust the `camera` keyword (azimuth, elevation) to rotate the view.
+
+### 4.2 Misleading Visual Comparison
+
+**Symptoms:** Two meshes appear dramatically different in size or shape even though they represent the same geometry.
+
+**Checklist:**
+
+- **Shared axis limits:** Verify that `plot_mesh_comparison` is used (not two separate calls to `plot_mesh_wireframe`). Independent plots autoscale axes differently.
+- **Equal aspect ratio:** Ensure `aspect_ratio = :equal` is set (the default in `plot_mesh_comparison`).
+- **Padding factor:** If `pad_frac` is too large (e.g., `> 0.5`), the cubic bounding box may dwarf small geometric details. Reduce `pad_frac` to `0.02`–`0.05`.
+
+### 4.3 Missing Plotting Backend
+
+**Symptoms:** Julia throws an error about `Plots.jl` backend not being installed.
+
+**Solution:** Install a plotting backend (e.g., `GR`, `PyPlot`, `PlotlyJS`) and set it before using visualization functions:
+```julia
+using Plots
+gr()  # or pyplot(), plotlyjs()
+```
+
+### 4.4 File‑Save Failures
+
+**Symptoms:** `save_mesh_preview` returns but no PNG/PDF files are created, or permissions errors occur.
+
+**Diagnostics:**
+
+- Check that the output directory exists (the function creates parent directories via `mkpath`).
+- Ensure write permissions for the destination.
+- Verify that the `Plots.jl` backend supports the requested file format (GR supports PNG/PDF; PyPlot supports PNG/PDF/PS; PlotlyJS supports HTML only).
+
+---
+
+## 5) Code Mapping
 
 - Plot implementations: `src/Visualization.jl`
 - Wireframe segment generation: `src/Mesh.jl`
@@ -179,10 +251,32 @@ This ordering avoids expensive solves on obviously bad meshes.
 
 ---
 
-## Exercises
+## 6) Exercises
 
 - Basic: render one repaired mesh and annotate `(Nv, Nt, Nedges)` in title.
 - Intermediate: compare two target-RWG coarsened meshes and justify which one
   you would trust for monostatic RCS.
 - Challenge: create a scripted pre-solve gate that fails if visual preview and
-  quality report suggest severe geometric loss.
+   quality report suggest severe geometric loss.
+
+---
+
+## 7) Chapter Checklist
+
+Before relying on visualization for mesh validation, ensure you can:
+
+- [ ] Generate a wireframe plot of a single mesh with correct scale and orientation.
+- [ ] Compare two meshes side‑by‑side using `plot_mesh_comparison` with shared axis limits and equal aspect ratio.
+- [ ] Save comparison plots as PNG/PDF files for documentation and reproducibility.
+- [ ] Interpret visual differences in the context of mesh repair and coarsening.
+- [ ] Troubleshoot common plotting issues (empty frames, misleading scaling, missing backends).
+- [ ] Integrate visual checks into a scripted pre‑solve validation gate.
+
+---
+
+## 8) Further Reading
+
+- **Plots.jl documentation:** [http://docs.juliaplots.org/stable/](http://docs.juliaplots.org/stable/) – comprehensive guide to the plotting library used by the package.
+- **Mesh processing for EM:** Shepard, *Mesh Generation and Quality Criteria for Computational Electromagnetics* (2002).
+- **Visual debugging in scientific computing:** Johansson & Forssén, *Visualization as a Tool for Debugging Numerical Software* (2016).
+- **Package examples:** `examples/ex_visualize_simulation_mesh.jl` and `examples/ex_airplane_rcs.jl` demonstrate end‑to‑end workflows.
