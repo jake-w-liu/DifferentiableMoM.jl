@@ -2,55 +2,69 @@
 
 ## Purpose
 
-Reference for package-level mesh plotting helpers used in OBJ workflows and
-simulation previews.
+Reference for package‑level mesh plotting helpers used in OBJ workflows and simulation previews.
 
 ---
 
-## `plot_mesh_wireframe`
+## `plot_mesh_wireframe(mesh; kwargs...)`
 
-```julia
-plot_mesh_wireframe(mesh; color=:steelblue, title="Mesh", camera=(30,30), linewidth=0.7, ...)
-```
+Create a 3D wireframe plot of a mesh using package‑native mesh segments.
 
-Creates a 3D wireframe from mesh edges.
+**Parameters:**
+- `mesh::TriMesh`: triangle mesh
+- `color=:steelblue`: line color
+- `title::AbstractString="Mesh"`: plot title
+- `camera::Tuple{Real,Real}=(30, 30)`: 3D camera view angles (azimuth, elevation)
+- `linewidth::Real=0.7`: line width
+- `xlims`, `ylims`, `zlims`: optional axis limits (default: auto‑scaled from mesh)
+- `kwargs...`: forwarded to Plots.jl `plot` command
 
-Important defaults:
+**Returns:** Plots.jl plot object.
 
-- labeled metric axes (`x,y,z` in meters),
-- boxed frame and grid,
-- camera controls exposed as kwargs.
-
----
-
-## `plot_mesh_comparison`
-
-```julia
-plot_mesh_comparison(mesh_a, mesh_b; title_a="Mesh A", title_b="Mesh B", ...)
-```
-
-Creates side-by-side wireframes with:
-
-- shared axis limits,
-- equal aspect ratio,
-- independent colors/titles.
-
-Useful for repaired-vs-coarsened mesh checks.
+**Features:**
+- labeled metric axes (`x`, `y`, `z` in meters)
+- boxed frame and grid
+- equal aspect ratio (when used with `plot_mesh_comparison`)
 
 ---
 
-## `save_mesh_preview`
+## `plot_mesh_comparison(mesh_a, mesh_b; kwargs...)`
 
-```julia
-save_mesh_preview(mesh_a, mesh_b, out_prefix; kwargs...)
-```
+Create side‑by‑side 3D wireframe plots with shared axis limits and equal aspect ratio.
 
-Writes both:
+**Parameters:**
+- `mesh_a::TriMesh`, `mesh_b::TriMesh`: meshes to compare
+- `title_a::AbstractString="Mesh A"`, `title_b::AbstractString="Mesh B"`: titles for each subplot
+- `color_a=:steelblue`, `color_b=:darkorange`: line colors for each mesh
+- `camera::Tuple{Real,Real}=(30, 30)`: 3D camera view angles (same for both subplots)
+- `size::Tuple{Int,Int}=(1200, 520)`: total figure size (width, height) in pixels
+- `pad_frac::Float64=0.04`: fractional padding around combined mesh bounding box
+- `kwargs...`: forwarded to `plot_mesh_wireframe`
 
-- `out_prefix * ".png"`
-- `out_prefix * ".pdf"`
+**Returns:** Plots.jl plot object with `layout=(1,2)`.
 
-Returns `(plot, png_path, pdf_path)`.
+**Features:**
+- shared axis limits computed from both meshes
+- equal aspect ratio enforced
+- independent colors and titles
+
+---
+
+## `save_mesh_preview(mesh_a, mesh_b, out_prefix; kwargs...)`
+
+Generate and save side‑by‑side mesh preview plots as PNG and PDF.
+
+**Parameters:**
+- `mesh_a::TriMesh`, `mesh_b::TriMesh`: meshes to compare
+- `out_prefix::AbstractString`: output file prefix (without extension)
+- `kwargs...`: forwarded to `plot_mesh_comparison`
+
+**Returns:** named tuple `(plot, png_path, pdf_path)` where:
+- `plot`: the Plots.jl plot object
+- `png_path`: full path to saved PNG file (`out_prefix * ".png"`)
+- `pdf_path`: full path to saved PDF file (`out_prefix * ".pdf"`)
+
+**Note:** Creates parent directories if they do not exist.
 
 ---
 
@@ -69,6 +83,7 @@ println(preview.png_path)
 
 - Wireframe plotting is intentionally lightweight and robust for large meshes.
 - Axis limits are computed from mesh extents with small padding.
+- Requires `Plots.jl` backend (e.g., GR) to be installed and loaded.
 
 ---
 
@@ -83,5 +98,4 @@ println(preview.png_path)
 ## Exercises
 
 - Basic: plot one mesh with two different camera settings.
-- Challenge: compare a repaired mesh and two coarsening levels in separate
-  previews and discuss geometric fidelity tradeoffs.
+- Challenge: compare a repaired mesh and two coarsening levels in separate previews and discuss geometric fidelity tradeoffs.

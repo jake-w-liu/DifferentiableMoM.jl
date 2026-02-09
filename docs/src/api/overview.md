@@ -21,15 +21,23 @@ All documented symbols below are exported from the top-level module.
 
 ### 1) Geometry and Mesh Safety
 
-- Types: `TriMesh`, `PatchPartition`
+- Types: `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid`, `Vec3`, `CVec3`
+- Helpers: `nvertices`, `ntriangles`
 - Build/import: `make_rect_plate`, `read_obj_mesh`, `write_obj_mesh`
+- Geometry: `triangle_area`, `triangle_center`, `triangle_normal`,
+  `mesh_unique_edges`, `mesh_wireframe_segments`
 - Quality: `mesh_quality_report`, `mesh_quality_ok`, `assert_mesh_quality`
 - Repair/coarsen: `repair_mesh_for_simulation`, `repair_obj_mesh`,
-  `coarsen_mesh_to_target_rwg`
+  `coarsen_mesh_to_target_rwg`, `cluster_mesh_vertices`,
+  `drop_nonmanifold_triangles`
+- Utilities: `estimate_dense_matrix_gib`
 
 ### 2) Basis and Assembly
 
 - RWG: `build_rwg`, `eval_rwg`, `div_rwg`, `basis_triangles`
+- Greens kernels: `greens`, `greens_smooth`, `grad_greens`
+- Quadrature: `tri_quad_rule`, `tri_quad_points`
+- Singular integration: `analytical_integral_1overR`, `self_cell_contribution`
 - EFIE: `assemble_Z_efie`
 - Impedance blocks: `precompute_patch_mass`, `assemble_Z_impedance`,
   `assemble_dZ_dtheta`, `assemble_full_Z`
