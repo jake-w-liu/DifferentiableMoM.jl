@@ -2,7 +2,7 @@
 
 ## Path A: New to Computational EM
 
-**Prerequisite check**: If you need refreshers on vector calculus, complex numbers, or linear algebra, start with [Mathematical Prerequisites](appendices/mathematical-prerequisites.md).
+**Prerequisite check**: If you need refreshers on vector calculus, complex numbers, or linear algebra, start with [Mathematical Prerequisites](mathematical-prerequisites.md).
 
 1. Getting Started
 2. Part I — Foundations (all chapters)

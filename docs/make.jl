@@ -74,6 +74,7 @@ makedocs(
         ],
         "Appendices" => [
             "Units and Conventions" => "appendices/units-conventions.md",
+            "Mathematical Prerequisites" => "appendices/mathematical-prerequisites.md",
             "Symbol Glossary" => "appendices/symbol-glossary.md",
             "Suggested Reading Paths" => "appendices/reading-path.md",
             "FAQ" => "appendices/faq.md",
