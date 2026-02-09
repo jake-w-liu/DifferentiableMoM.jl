@@ -161,7 +161,12 @@ Substituting \eqref{eq:dZ_dtheta_resistive} into the general adjoint gradient fo
 \label{eq:grad_resistive}
 ```
 
-Similarly, for reactive sheets,
+The algebraic steps are:
+1. Substitute $\partial \mathbf{Z}/\partial \theta_p = -\mathbf{M}_p$ into $\partial J/\partial \theta_p = -2\Re\{\boldsymbol{\lambda}^\dagger (\partial \mathbf{Z}/\partial \theta_p) \mathbf{I}\}$
+2. Distribute the minus sign: $-2\Re\{\boldsymbol{\lambda}^\dagger (-\mathbf{M}_p) \mathbf{I}\} = -2\Re\{-\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\}$
+3. Use linearity of real part: $-2\Re\{-\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\} = +2\Re\{\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\}$
+
+Similarly, for reactive sheets, substitute $\partial \mathbf{Z}/\partial \theta_p = -i\mathbf{M}_p$:
 
 ```math
 \frac{\partial J}{\partial \theta_p}
@@ -179,6 +184,11 @@ i\,\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}
 \right\}.
 \label{eq:grad_reactive}
 ```
+
+The key step uses the identity $\Re\{i z\} = -\Im\{z\}$ for any complex number $z$. The full derivation:
+1. Substitute $\partial \mathbf{Z}/\partial \theta_p = -i\mathbf{M}_p$: $-2\Re\{\boldsymbol{\lambda}^\dagger (-i\mathbf{M}_p) \mathbf{I}\}$
+2. Distribute the minus sign: $-2\Re\{-i\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\} = +2\Re\{i\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\}$
+3. Apply $\Re\{i z\} = -\Im\{z\}$: $+2\Re\{i\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\} = -2\Im\{\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\}$
 
 Defining the scalar overlap $l_p = \boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I} \in \mathbb{C}$, we obtain the compact forms used in the code:
 

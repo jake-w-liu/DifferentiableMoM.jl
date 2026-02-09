@@ -115,7 +115,54 @@ RWG functions are defined on pairs of triangles and ensure current continuity ac
 
 ## 3. EFIE Operator and Mixed-Potential Form
 
-### 3.1 Integral Operator for Scattered Field
+### 3.1 Derivation from Maxwell's Equations
+
+The Electric Field Integral Equation (EFIE) can be derived systematically from Maxwell's equations under the time-harmonic convention $e^{+i\omega t}$. Starting with Maxwell's equations in free space with sources:
+
+```math
+\begin{aligned}
+\nabla \times \mathbf{E} &= -i\omega\mu_0 \mathbf{H}, \\
+\nabla \times \mathbf{H} &= \mathbf{J} + i\omega\epsilon_0 \mathbf{E}, \\
+\nabla \cdot \mathbf{E} &= \frac{\rho}{\epsilon_0}, \\
+\nabla \cdot \mathbf{H} &= 0.
+\end{aligned}
+```
+
+Introduce the magnetic vector potential $\mathbf{A}$ and electric scalar potential $\phi$ via the Lorenz gauge conditions:
+
+```math
+\mathbf{E} = -i\omega\mathbf{A} - \nabla\phi, \quad \mathbf{H} = \frac{1}{\mu_0}\nabla \times \mathbf{A}, \quad \nabla\cdot\mathbf{A} = -i\omega\mu_0\epsilon_0\phi.
+```
+
+The potentials satisfy the inhomogeneous Helmholtz equations:
+
+```math
+(\nabla^2 + k^2)\mathbf{A} = -\mu_0\mathbf{J}, \qquad (\nabla^2 + k^2)\phi = -\frac{\rho}{\epsilon_0},
+```
+
+where $k = \omega\sqrt{\mu_0\epsilon_0}$. Using the free-space Green's function $G(\mathbf{r},\mathbf{r}') = e^{-ikR}/(4\pi R)$ with $R = |\mathbf{r}-\mathbf{r}'|$, the solutions are
+
+```math
+\mathbf{A}(\mathbf{r}) = \mu_0 \int_{\Gamma} G(\mathbf{r},\mathbf{r}')\mathbf{J}(\mathbf{r}')\,dS', \qquad
+\phi(\mathbf{r}) = \frac{1}{i\omega\epsilon_0} \int_{\Gamma} G(\mathbf{r},\mathbf{r}')\nabla'\cdot\mathbf{J}(\mathbf{r}')\,dS'.
+```
+
+The last expression uses the continuity equation $\nabla'\cdot\mathbf{J} = -i\omega\rho$. Substituting into $\mathbf{E}^{\mathrm{sca}} = -i\omega\mathbf{A} - \nabla\phi$ gives
+
+```math
+\mathbf{E}^{\mathrm{sca}}(\mathbf{r}) = -i\omega\mu_0 \int_{\Gamma} G(\mathbf{r},\mathbf{r}')\mathbf{J}(\mathbf{r}')\,dS'
+- \nabla \frac{1}{i\omega\epsilon_0} \int_{\Gamma} G(\mathbf{r},\mathbf{r}')\nabla'\cdot\mathbf{J}(\mathbf{r}')\,dS'.
+```
+
+Applying the gradient operator under the integral and using $\nabla G = -\nabla' G$ (for functions of $\mathbf{r}-\mathbf{r}'$) leads to
+
+```math
+\mathbf{E}^{\mathrm{sca}}(\mathbf{r}) = -i\omega\mu_0 \int_{\Gamma} \left[\mathbf{I} + \frac{1}{k^2}\nabla\nabla\right] G(\mathbf{r},\mathbf{r}')\,\mathbf{J}(\mathbf{r}')\,dS'.
+```
+
+This is the **mixed-potential** representation of the scattered electric field.
+
+### 3.2 Integral Operator for Scattered Field
 
 The scattered electric field radiated by a surface current $\mathbf{J}$ is given by the integral operator
 
@@ -140,14 +187,68 @@ To discretize the EFIE using the Method of Moments with RWG basis functions $\{\
 Z_{mn} = \langle \mathbf{f}_m, \mathcal{T}[\mathbf{f}_n] \rangle = -i\omega\mu_0 \iint_{\Gamma\times\Gamma} \mathbf{f}_m(\mathbf{r})\cdot\left[\mathbf{I} + \frac{1}{k^2}\nabla\nabla\right] G(\mathbf{r},\mathbf{r}')\,\mathbf{f}_n(\mathbf{r}')\,dS\,dS'.
 ```
 
-The key step is **integration by parts** on the surface, which transfers one of the gradients from the Green's function onto the basis function. For tangential vector functions defined on a closed or open surface, the surface divergence theorem yields
+The key step is **integration by parts** on the surface, which transfers one of the gradients from the Green's function onto the basis function. This transformation relies on the **surface divergence theorem**, which for smooth tangential vector fields $\mathbf{u}$ and scalar function $f$ on a surface $\Gamma$ states:
+
+```math
+\int_\Gamma (\nabla_s\cdot\mathbf{u})\, f\, dS = -\int_\Gamma \mathbf{u}\cdot\nabla_s f\, dS + \oint_{\partial\Gamma} (\mathbf{u}\cdot\hat{\mathbf{t}})\, f\, dl,
+```
+
+where $\nabla_s$ is the surface gradient, $\nabla_s\cdot$ is the surface divergence, $\hat{\mathbf{t}}$ is the unit tangent vector to the boundary $\partial\Gamma$, and $dl$ is the line element along the boundary.
+
+For RWG basis functions defined on a closed surface or an open surface with no boundary (when considering interior edges only), the boundary term vanishes because:
+1. $\mathbf{f}_m$ has zero normal component at the domain boundary (by construction for RWG functions on open surfaces, or because the surface is closed).
+2. For interior edges, the support of $\mathbf{f}_m$ does not extend to the domain boundary.
+
+#### Step-by-Step Integration by Parts
+
+Let's perform the integration by parts in detail. Starting with the double-gradient term:
+
+```math
+I = \iint_{\Gamma\times\Gamma} \mathbf{f}_m(\mathbf{r})\cdot\nabla\nabla G(\mathbf{r},\mathbf{r}')\,\mathbf{f}_n(\mathbf{r}')\,dS\,dS'.
+```
+
+We treat $\nabla$ as acting on $\mathbf{r}$ and $\nabla'$ as acting on $\mathbf{r}'$. Note that $\nabla G(\mathbf{r},\mathbf{r}') = -\nabla' G(\mathbf{r},\mathbf{r}')$ because $G$ depends on $\mathbf{r}-\mathbf{r}'$.
+
+**First integration by parts** (with respect to $\mathbf{r}$):
+Apply the surface divergence theorem to the inner integral over $\mathbf{r}$:
+
+```math
+\int_\Gamma \mathbf{f}_m(\mathbf{r})\cdot\nabla\nabla G(\mathbf{r},\mathbf{r}')\,\mathbf{f}_n(\mathbf{r}')\,dS
+= -\int_\Gamma \big[\nabla_s\cdot\mathbf{f}_m(\mathbf{r})\big]\,\nabla G(\mathbf{r},\mathbf{r}')\cdot\mathbf{f}_n(\mathbf{r}')\,dS + \text{boundary term}.
+```
+
+The boundary term vanishes for RWG functions as explained above. Thus:
+
+```math
+I = -\iint_{\Gamma\times\Gamma} \big[\nabla_s\cdot\mathbf{f}_m(\mathbf{r})\big]\,\nabla G(\mathbf{r},\mathbf{r}')\cdot\mathbf{f}_n(\mathbf{r}')\,dS\,dS'.
+```
+
+**Second integration by parts** (with respect to $\mathbf{r}'$):
+Now apply the surface divergence theorem to the integral over $\mathbf{r}'$:
+
+```math
+\int_\Gamma \nabla G(\mathbf{r},\mathbf{r}')\cdot\mathbf{f}_n(\mathbf{r}')\,dS'
+= -\int_\Gamma G(\mathbf{r},\mathbf{r}')\,\nabla_s'\cdot\mathbf{f}_n(\mathbf{r}')\,dS' + \text{boundary term}.
+```
+
+Again the boundary term vanishes. Substituting and using $\nabla G = -\nabla' G$ gives:
+
+```math
+\begin{aligned}
+I &= -\iint_{\Gamma\times\Gamma} \big[\nabla_s\cdot\mathbf{f}_m(\mathbf{r})\big]\,\big[-\int_\Gamma G(\mathbf{r},\mathbf{r}')\,\nabla_s'\cdot\mathbf{f}_n(\mathbf{r}')\,dS'\big]\,dS \\
+&= +\iint_{\Gamma\times\Gamma} \big[\nabla_s\cdot\mathbf{f}_m(\mathbf{r})\big]\,G(\mathbf{r},\mathbf{r}')\,\big[\nabla_s'\cdot\mathbf{f}_n(\mathbf{r}')\big]\,dS\,dS'.
+\end{aligned}
+```
+
+Thus we obtain the final result:
 
 ```math
 \iint_{\Gamma\times\Gamma} \mathbf{f}_m(\mathbf{r})\cdot\nabla\nabla G(\mathbf{r},\mathbf{r}')\,\mathbf{f}_n(\mathbf{r}')\,dS\,dS'
 = -\iint_{\Gamma\times\Gamma} \big[\nabla_s\cdot\mathbf{f}_m(\mathbf{r})\big]\,G(\mathbf{r},\mathbf{r}')\,\big[\nabla_s'\cdot\mathbf{f}_n(\mathbf{r}')\big]\,dS\,dS',
 ```
 
-where $\nabla_s\cdot$ denotes the surface divergence. The minus sign appears because the gradient operator $\nabla$ acting on $G$ is transferred to $\mathbf{f}_m$ via integration by parts, and the boundary terms vanish for RWG functions (they have no normal component at the domain boundary).
+where the overall minus sign comes from the fact that we started with $\nabla\nabla G$ and ended with a positive expression, but the original EFIE operator has a minus sign in front of the scalar potential term (see Equation \eqref{eq:Esca}).
+
 
 ### 3.3 Mixed-Potential Matrix Element
 

@@ -243,6 +243,8 @@ Because $\mathbf{f}_n$ is affine on each triangle, its surface divergence is **c
 
 **Physical interpretation**: The surface divergence represents the **charge density** associated with the basis function via the continuity equation $\nabla_s \cdot \mathbf{J} = -i\omega \rho$. The constant divergence on each triangle greatly simplifies the scalar‑potential term in the EFIE assembly.
 
+**Charge density connection**: The continuity equation for time‑harmonic fields links surface current divergence to surface charge density: $\nabla_s \cdot \mathbf{J} = -i\omega \rho_s$, where $\rho_s$ has units C/m². For an RWG basis function $\mathbf{f}_n$, the divergence is constant on each triangle, implying a piecewise‑constant charge density. On $T_n^+$, $\rho_s^+ = \frac{i}{\omega} \nabla_s\cdot\mathbf{f}_n = \frac{i}{\omega}\frac{\ell_n}{A_n^+}$; on $T_n^-$, $\rho_s^- = \frac{i}{\omega} \nabla_s\cdot\mathbf{f}_n = -\frac{i}{\omega}\frac{\ell_n}{A_n^-}$. The total charge on $T_n^+$ is $Q^+ = \rho_s^+ A_n^+ = \frac{i}{\omega}\ell_n$, and on $T_n^-$ is $Q^- = \rho_s^- A_n^- = -\frac{i}{\omega}\ell_n$. These charges sum to zero, reflecting local charge conservation: the current flowing out of $T_n^+$ through the shared edge exactly balances the current flowing into $T_n^-$.
+
 ### 3.2 Current Continuity (Divergence Conformity)
 
 A key property of RWG functions is that they are **divergence‑conforming**: the normal component of $\mathbf{f}_n$ is continuous across the shared edge. Mathematically, for any point $\mathbf{r}$ on the interior edge,

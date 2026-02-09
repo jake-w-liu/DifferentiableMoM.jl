@@ -136,7 +136,76 @@ For complex vectors `a, b`:
 
 ---
 
-## 4) Linear Algebra Concepts
+## 4) Complex Derivatives and Wirtinger Calculus
+
+### Motivation: Differentiating with Respect to Complex Variables
+
+In optimization problems involving complex variables (e.g., surface current coefficients $I_n \in \mathbb{C}$), standard real‑variable calculus is insufficient because complex functions are generally not holomorphic when they involve complex conjugation. The quadratic objective $J = \mathbf{I}^\dagger \mathbf{Q} \mathbf{I}$ appears in many electromagnetic design problems and is **not** holomorphic in $\mathbf{I}$ because it contains $\mathbf{I}^\dagger$ (complex conjugate). Wirtinger calculus provides a consistent framework for such derivatives.
+
+### Wirtinger Derivatives
+
+For a real‑valued function $f(z, z^*) : \mathbb{C} \to \mathbb{R}$ that depends on both $z$ and its conjugate $z^*$, define the **Wirtinger derivatives**:
+
+```math
+\frac{\partial f}{\partial z} \triangleq \frac{1}{2}\left( \frac{\partial f}{\partial x} - i \frac{\partial f}{\partial y} \right), \qquad
+\frac{\partial f}{\partial z^*} \triangleq \frac{1}{2}\left( \frac{\partial f}{\partial x} + i \frac{\partial f}{\partial y} \right),
+```
+
+where $z = x + iy$. For optimization, the relevant derivative is $\partial f / \partial z^*$ because treating $z$ and $z^*$ as independent variables yields the steepest‑ascent direction.
+
+### Vector/Matrix Notation
+
+For a vector $\mathbf{z} \in \mathbb{C}^N$, the Wirtinger gradient with respect to $\mathbf{z}^*$ is:
+
+```math
+\frac{\partial f}{\partial \mathbf{z}^*} =
+\begin{pmatrix}
+\frac{\partial f}{\partial z_1^*} \\ \vdots \\ \frac{\partial f}{\partial z_N^*}
+\end{pmatrix}.
+```
+
+Key properties:
+1. If $f$ is holomorphic in $\mathbf{z}$ (no $z^*$ dependence), $\partial f / \partial \mathbf{z}^* = 0$.
+2. For real‑valued $f$, $\partial f / \partial \mathbf{z}^* = (\partial f / \partial \mathbf{z})^*$.
+
+### Common Derivatives
+
+- **Quadratic form**: For $\mathbf{Q} = \mathbf{Q}^\dagger$,
+  ```math
+  \frac{\partial}{\partial \mathbf{z}^*} (\mathbf{z}^\dagger \mathbf{Q} \mathbf{z}) = \mathbf{Q} \mathbf{z}.
+  ```
+  Note the absence of factor 2; this matches the convention used in the adjoint derivation in Chapter 2.
+
+- **Linear form**: For constant $\mathbf{a}$,
+  ```math
+  \frac{\partial}{\partial \mathbf{z}^*} (\mathbf{a}^\dagger \mathbf{z}) = \mathbf{0}, \qquad
+  \frac{\partial}{\partial \mathbf{z}^*} (\mathbf{z}^\dagger \mathbf{a}) = \mathbf{a}.
+  ```
+
+- **Chain rule**: If $g(\mathbf{z}) = f(\mathbf{z}, \mathbf{z}^*)$, then
+  ```math
+  \frac{\partial g}{\partial \theta} = \frac{\partial f}{\partial \mathbf{z}} \frac{\partial \mathbf{z}}{\partial \theta}
+                                   + \frac{\partial f}{\partial \mathbf{z}^*} \frac{\partial \mathbf{z}^*}{\partial \theta},
+  ```
+  where $\theta$ is a real parameter.
+
+### Connection to Adjoint Gradient Derivation
+
+In the EFIE adjoint formulation, the objective $J = \mathbf{I}^\dagger \mathbf{Q} \mathbf{I}$ depends on the complex current coefficients $\mathbf{I}$. The derivative with respect to $\mathbf{I}^*$ appears naturally when applying the Wirtinger approach:
+
+```math
+\frac{\partial J}{\partial \mathbf{I}^*} = \mathbf{Q} \mathbf{I}.
+```
+
+This is precisely the right‑hand side of the adjoint equation $\mathbf{Z}^\dagger \boldsymbol{\lambda} = \partial J / \partial \mathbf{I}^*$.
+
+### Implementation Note
+
+The Julia code uses standard complex arithmetic; Wirtinger derivatives are implemented implicitly through the adjoint formula. When verifying gradients with finite differences, one must perturb the real and imaginary parts separately because the objective is real‑valued.
+
+---
+
+## 5) Linear Algebra Concepts
 
 ### Matrix Condition Number
 
@@ -156,9 +225,9 @@ Matrix `H` is Hermitian if `H = H†` (conjugate transpose). Properties:
 
 ---
 
-## 5) Special Functions in Electromagnetics
+## 5) Green's Function in Electromagnetics
 
-### Free-Space Green's Function
+### 3D Free-Space Green's Function
 
 ```math
 G(\mathbf r, \mathbf r') = \frac{e^{-ik|\mathbf r - \mathbf r'|}}{4\pi |\mathbf r - \mathbf r'|}

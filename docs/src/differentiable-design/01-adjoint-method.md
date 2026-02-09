@@ -4,6 +4,8 @@
 
 This chapter explains the adjoint method for computing gradients of electromagnetic objectives with respect to impedance parameters. The adjoint method is the mathematical foundation that enables high‑dimensional inverse design in `DifferentiableMoM.jl` by providing gradients at a computational cost that is **essentially independent** of the number of design variables. Unlike finite‑difference approximations that require $O(P)$ forward solves, the adjoint method requires only **one additional linear solve** per iteration (two for ratio objectives), regardless of $P$.
 
+**What makes this approach "differentiable"?** The key is that we compute **exact analytical derivatives** of the system matrix with respect to design parameters, not numerical approximations. By combining these analytical derivatives with the solution of an auxiliary (adjoint) linear system, we obtain gradients that are accurate to machine precision—enabling reliable gradient‑based optimization even with thousands of design variables.
+
 ---
 
 ## Learning Goals
@@ -108,7 +110,55 @@ Multiply \eqref{eq:forward_deriv} by $\boldsymbol{\lambda}^\dagger$ from the lef
 \boldsymbol{\lambda}^\dagger \frac{\partial \mathbf{Z}}{\partial \theta_p} \mathbf{I}.
 ```
 
-But $\boldsymbol{\lambda}^\dagger \mathbf{Z} = (\mathbf{Z}^\dagger \boldsymbol{\lambda})^\dagger = (\mathbf{Q}\mathbf{I})^\dagger$. Substituting into \eqref{eq:chain_rule} and simplifying yields the compact gradient expression
+But $\boldsymbol{\lambda}^\dagger \mathbf{Z} = (\mathbf{Z}^\dagger \boldsymbol{\lambda})^\dagger = (\mathbf{Q}\mathbf{I})^\dagger$. Therefore,
+
+```math
+\boldsymbol{\lambda}^\dagger \mathbf{Z} \frac{\partial \mathbf{I}}{\partial \theta_p}
+=
+(\mathbf{Q}\mathbf{I})^\dagger \frac{\partial \mathbf{I}}{\partial \theta_p}.
+```
+
+Now recall the chain rule \eqref{eq:chain_rule}:
+
+```math
+\frac{d J}{d \theta_p}
+=
+\frac{\partial \Phi}{\partial \mathbf{I}^*} \cdot \frac{\partial \mathbf{I}}{\partial \theta_p}
++
+\frac{\partial \Phi}{\partial \mathbf{I}} \cdot \frac{\partial \mathbf{I}^*}{\partial \theta_p}.
+```
+
+With $\partial \Phi/\partial \mathbf{I}^* = \mathbf{Q}\mathbf{I}$ and $\partial \Phi/\partial \mathbf{I} = (\mathbf{Q}\mathbf{I})^*$, we have
+
+```math
+\frac{d J}{d \theta_p}
+=
+(\mathbf{Q}\mathbf{I})^\dagger \frac{\partial \mathbf{I}}{\partial \theta_p}
++
+\bigl[(\mathbf{Q}\mathbf{I})^\dagger \frac{\partial \mathbf{I}}{\partial \theta_p}\bigr]^*,
+```
+
+because for any complex vectors $\mathbf{a},\mathbf{b}$, $\mathbf{a}^* \cdot \mathbf{b} = (\mathbf{a}^\dagger \mathbf{b})^*$.
+
+From the earlier equation $\boldsymbol{\lambda}^\dagger \mathbf{Z} \frac{\partial \mathbf{I}}{\partial \theta_p} = -\boldsymbol{\lambda}^\dagger \frac{\partial \mathbf{Z}}{\partial \theta_p} \mathbf{I}$, and using $\boldsymbol{\lambda}^\dagger \mathbf{Z} = (\mathbf{Q}\mathbf{I})^\dagger$, we have
+
+```math
+(\mathbf{Q}\mathbf{I})^\dagger \frac{\partial \mathbf{I}}{\partial \theta_p}
+=
+-\boldsymbol{\lambda}^\dagger \frac{\partial \mathbf{Z}}{\partial \theta_p} \mathbf{I}.
+```
+
+Substituting this into the chain rule expression gives
+
+```math
+\frac{d J}{d \theta_p}
+=
+-\boldsymbol{\lambda}^\dagger \frac{\partial \mathbf{Z}}{\partial \theta_p} \mathbf{I}
++
+\Bigl[-\boldsymbol{\lambda}^\dagger \frac{\partial \mathbf{Z}}{\partial \theta_p} \mathbf{I}\Bigr]^*.
+```
+
+Using the identity $z + z^* = 2\Re\{z\}$ for any complex number $z$, we obtain the compact gradient expression
 
 ```math
 \boxed{
@@ -122,7 +172,6 @@ But $\boldsymbol{\lambda}^\dagger \mathbf{Z} = (\mathbf{Z}^\dagger \boldsymbol{\
 \mathbf{I}
 \right\}},
 \qquad p=1,\dots,P.
-
 ```
 
 For impedance parameters, $\partial \mathbf{Z}/\partial \theta_p = -\mathbf{M}_p$ (resistive) or $-i\mathbf{M}_p$ (reactive), where $\mathbf{M}_p$ are the precomputed patch mass matrices (Chapter 2). Thus, once $\mathbf{I}$ and $\boldsymbol{\lambda}$ are known, each gradient component reduces to a cheap inner product involving $\mathbf{M}_p$.
@@ -396,4 +445,4 @@ If you can confidently check all items, you have mastered the adjoint method as 
 
 ---
 
-*Next: Chapter 2, “Impedance Sensitivities,” details why impedance parameters yield especially simple derivative blocks $\partial \mathbf{Z}/\partial \theta_p$ and how these blocks are assembled from precomputed patch mass matrices.*
+*Next: Chapter 2, "Impedance Sensitivities," details why impedance parameters yield especially simple derivative blocks $\partial \mathbf{Z}/\partial \theta_p$ and how these blocks are assembled from precomputed patch mass matrices.*
