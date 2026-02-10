@@ -23,7 +23,7 @@ All documented symbols below are exported from the top-level module.
 
 - Types: `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid`, `Vec3`, `CVec3`
 - Helpers: `nvertices`, `ntriangles`
-- Build/import: `make_rect_plate`, `read_obj_mesh`, `write_obj_mesh`
+- Build/import: `make_rect_plate`, `make_parabolic_reflector`, `read_obj_mesh`, `write_obj_mesh`
 - Geometry: `triangle_area`, `triangle_center`, `triangle_normal`,
   `mesh_unique_edges`, `mesh_wireframe_segments`
 - Quality: `mesh_quality_report`, `mesh_quality_ok`, `assert_mesh_quality`
@@ -44,7 +44,20 @@ All documented symbols below are exported from the top-level module.
 
 ### 3) Excitation, Solve, and Far Field
 
-- Excitation: `assemble_v_plane_wave`
+- **Excitation**: See detailed API in `excitation.md`
+  and fundamentals derivation in
+  `fundamentals/06-excitation-theory-and-usage.md`
+  - `AbstractExcitation`, `PlaneWaveExcitation`, `PortExcitation`, `DeltaGapExcitation`,
+    `DipoleExcitation`, `LoopExcitation`, `ImportedExcitation`,
+    `PatternFeedExcitation`, `MultiExcitation`
+  - `make_plane_wave`, `make_delta_gap`, `make_dipole`, `make_loop`,
+  `make_imported_excitation`, `make_pattern_feed`,
+  `make_analytic_dipole_pattern_feed`, `make_multi_excitation`
+  - `plane_wave_field`, `pattern_feed_field`, `assemble_v_plane_wave`,
+  `assemble_excitation`, `assemble_multiple_excitations`
+- Practical pattern-import demos:
+  `examples/ex_radiationpatterns_adapter.jl`,
+  `examples/ex_horn_pattern_import_demo.jl`
 - Linear solves: `solve_forward`, `solve_system`
 - Far-field: `make_sph_grid`, `radiation_vectors`, `compute_farfield`
 - Q/objective helpers: `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`
@@ -81,6 +94,7 @@ All documented symbols below are exported from the top-level module.
 4. `farfield-rcs.md`
 5. `adjoint-optimize.md`
 6. `verification.md`
+7. `excitation.md` (new extended excitation system)
 
 ---
 

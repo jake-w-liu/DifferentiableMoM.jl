@@ -35,7 +35,9 @@ end
 xyz = [0.0 1.0 1.0 0.0;   # x coordinates
        0.0 0.0 1.0 1.0;   # y coordinates  
        0.0 0.0 0.0 0.0]   # z coordinates
-tri = [1 2; 2 3; 3 4; 4 1]'  # two triangles forming a square
+tri = [1 1;               # triangle 1/2 first vertex
+       2 3;               # triangle 1/2 second vertex
+       3 4]               # triangle 1/2 third vertex
 mesh = TriMesh(xyz, tri)
 println("Vertices: ", nvertices(mesh), ", triangles: ", ntriangles(mesh))
 ```
@@ -193,7 +195,7 @@ cv = CVec3(1.0 + 2.0im, 0.0, 0.0)  # complex vector
 | Type | Source File | Primary Users |
 |------|-------------|---------------|
 | `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid` | `src/Types.jl` | All assembly, solve, and post‑processing modules |
-| Vector aliases | `src/Types.jl` | `src/Geometry.jl`, `src/Greens.jl`, `src/FarField.jl` |
+| Vector aliases | `src/Types.jl` | `src/Mesh.jl`, `src/Greens.jl`, `src/FarField.jl`, `src/Excitation.jl` |
 
 ---
 

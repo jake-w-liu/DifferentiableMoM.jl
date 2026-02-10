@@ -28,6 +28,7 @@ makedocs(
             "MoM and RWG Discretization" => "fundamentals/03-mom-rwg-discretization.md",
             "Singular Integration" => "fundamentals/04-singular-integration.md",
             "Conditioning and Preconditioning" => "fundamentals/05-conditioning-preconditioning.md",
+            "Excitation Theory and Usage" => "fundamentals/06-excitation-theory-and-usage.md",
         ],
         "Part II — Package Fundamentals" => [
             "Mesh Pipeline" => "package-basics/01-mesh-pipeline.md",
@@ -66,6 +67,7 @@ makedocs(
             "Types" => "api/types.md",
             "Mesh Utilities" => "api/mesh.md",
             "RWG Utilities" => "api/rwg.md",
+            "Excitation" => "api/excitation.md",
             "Assembly and Solve" => "api/assembly-solve.md",
             "Far-Field and RCS" => "api/farfield-rcs.md",
             "Adjoint and Optimization" => "api/adjoint-optimize.md",

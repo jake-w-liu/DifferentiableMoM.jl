@@ -239,7 +239,7 @@ rep = repair_mesh_for_simulation(mesh_raw;
     strict_nonmanifold=true,
     fix_orientation=true)
 mesh_repaired = rep.mesh
-println("Repaired: removed $(rep.removed_triangles) triangles")
+println("Repaired: removed $(length(rep.removed_invalid) + length(rep.removed_degenerate)) triangles")
 
 # 4. Coarsen to target complexity
 target_rwg = 5000
@@ -273,14 +273,14 @@ function process_geometry(input_path, output_path, target_rwg)
     rep = repair_mesh_for_simulation(mesh)
     
     # Coarsen if needed
-    rwg_est = estimate_rwg_from_mesh(rep.mesh)
+    rwg_est = build_rwg(rep.mesh; precheck=true, allow_boundary=true, require_closed=false).nedges
     if rwg_est > target_rwg
         coarse = coarsen_mesh_to_target_rwg(rep.mesh, target_rwg)
         mesh = coarse.mesh
     end
     
     # Save processed mesh
-    write_obj_mesh(mesh, output_path)
+    write_obj_mesh(output_path, mesh)
     
     # Generate quality report
     report = mesh_quality_report(mesh)
@@ -288,25 +288,22 @@ function process_geometry(input_path, output_path, target_rwg)
 end
 ```
 
-### 3.3 Interactive Quality Inspection
+### 3.3 Quality Inspection Workflow
 
 ```julia
-using DifferentiableMoM.Visualization
+using DifferentiableMoM
 
 mesh = read_obj_mesh("platform.obj")
 report = mesh_quality_report(mesh)
+println(report)
 
-# Visualize problem areas
-if report.non_manifold_edges > 0
-    highlight_nonmanifold_edges(mesh, report)
-end
+# Optional visual check
+plot_mesh_wireframe(mesh; title="Raw mesh")
 
-if report.orientation_conflicts > 0
-    highlight_orientation_conflicts(mesh, report)
-end
-
-# Interactive repair
-mesh_fixed = interactive_mesh_repair(mesh)
+# Repair and re-check
+rep = repair_mesh_for_simulation(mesh)
+println(rep.after)
+plot_mesh_wireframe(rep.mesh; title="Repaired mesh")
 ```
 
 ---
@@ -321,13 +318,13 @@ mesh_fixed = interactive_mesh_repair(mesh)
    - Manually inspect edge connectivity with `mesh_unique_edges`
 
 2. **Excessive memory usage**
-   - Estimate RWG count before solve: `estimate_rwg_from_mesh`
+   - Estimate RWG count before solve: `build_rwg(mesh; precheck=true, allow_boundary=true, require_closed=false).nedges`
    - Coarsen mesh: `coarsen_mesh_to_target_rwg`
    - Consider iterative solver or domain decomposition
 
 3. **Poor solution accuracy after coarsening**
    - Compare key geometric features before/after coarsening
-   - Increase `min_edge_length_ratio` to preserve detail
+   - Increase `target_rwg` (retain more unknowns)
    - Use multi-resolution approach: solve coarse, refine regionally
 
 4. **OBJ import fails or produces degenerate geometry**
@@ -360,16 +357,13 @@ Combine coarsening with refinement based on solution features:
 
 ```julia
 # Initial coarse solve
-mesh_coarse = coarsen_mesh_to_target_rwg(mesh, 2000)
+coarse = coarsen_mesh_to_target_rwg(mesh, 2000)
+mesh_coarse = coarse.mesh
 rwg_coarse = build_rwg(mesh_coarse)
 solution_coarse = solve_efie(mesh_coarse, rwg_coarse)
 
-# Identify regions needing refinement
-sensitivity = compute_solution_sensitivity(solution_coarse)
-refinement_mask = sensitivity .> threshold
-
-# Refine selected triangles
-mesh_refined = refine_mesh_regions(mesh_coarse, refinement_mask)
+# Region-selective refinement is not implemented in the current package.
+# Typical practice: repeat solve with higher target_rwg and compare observables.
 ```
 
 ### 5.2 Multi-Resolution Workflows
@@ -397,7 +391,7 @@ mesh_refined = refine_mesh_regions(mesh_coarse, refinement_mask)
   - `coarsen_mesh_to_target_rwg`, `estimate_dense_matrix_gib`
 
 - **RWG basis generation**: `src/RWG.jl`
-  - `build_rwg`, `estimate_rwg_from_mesh`
+  - `build_rwg`
   - Pre-check integration with mesh quality system
 
 - **Visualization utilities**: `src/Visualization.jl`
@@ -407,12 +401,12 @@ mesh_refined = refine_mesh_regions(mesh_coarse, refinement_mask)
 
 - **Mesh repair demonstration**: `examples/ex_repair_obj_mesh.jl`
 - **Aircraft RCS workflow**: `examples/ex_airplane_rcs.jl`
-- **Coarsening study**: `examples/ex_mesh_coarsening.jl`
+- **Coarsening in pipeline**: `examples/ex_airplane_rcs.jl`
 
 ### 6.3 Supporting Functions
 
-- **Geometry utilities**: `src/Geometry.jl` (triangle operations, normals)
-- **Performance estimation**: `src/Performance.jl` (memory, timing)
+- **Geometry utilities**: `src/Mesh.jl` (`triangle_area`, `triangle_center`, `triangle_normal`)
+- **Performance estimation**: `src/Mesh.jl` (`estimate_dense_matrix_gib`)
 
 ---
 

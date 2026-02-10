@@ -7,6 +7,8 @@ push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
 using LinearAlgebra
 using SparseArrays
 using StaticArrays
+using Statistics
+using Test
 using CSV
 using DataFrames
 
@@ -257,6 +259,38 @@ rwg_coarse_out = build_rwg(coarse_result.mesh; precheck=true, allow_boundary=tru
 @assert rwg_coarse_out.nedges < rwg_coarse_in.nedges
 report_coarse_out = mesh_quality_report(coarse_result.mesh)
 @assert mesh_quality_ok(report_coarse_out; allow_boundary=true, require_closed=false)
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 1e: Parabolic reflector mesh
+# ─────────────────────────────────────────────────
+println("\n── Test 1e: Parabolic reflector mesh ──")
+
+D_ref = 0.30
+f_ref = 0.105
+Nr_ref = 6
+Nphi_ref = 20
+mesh_ref = make_parabolic_reflector(D_ref, f_ref, Nr_ref, Nphi_ref)
+report_ref = mesh_quality_report(mesh_ref)
+@assert mesh_quality_ok(report_ref; allow_boundary=true, require_closed=false)
+@assert nvertices(mesh_ref) == 1 + Nr_ref * Nphi_ref
+@assert ntriangles(mesh_ref) == Nphi_ref + 2 * (Nr_ref - 1) * Nphi_ref
+
+# Paraboloid checks at rim points: z=r²/(4f), and distance-to-focus = z+f.
+focus = Vec3(0.0, 0.0, f_ref)
+rim_start = 2 + (Nr_ref - 1) * Nphi_ref
+for idx in rim_start:4:(rim_start + Nphi_ref - 1)
+    p = Vec3(mesh_ref.xyz[:, idx])
+    rxy = hypot(p[1], p[2])
+    z_expected = rxy^2 / (4 * f_ref)
+    @assert abs(p[3] - z_expected) < 1e-12
+    d_focus = norm(p - focus)
+    @assert abs(d_focus - (p[3] + f_ref)) < 1e-12
+end
+
+rwg_ref = build_rwg(mesh_ref; precheck=true, allow_boundary=true)
+@assert rwg_ref.nedges > 0
 
 println("  PASS ✓")
 
@@ -932,6 +966,614 @@ df_sphere_gate = DataFrame(
     value = [mae_s, rmse_s, maxabs_s, Δbs_s, res_s],
 )
 CSV.write(joinpath(DATADIR, "sphere_mie_gate_metrics.csv"), df_sphere_gate)
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 14: Excitation-model physics sanity checks
+# ─────────────────────────────────────────────────
+println("\n── Test 14: Excitation physics sanity checks ──")
+
+mesh_exc = make_rect_plate(0.02, 0.02, 3, 3)
+rwg_exc = build_rwg(mesh_exc)
+
+freq_exc = 1.0e9
+k_exc = 2π * freq_exc / 299792458.0
+k_vec_exc = Vec3(0.0, 0.0, -k_exc)
+pol_exc = Vec3(1.0, 0.0, 0.0)
+
+v_old_exc = assemble_v_plane_wave(mesh_exc, rwg_exc, k_vec_exc, 1.0, pol_exc; quad_order=3)
+v_new_exc = assemble_excitation(mesh_exc, rwg_exc, make_plane_wave(k_vec_exc, 1.0, pol_exc); quad_order=3)
+rel_rhs_exc = norm(v_new_exc - v_old_exc) / max(norm(v_old_exc), 1e-30)
+println("  Plane-wave path-consistency RHS rel. diff: $rel_rhs_exc")
+@assert rel_rhs_exc < 1e-13
+
+# Explicit quadrature check for plane-wave RHS assembly
+xi_exc, wq_exc = tri_quad_rule(3)
+v_manual_exc = zeros(ComplexF64, rwg_exc.nedges)
+for n in 1:rwg_exc.nedges
+    for t in (rwg_exc.tplus[n], rwg_exc.tminus[n])
+        A = triangle_area(mesh_exc, t)
+        pts = tri_quad_points(mesh_exc, t, xi_exc)
+        for q in eachindex(wq_exc)
+            rq = pts[q]
+            fn = eval_rwg(rwg_exc, n, rq, t)
+            Einc = pol_exc * exp(-1im * dot(k_vec_exc, rq))
+            v_manual_exc[n] += -wq_exc[q] * dot(fn, Einc) * (2 * A)
+        end
+    end
+end
+rel_rhs_manual_exc = norm(v_new_exc - v_manual_exc) / max(norm(v_manual_exc), 1e-30)
+println("  Plane-wave vs explicit quadrature RHS rel. diff: $rel_rhs_manual_exc")
+@assert rel_rhs_manual_exc < 1e-12
+
+gap_a = make_delta_gap(1, 1.0 + 0im, 1e-3)
+gap_b = make_delta_gap(1, 1.0 + 0im, 2e-3)
+v_gap_a = assemble_excitation(mesh_exc, rwg_exc, gap_a)
+v_gap_b = assemble_excitation(mesh_exc, rwg_exc, gap_b)
+ratio_gap = abs(v_gap_a[1]) / max(abs(v_gap_b[1]), 1e-30)
+println("  Delta-gap scaling ratio (g=1mm/g=2mm): $ratio_gap")
+@assert abs(ratio_gap - 2.0) < 1e-12
+@assert norm(v_gap_a[2:end]) < 1e-12
+
+port_exc = PortExcitation([1, 2], 2.0 + 0im, 50.0 + 0im)
+v_port = assemble_excitation(mesh_exc, rwg_exc, port_exc)
+@assert abs(v_port[1] - (2.0 / rwg_exc.len[1])) < 1e-14
+@assert abs(v_port[2] - (2.0 / rwg_exc.len[2])) < 1e-14
+@assert norm(v_port[3:end]) < 1e-14
+
+# Out-of-bounds port edges should be skipped gracefully
+port_oob = PortExcitation([1, rwg_exc.nedges + 10], 1.0 + 0im, 50.0 + 0im)
+# Expected-by-design robustness behavior: out-of-range edges are warned and skipped.
+v_port_oob = @test_logs (:warn, r"Port edge .* is out of bounds .* Skipping") assemble_excitation(mesh_exc, rwg_exc, port_oob)
+@assert abs(v_port_oob[1] - (1.0 / rwg_exc.len[1])) < 1e-14
+@assert norm(v_port_oob[2:end]) < 1e-14
+
+thrown_multi = try
+    bad_multi = make_multi_excitation([gap_a, gap_b], [1 + 0im])
+    assemble_excitation(mesh_exc, rwg_exc, bad_multi)
+    false
+catch
+    true
+end
+@assert thrown_multi
+
+V_exc = assemble_multiple_excitations(mesh_exc, rwg_exc, [gap_a, make_plane_wave(k_vec_exc, 1.0, pol_exc)]; quad_order=3)
+@assert size(V_exc) == (rwg_exc.nedges, 2)
+@assert norm(V_exc[:, 1] - v_gap_a) / max(norm(v_gap_a), 1e-30) < 1e-13
+@assert norm(V_exc[:, 2] - v_new_exc) / max(norm(v_new_exc), 1e-30) < 1e-13
+
+weights_exc = ComplexF64[0.3 - 0.1im, -0.2 + 0.7im]
+multi_exc = make_multi_excitation([gap_a, make_plane_wave(k_vec_exc, 1.0, pol_exc)], weights_exc)
+v_multi_exc = assemble_excitation(mesh_exc, rwg_exc, multi_exc; quad_order=3)
+v_multi_ref = V_exc * weights_exc
+rel_multi_exc = norm(v_multi_exc - v_multi_ref) / max(norm(v_multi_ref), 1e-30)
+println("  Multi-excitation linearity rel. diff: $rel_multi_exc")
+@assert rel_multi_exc < 1e-13
+
+# Imported excitation semantics:
+# kind=:electric_field should match direct electric-field import exactly.
+E_field_test(r) = CVec3(r[1] + 0im, (0.5 * r[2]) + 0im, 0.0 + 0im)
+cur_E = make_imported_excitation(E_field_test; kind=:electric_field, min_quad_order=3)
+imp_E = ImportedExcitation(E_field_test; kind=:electric_field, min_quad_order=3)
+v_cur_E = assemble_excitation(mesh_exc, rwg_exc, cur_E; quad_order=3)
+v_imp_E = assemble_excitation(mesh_exc, rwg_exc, imp_E; quad_order=3)
+rel_cur_imp = norm(v_cur_E - v_imp_E) / max(norm(v_imp_E), 1e-30)
+println("  ImportedExcitation(:electric_field) self-consistency rel. diff: $rel_cur_imp")
+@assert rel_cur_imp < 1e-13
+
+# Source function can return tuple/vector-like 3-component data.
+E_field_tuple(r) = (r[1] + 0im, (0.5 * r[2]) + 0im, 0.0 + 0im)
+cur_E_tuple = make_imported_excitation(E_field_tuple; kind=:electric_field, min_quad_order=3)
+v_cur_E_tuple = assemble_excitation(mesh_exc, rwg_exc, cur_E_tuple; quad_order=3)
+rel_cur_tuple = norm(v_cur_E_tuple - v_imp_E) / max(norm(v_imp_E), 1e-30)
+println("  ImportedExcitation tuple-return rel. diff: $rel_cur_tuple")
+@assert rel_cur_tuple < 1e-13
+
+# surface-current mode uses local equivalent-sheet map E ≈ η Js.
+Js_test(r) = CVec3((2r[1]) + 0im, 0.0 + 0im, 0.0 + 0im)
+eta_test = 120.0 + 30.0im
+cur_Js = make_imported_excitation(Js_test; kind=:surface_current_density, eta_equiv=eta_test, min_quad_order=3)
+imp_etaJs = ImportedExcitation(r -> eta_test * Js_test(r); kind=:electric_field, min_quad_order=3)
+v_cur_Js = assemble_excitation(mesh_exc, rwg_exc, cur_Js; quad_order=3)
+v_imp_Js = assemble_excitation(mesh_exc, rwg_exc, imp_etaJs; quad_order=3)
+rel_cur_js = norm(v_cur_Js - v_imp_Js) / max(norm(v_imp_Js), 1e-30)
+println("  ImportedExcitation(:surface_current_density) map rel. diff: $rel_cur_js")
+@assert rel_cur_js < 1e-13
+
+# Imported field can also be tuple/vector-like.
+imp_tuple = ImportedExcitation(r -> (r[1] + 0im, 0.0 + 0im, 0.0 + 0im); kind=:electric_field, min_quad_order=3)
+v_imp_tuple = assemble_excitation(mesh_exc, rwg_exc, imp_tuple; quad_order=3)
+@assert all(isfinite, real.(v_imp_tuple))
+@assert all(isfinite, imag.(v_imp_tuple))
+
+thrown_imp_bad_dim = try
+    imp_bad_dim = ImportedExcitation(r -> ComplexF64[1 + 0im, 2 + 0im]; kind=:electric_field)
+    assemble_excitation(mesh_exc, rwg_exc, imp_bad_dim; quad_order=3)
+    false
+catch
+    true
+end
+@assert thrown_imp_bad_dim
+
+thrown_imp_nonfinite = try
+    imp_nonfinite = ImportedExcitation(r -> CVec3(NaN + 0im, 0 + 0im, 0 + 0im); kind=:electric_field)
+    assemble_excitation(mesh_exc, rwg_exc, imp_nonfinite; quad_order=3)
+    false
+catch
+    true
+end
+@assert thrown_imp_nonfinite
+
+# Constructor guard
+thrown_cur = try
+    make_imported_excitation(E_field_test; min_quad_order=0)
+    false
+catch
+    true
+end
+@assert thrown_cur
+
+thrown_cur_bad_dim = try
+    cur_bad_dim = make_imported_excitation(r -> ComplexF64[1 + 0im, 2 + 0im];
+                                           kind=:electric_field,
+                                           min_quad_order=3)
+    assemble_excitation(mesh_exc, rwg_exc, cur_bad_dim; quad_order=3)
+    false
+catch
+    true
+end
+@assert thrown_cur_bad_dim
+
+thrown_cur_nonfinite = try
+    cur_nonfinite = make_imported_excitation(r -> CVec3(NaN + 0im, 0 + 0im, 0 + 0im);
+                                             kind=:electric_field,
+                                             min_quad_order=3)
+    assemble_excitation(mesh_exc, rwg_exc, cur_nonfinite; quad_order=3)
+    false
+catch
+    true
+end
+@assert thrown_cur_nonfinite
+
+# Hard-break API check: legacy excitation wrappers are intentionally removed.
+@assert !isdefined(DifferentiableMoM, :CurrentDistributionExcitation)
+@assert !isdefined(DifferentiableMoM, :ImportedFieldExcitation)
+@assert !isdefined(DifferentiableMoM, :make_current_distribution)
+
+m_mag = CVec3(0.0 + 0im, 0.0 + 0im, 1e-4 + 0im) # A·m²
+dip_mag = make_dipole(Vec3(0.0, 0.0, 0.0), m_mag, Vec3(0.0, 0.0, 1.0), :magnetic, freq_exc)
+Rfar = 5.0
+E_mag_num = DifferentiableMoM.dipole_incident_field(Vec3(Rfar, 0.0, 0.0), dip_mag)
+E_mag_ref = -1im * eta0 * k_exc^2 * m_mag[3] * exp(-1im * k_exc * Rfar) / (4π * Rfar)
+rel_mag = abs(E_mag_num[2] - E_mag_ref) / max(abs(E_mag_ref), 1e-30)
+println("  Magnetic-dipole far-field rel. error: $rel_mag")
+@assert rel_mag < 0.03
+
+# Electric dipole: broadside far-field amplitude and axial quasi-static behavior
+p_e = CVec3(0.0 + 0im, 0.0 + 0im, 1e-12 + 0im)
+dip_e = make_dipole(Vec3(0.0, 0.0, 0.0), p_e, Vec3(0.0, 0.0, 1.0), :electric, freq_exc)
+Rfar_e = 8.0
+E_e_num = DifferentiableMoM.dipole_incident_field(Vec3(Rfar_e, 0.0, 0.0), dip_e)
+eps0_exc = 8.854187817e-12
+E_e_ref = p_e[3] * k_exc^2 * exp(-1im * k_exc * Rfar_e) / (4π * eps0_exc * Rfar_e)
+rel_e = abs(E_e_num[3] - E_e_ref) / max(abs(E_e_ref), 1e-30)
+println("  Electric-dipole broadside far-field rel. error: $rel_e")
+@assert rel_e < 0.03
+
+dip_e_low = make_dipole(Vec3(0.0, 0.0, 0.0), p_e, Vec3(0.0, 0.0, 1.0), :electric, 1.0e6)
+R_quasi = 0.5
+E_e_axial = DifferentiableMoM.dipole_incident_field(Vec3(0.0, 0.0, R_quasi), dip_e_low)
+E_e_static = 2 * p_e[3] / (4π * eps0_exc * R_quasi^3)
+rel_e_quasi = abs(real(E_e_axial[3]) - real(E_e_static)) / max(abs(real(E_e_static)), 1e-30)
+println("  Electric-dipole axial quasi-static rel. error: $rel_e_quasi")
+@assert rel_e_quasi < 0.05
+
+# Loop field must match equivalent magnetic dipole field and RHS exactly
+loop_eq = make_loop(Vec3(0.0, 0.0, 0.0), Vec3(0.0, 0.0, 1.0), 0.01, 2.0 + 0im, freq_exc)
+m_eq = (2.0 + 0im) * π * (0.01)^2
+dip_eq = make_dipole(Vec3(0.0, 0.0, 0.0), CVec3(0.0 + 0im, 0.0 + 0im, m_eq), Vec3(0.0, 0.0, 1.0), :magnetic, freq_exc)
+E_loop_eq = DifferentiableMoM.loop_incident_field(Vec3(Rfar, 0.0, 0.0), loop_eq)
+E_dip_eq = DifferentiableMoM.dipole_incident_field(Vec3(Rfar, 0.0, 0.0), dip_eq)
+rel_loop_field = norm(E_loop_eq - E_dip_eq) / max(norm(E_dip_eq), 1e-30)
+println("  Loop vs equivalent magnetic-dipole field rel. diff: $rel_loop_field")
+@assert rel_loop_field < 1e-13
+
+v_loop_eq = assemble_excitation(mesh_exc, rwg_exc, loop_eq; quad_order=3)
+v_dip_eq = assemble_excitation(mesh_exc, rwg_exc, dip_eq; quad_order=3)
+rel_loop_rhs = norm(v_loop_eq - v_dip_eq) / max(norm(v_dip_eq), 1e-30)
+println("  Loop vs equivalent magnetic-dipole RHS rel. diff: $rel_loop_rhs")
+@assert rel_loop_rhs < 1e-13
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 15: Dipole/loop far-field pattern gate
+# ─────────────────────────────────────────────────
+println("\n── Test 15: Dipole/loop far-field pattern gate ──")
+
+freq_pat = 1.0e9
+k_pat = 2π * freq_pat / 299792458.0
+lambda_pat = 2π / k_pat
+Rfar_pat = 50 * lambda_pat
+theta_deg_pat = collect(0.0:1.0:180.0)
+theta_pat = deg2rad.(theta_deg_pat)
+
+dip_pat = make_dipole(
+    Vec3(0.0, 0.0, 0.0),
+    CVec3(0.0 + 0im, 0.0 + 0im, 1e-12 + 0im),   # electric dipole (C·m)
+    Vec3(0.0, 0.0, 1.0),
+    :electric,
+    freq_pat
+)
+loop_pat = make_loop(
+    Vec3(0.0, 0.0, 0.0),
+    Vec3(0.0, 0.0, 1.0),
+    0.01,                                        # 1 cm radius
+    1.0 + 0im,
+    freq_pat
+)
+
+P_dip_num = zeros(Float64, length(theta_pat))
+P_loop_num = zeros(Float64, length(theta_pat))
+P_ana = sin.(theta_pat) .^ 2
+E_dip_theta_cmp = zeros(ComplexF64, length(theta_pat))
+E_loop_phi_cmp = zeros(ComplexF64, length(theta_pat))
+
+for i in eachindex(theta_pat)
+    th = theta_pat[i]
+    rhat = Vec3(sin(th), 0.0, cos(th))          # φ = 0 cut
+    r = Rfar_pat * rhat
+    E_d = DifferentiableMoM.dipole_incident_field(r, dip_pat)
+    E_l = DifferentiableMoM.loop_incident_field(r, loop_pat)
+    e_theta = Vec3(cos(th), 0.0, -sin(th))
+    e_phi = Vec3(0.0, 1.0, 0.0)
+    E_dip_theta_cmp[i] = dot(E_d, e_theta)
+    E_loop_phi_cmp[i] = dot(E_l, e_phi)
+    P_dip_num[i] = norm(E_d)^2
+    P_loop_num[i] = norm(E_l)^2
+end
+
+P_dip_num ./= maximum(P_dip_num)
+P_loop_num ./= maximum(P_loop_num)
+P_ana ./= maximum(P_ana)
+
+err_dip = P_dip_num .- P_ana
+err_loop = P_loop_num .- P_ana
+
+rmse_dip = sqrt(sum(abs2, err_dip) / length(err_dip))
+rmse_loop = sqrt(sum(abs2, err_loop) / length(err_loop))
+maxabs_dip = maximum(abs.(err_dip))
+maxabs_loop = maximum(abs.(err_loop))
+
+null_max_dip = max(P_dip_num[1], P_dip_num[end])
+null_max_loop = max(P_loop_num[1], P_loop_num[end])
+
+# Polarization-resolved check over a coarse (θ,φ) grid.
+phi_pat = deg2rad.(collect(0.0:10.0:350.0))
+theta_pol_pat = deg2rad.(collect(1.0:2.0:179.0))
+crossfrac_dip = Float64[]
+crossfrac_loop = Float64[]
+for th in theta_pol_pat, ph in phi_pat
+    rhat = Vec3(sin(th) * cos(ph), sin(th) * sin(ph), cos(th))
+    r = Rfar_pat * rhat
+    e_theta = Vec3(cos(th) * cos(ph), cos(th) * sin(ph), -sin(th))
+    e_phi = Vec3(-sin(ph), cos(ph), 0.0)
+    E_d = DifferentiableMoM.dipole_incident_field(r, dip_pat)
+    E_l = DifferentiableMoM.loop_incident_field(r, loop_pat)
+    E_d_theta = dot(E_d, e_theta)
+    E_d_phi = dot(E_d, e_phi)
+    E_l_theta = dot(E_l, e_theta)
+    E_l_phi = dot(E_l, e_phi)
+    P_d = abs2(E_d_theta) + abs2(E_d_phi)
+    P_l = abs2(E_l_theta) + abs2(E_l_phi)
+    push!(crossfrac_dip, abs(E_d_phi) / sqrt(P_d))
+    push!(crossfrac_loop, abs(E_l_theta) / sqrt(P_l))
+end
+max_crossfrac_dip = maximum(crossfrac_dip)
+max_crossfrac_loop = maximum(crossfrac_loop)
+
+# Co-pol phase consistency on φ=0 cut: Eϕ(loop)/Eθ(dipole) ≈ ±90° phase.
+wrap_to_pi(x) = atan(sin(x), cos(x))
+phase_err_pm90_deg = Float64[]
+phase_ratio_deg = Float64[]
+amp_floor_phase = 1e-12 * max(maximum(abs.(E_dip_theta_cmp)), maximum(abs.(E_loop_phi_cmp)))
+for i in eachindex(theta_pat)
+    if abs(E_dip_theta_cmp[i]) > amp_floor_phase && abs(E_loop_phi_cmp[i]) > amp_floor_phase
+        Δϕ = angle(E_loop_phi_cmp[i] / E_dip_theta_cmp[i])
+        push!(phase_ratio_deg, rad2deg(Δϕ))
+        err_pm90 = min(abs(wrap_to_pi(Δϕ - π / 2)), abs(wrap_to_pi(Δϕ + π / 2)))
+        push!(phase_err_pm90_deg, rad2deg(err_pm90))
+    end
+end
+phase_mean_deg = mean(phase_ratio_deg)
+phase_std_deg = std(phase_ratio_deg)
+phase_max_err_pm90_deg = maximum(phase_err_pm90_deg)
+
+println("  Dipole pattern RMSE:      $rmse_dip")
+println("  Dipole pattern max |err|: $maxabs_dip")
+println("  Loop pattern RMSE:        $rmse_loop")
+println("  Loop pattern max |err|:   $maxabs_loop")
+println("  Dipole null max:          $null_max_dip")
+println("  Loop null max:            $null_max_loop")
+println("  Dipole max cross-pol frac: $max_crossfrac_dip")
+println("  Loop max cross-pol frac:   $max_crossfrac_loop")
+println("  Phase mean (deg):          $phase_mean_deg")
+println("  Phase std (deg):           $phase_std_deg")
+println("  Phase max err to ±90° (deg): $phase_max_err_pm90_deg")
+
+# CI thresholds (pattern-shape gate)
+@assert rmse_dip < 1e-4 "Dipole pattern gate failed: RMSE=$rmse_dip"
+@assert maxabs_dip < 2e-4 "Dipole pattern gate failed: max |err|=$maxabs_dip"
+@assert rmse_loop < 1e-10 "Loop pattern gate failed: RMSE=$rmse_loop"
+@assert maxabs_loop < 1e-9 "Loop pattern gate failed: max |err|=$maxabs_loop"
+@assert null_max_dip < 1e-3 "Dipole pattern gate failed: null level=$null_max_dip"
+@assert null_max_loop < 1e-10 "Loop pattern gate failed: null level=$null_max_loop"
+@assert max_crossfrac_dip < 1e-10 "Dipole polarization gate failed: max cross-pol frac=$max_crossfrac_dip"
+@assert max_crossfrac_loop < 1e-10 "Loop polarization gate failed: max cross-pol frac=$max_crossfrac_loop"
+@assert phase_max_err_pm90_deg < 1.0 "Dipole/loop phase gate failed: max err to ±90° = $phase_max_err_pm90_deg deg"
+@assert phase_std_deg < 0.1 "Dipole/loop phase gate failed: phase std = $phase_std_deg deg"
+
+df_pattern_gate = DataFrame(
+    metric = [
+        "dipole_rmse",
+        "dipole_maxabs",
+        "loop_rmse",
+        "loop_maxabs",
+        "dipole_null_max",
+        "loop_null_max",
+        "dipole_max_crossfrac",
+        "loop_max_crossfrac",
+        "phase_mean_deg",
+        "phase_std_deg",
+        "phase_max_err_pm90_deg",
+        "Rfar_over_lambda",
+        "freq_GHz",
+    ],
+    value = [
+        rmse_dip,
+        maxabs_dip,
+        rmse_loop,
+        maxabs_loop,
+        null_max_dip,
+        null_max_loop,
+        max_crossfrac_dip,
+        max_crossfrac_loop,
+        phase_mean_deg,
+        phase_std_deg,
+        phase_max_err_pm90_deg,
+        Rfar_pat / lambda_pat,
+        freq_pat / 1e9,
+    ],
+)
+CSV.write(joinpath(DATADIR, "dipole_loop_pattern_gate_metrics.csv"), df_pattern_gate)
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 16: Pattern-feed excitation gate
+# ─────────────────────────────────────────────────
+println("\n── Test 16: Pattern-feed excitation gate ──")
+
+const EPS0_PAT = 8.854187817e-12
+const C0_PAT = 299792458.0
+
+freq_pf = 1.0e9
+k_pf = 2π * freq_pf / C0_PAT
+λ_pf = C0_PAT / freq_pf
+Rfar_pf = 80 * λ_pf
+pz_pf = 1e-12 + 0im
+
+dip_pf = make_dipole(
+    Vec3(0.0, 0.0, 0.0),
+    CVec3(0.0 + 0im, 0.0 + 0im, pz_pf),
+    Vec3(0.0, 0.0, 1.0),
+    :electric,
+    freq_pf,
+)
+
+theta_pat_deg_pf = collect(0.0:2.0:180.0)
+phi_pat_deg_pf = collect(0.0:6.0:354.0)
+pat_plus = make_analytic_dipole_pattern_feed(
+    dip_pf,
+    theta_pat_deg_pf,
+    phi_pat_deg_pf;
+    angles_in_degrees=true,
+)
+
+# Adapter-style constructor using two pattern objects with fields x, y, U
+struct _PatternLike
+    x::Vector{Float64}
+    y::Vector{Float64}
+    U::Matrix{ComplexF64}
+end
+pat_like_θ = _PatternLike(copy(pat_plus.theta), copy(pat_plus.phi), copy(pat_plus.Ftheta))
+pat_like_ϕ = _PatternLike(copy(pat_plus.theta), copy(pat_plus.phi), copy(pat_plus.Fphi))
+pat_from_like = make_pattern_feed(pat_like_θ, pat_like_ϕ, pat_plus.frequency; angles_in_degrees=false)
+
+probe_like_dirs = (Vec3(1.0, 0.5, 2.0), Vec3(-0.8, 0.3, 1.4), Vec3(0.1, -0.9, 1.1))
+rel_like = let worst = 0.0
+    for d in probe_like_dirs
+        r = Rfar_pf * d / norm(d)
+        E_ref = pattern_feed_field(r, pat_plus)
+        E_new = pattern_feed_field(r, pat_from_like)
+        worst = max(worst, norm(E_ref - E_new) / max(norm(E_ref), 1e-30))
+    end
+    worst
+end
+println("  Pattern-object adapter mismatch:    $rel_like")
+@assert rel_like < 1e-13
+
+# Matrix-shape tolerance: transposed input should auto-correct
+# Expected-by-design shape-tolerance behavior: auto-transpose with warnings.
+pat_transposed = @test_logs (
+    :warn,
+    r"Ftheta matrix shape .* appears transposed; auto-transposing to .*",
+) (
+    :warn,
+    r"Fphi matrix shape .* appears transposed; auto-transposing to .*",
+) make_pattern_feed(
+    pat_plus.theta,
+    pat_plus.phi,
+    permutedims(pat_plus.Ftheta),
+    permutedims(pat_plus.Fphi),
+    pat_plus.frequency;
+    angles_in_degrees=false,
+)
+rel_transposed = let worst = 0.0
+    for d in probe_like_dirs
+        r = Rfar_pf * d / norm(d)
+        E_ref = pattern_feed_field(r, pat_plus)
+        E_new = pattern_feed_field(r, pat_transposed)
+        worst = max(worst, norm(E_ref - E_new) / max(norm(E_ref), 1e-30))
+    end
+    worst
+end
+println("  Pattern-transpose auto-fix mismatch: $rel_transposed")
+@assert rel_transposed < 1e-12
+
+# Field-level comparison on a fine φ=0 cut against closed-form dipole far-field.
+theta_eval_deg_pf = collect(0.0:0.5:180.0)
+theta_eval_pf = deg2rad.(theta_eval_deg_pf)
+P_num_pf = zeros(Float64, length(theta_eval_pf))
+P_ref_pf = zeros(Float64, length(theta_eval_pf))
+Etheta_num_pf = zeros(ComplexF64, length(theta_eval_pf))
+Etheta_ref_pf = zeros(ComplexF64, length(theta_eval_pf))
+cross_ratio_pf = zeros(Float64, length(theta_eval_pf))
+
+for i in eachindex(theta_eval_pf)
+    θ = theta_eval_pf[i]
+    ϕ = 0.0
+    rhat = Vec3(sin(θ), 0.0, cos(θ))
+    r = Rfar_pf * rhat
+    eθ = Vec3(cos(θ), 0.0, -sin(θ))
+    eϕ = Vec3(0.0, 1.0, 0.0)
+
+    E_num = pattern_feed_field(r, pat_plus)
+    Eθ_num = dot(E_num, eθ)
+    Eϕ_num = dot(E_num, eϕ)
+
+    Eθ_ref = (k_pf^2 * pz_pf / (4π * EPS0_PAT)) * sin(θ) * exp(-1im * k_pf * Rfar_pf) / Rfar_pf
+    Eϕ_ref = 0.0 + 0im
+
+    Etheta_num_pf[i] = Eθ_num
+    Etheta_ref_pf[i] = Eθ_ref
+    P_num_pf[i] = abs2(Eθ_num) + abs2(Eϕ_num)
+    P_ref_pf[i] = abs2(Eθ_ref) + abs2(Eϕ_ref)
+    cross_ratio_pf[i] = abs(Eϕ_num) / max(sqrt(P_num_pf[i]), 1e-30)
+end
+
+P_num_pf ./= maximum(P_num_pf)
+P_ref_pf ./= maximum(P_ref_pf)
+err_lin_pf = P_num_pf .- P_ref_pf
+rmse_pf = sqrt(mean(abs2, err_lin_pf))
+maxabs_pf = maximum(abs.(err_lin_pf))
+max_cross_pf = maximum(cross_ratio_pf)
+
+phase_err_deg_pf = fill(NaN, length(theta_eval_pf))
+phase_floor_pf = 1e-12 * maximum(abs.(Etheta_ref_pf))
+for i in eachindex(theta_eval_pf)
+    if abs(Etheta_ref_pf[i]) > phase_floor_pf && abs(Etheta_num_pf[i]) > phase_floor_pf
+        phase_err_deg_pf[i] = rad2deg(angle(Etheta_num_pf[i] / Etheta_ref_pf[i]))
+    end
+end
+
+phase_valid_pf = phase_err_deg_pf[.!isnan.(phase_err_deg_pf)]
+phase_mean_pf = mean(phase_valid_pf)
+phase_std_pf = std(phase_valid_pf)
+phase_max_pf = maximum(abs.(phase_valid_pf))
+phase_resid_pf = [rad2deg(atan(sin(deg2rad(x - phase_mean_pf)), cos(deg2rad(x - phase_mean_pf)))) for x in phase_valid_pf]
+phase_resid_std_pf = std(phase_resid_pf)
+phase_resid_max_pf = maximum(abs.(phase_resid_pf))
+
+# Convention conversion check:
+# If imported data comes from exp(-iωt), using conjugated coefficients with
+# convention=:exp_minus_iwt must reproduce the same physical field.
+pat_minus = make_pattern_feed(
+    pat_plus.theta,
+    pat_plus.phi,
+    conj.(pat_plus.Ftheta),
+    conj.(pat_plus.Fphi),
+    pat_plus.frequency;
+    convention=:exp_minus_iwt,
+)
+probe_dirs_pf = (
+    Vec3(1.2, -0.4, 2.1),
+    Vec3(-0.8, 1.5, 1.2),
+    Vec3(0.5, 0.9, -1.7),
+)
+conv_mismatch_pf = let mismatch = 0.0
+    for d in probe_dirs_pf
+        r = Rfar_pf * d / norm(d)
+        E_plus = pattern_feed_field(r, pat_plus)
+        E_minus = pattern_feed_field(r, pat_minus)
+        mismatch = max(mismatch, norm(E_plus - E_minus) / max(norm(E_plus), 1e-30))
+    end
+    mismatch
+end
+
+# RHS consistency against direct imported electric-field path.
+mesh_pf = make_rect_plate(0.04, 0.04, 4, 4)
+rwg_pf = build_rwg(mesh_pf)
+v_pf_pat = assemble_excitation(mesh_pf, rwg_pf, pat_plus; quad_order=3)
+imp_pf = ImportedExcitation(r -> pattern_feed_field(r, pat_plus); kind=:electric_field, min_quad_order=3)
+v_pf_imp = assemble_excitation(mesh_pf, rwg_pf, imp_pf; quad_order=3)
+rhs_rel_pf = norm(v_pf_pat - v_pf_imp) / max(norm(v_pf_pat), 1e-30)
+
+println("  Pattern-feed RMSE (linear):        $rmse_pf")
+println("  Pattern-feed max |err| (linear):   $maxabs_pf")
+println("  Pattern-feed max cross-pol ratio:  $max_cross_pf")
+println("  Pattern-feed phase mean (deg):     $phase_mean_pf")
+println("  Pattern-feed phase std (deg):      $phase_std_pf")
+println("  Pattern-feed phase max |err| (deg): $phase_max_pf")
+println("  Pattern-feed phase residual std (deg): $phase_resid_std_pf")
+println("  Pattern-feed phase residual max |err| (deg): $phase_resid_max_pf")
+println("  Convention conversion mismatch:    $conv_mismatch_pf")
+println("  RHS path mismatch (pattern vs imported): $rhs_rel_pf")
+
+@assert rmse_pf < 2e-4 "Pattern-feed gate failed: RMSE=$rmse_pf"
+@assert maxabs_pf < 5e-4 "Pattern-feed gate failed: max |err|=$maxabs_pf"
+@assert max_cross_pf < 1e-8 "Pattern-feed gate failed: cross-pol ratio=$max_cross_pf"
+@assert phase_resid_std_pf < 0.2 "Pattern-feed gate failed: phase residual std=$phase_resid_std_pf"
+@assert phase_resid_max_pf < 0.5 "Pattern-feed gate failed: phase residual max |err|=$phase_resid_max_pf"
+@assert conv_mismatch_pf < 1e-12 "Pattern-feed gate failed: convention mismatch=$conv_mismatch_pf"
+@assert rhs_rel_pf < 1e-12 "Pattern-feed gate failed: RHS mismatch=$rhs_rel_pf"
+
+df_pattern_feed_gate = DataFrame(
+    metric = [
+        "rmse_lin",
+        "maxabs_lin",
+        "max_crosspol_ratio",
+        "phase_mean_deg",
+        "phase_std_deg",
+        "phase_max_abs_deg",
+        "phase_residual_std_deg",
+        "phase_residual_max_abs_deg",
+        "convention_mismatch",
+        "rhs_rel_mismatch",
+        "Rfar_over_lambda",
+        "freq_GHz",
+        "theta_pattern_step_deg",
+        "phi_pattern_step_deg",
+    ],
+    value = [
+        rmse_pf,
+        maxabs_pf,
+        max_cross_pf,
+        phase_mean_pf,
+        phase_std_pf,
+        phase_max_pf,
+        phase_resid_std_pf,
+        phase_resid_max_pf,
+        conv_mismatch_pf,
+        rhs_rel_pf,
+        Rfar_pf / λ_pf,
+        freq_pf / 1e9,
+        2.0,
+        6.0,
+    ],
+)
+CSV.write(joinpath(DATADIR, "pattern_feed_gate_metrics.csv"), df_pattern_feed_gate)
 
 println("  PASS ✓")
 

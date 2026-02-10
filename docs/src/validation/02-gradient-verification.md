@@ -84,8 +84,11 @@ function J_of_theta(theta_vec)
     return real(dot(I, Q * I))
 end
 
-# 2. Compute adjoint gradient
-g_adj = compute_adjoint_gradient(Z_efie, Mp, Q, v, theta0)
+# 2. Compute adjoint gradient (impedance parameters)
+Z_total = assemble_full_Z(Z_efie, Mp, theta0)
+I = solve_forward(Z_total, v)
+lambda = solve_adjoint(Z_total, Q, I)
+g_adj = gradient_impedance(Mp, I, lambda; reactive=true)
 
 # 3. Verify against references
 results = verify_gradient(J_of_theta, g_adj, theta0;

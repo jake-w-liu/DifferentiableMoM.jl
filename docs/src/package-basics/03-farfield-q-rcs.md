@@ -294,21 +294,17 @@ Finds direction closest to $-\hat{\mathbf{k}}_{\text{inc}}$ and returns RCS valu
 The package supports arbitrary polarization vectors:
 
 ```julia
-# Linear polarization (x, y, or arbitrary direction)
+# Built-in linear-θ polarization
 pol_x = pol_linear_x(grid)
-pol_y = pol_linear_y(grid)
-pol_custom = pol_linear(grid, Vec3(a, b, c))
 
-# Circular polarization (right/left hand)
-pol_rhcp = pol_rhcp(grid; k_hat=Vec3(0,0,1))
-pol_lhcp = pol_lhcp(grid; k_hat=Vec3(0,0,1))
-
-# User-defined polarization function
-function custom_pol(theta, phi)
-    # Return complex polarization vector
-    return [cos(theta), 0, 1im*sin(theta)]
+# User-defined polarization matrix (3 × NΩ), column q = p(r̂_q)
+pol_custom = zeros(ComplexF64, 3, length(grid.w))
+for q in eachindex(grid.w)
+    θ = grid.theta[q]
+    φ = grid.phi[q]
+    theta_hat = Vec3(cos(θ)*cos(φ), cos(θ)*sin(φ), -sin(θ))
+    pol_custom[:, q] = theta_hat
 end
-pol_custom = pol_from_function(grid, custom_pol)
 ```
 
 ### 2.7 Angular Masks
@@ -319,17 +315,11 @@ Select specific angular regions:
 # Cone around broadside
 mask_cone = cap_mask(grid; theta_max=30π/180)
 
-# Annular region
-mask_annulus = annular_mask(grid; theta_min=10π/180, theta_max=60π/180)
-
-# Azimuth sector
-mask_azimuth = azimuth_mask(grid; phi_min=0, phi_max=π/2)
-
 # Custom mask function
-mask_custom = [abs(phi) < π/4 && theta > π/6 for (theta, phi) in zip(grid.theta, grid.phi)]
+mask_custom = [abs(φ) < π/4 && θ > π/6 for (θ, φ) in zip(grid.theta, grid.phi)]
 
 # Combine masks
-mask_combined = mask_cone .& mask_azimuth
+mask_combined = mask_cone .& mask_custom
 ```
 
 ---
@@ -714,10 +704,9 @@ end
 
 - **Far-field grid and radiation vectors**: `src/FarField.jl`
   - `make_sph_grid`, `radiation_vectors`, `compute_farfield`
-  - Polarization utilities: `pol_linear_x`, `pol_rhcp`, etc.
 
 - **Q matrix construction**: `src/QMatrix.jl`
-  - `build_Q`, `compute_objective`, mask utilities
+  - `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`
 
 - **RCS diagnostics**: `src/Diagnostics.jl`
   - `bistatic_rcs`, `backscatter_rcs`, `radiated_power`
@@ -734,9 +723,9 @@ end
 
 ### 7.3 Supporting Utilities
 
-- **Geometry operations**: `src/Geometry.jl` (vector operations)
-- **Visualization**: `src/Visualization.jl` (pattern plotting)
-- **Performance tools**: `src/Performance.jl` (memory estimation)
+- **Geometry operations**: `src/Mesh.jl` (triangle geometry helpers)
+- **Visualization**: `src/Visualization.jl` (mesh plotting utilities)
+- **Performance tools**: `src/Mesh.jl` (`estimate_dense_matrix_gib`)
 
 ---
 
