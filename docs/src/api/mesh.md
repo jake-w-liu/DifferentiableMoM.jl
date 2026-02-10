@@ -198,20 +198,27 @@ Run mesh‑quality checks and throw a detailed error if the mesh is unsuitable.
 
 ## Repair and Coarsening
 
-### `repair_mesh_for_simulation(mesh; allow_boundary=true, require_closed=false, area_tol_rel=1e-12, drop_invalid=true, drop_degenerate=true, fix_orientation=true, strict_nonmanifold=true)`
+### `repair_mesh_for_simulation(mesh; allow_boundary=true, require_closed=false, area_tol_rel=1e-12, drop_invalid=true, drop_degenerate=true, fix_orientation=true, strict_nonmanifold=true, auto_drop_nonmanifold=true)`
 
 Repair a triangle mesh so it can pass solver prechecks.
 
 **Pipeline:**
 1. Optionally remove invalid/degenerate triangles (`drop_invalid`, `drop_degenerate`)
-2. Fix orientation conflicts across interior edges (`fix_orientation`)
-3. Enforce manifold constraints (optional strict mode, `strict_nonmanifold`)
-4. Re‑check mesh suitability
+2. Optionally drop triangles causing non‑manifold edges (`auto_drop_nonmanifold`)
+3. Fix orientation conflicts across interior edges (`fix_orientation`)
+4. Enforce manifold constraints (`strict_nonmanifold`)
+5. Re‑check mesh suitability
+
+**Behavior notes:**
+- Default behavior is robust for messy CAD OBJ input (`auto_drop_nonmanifold=true`).
+- For strict fail‑fast validation, set `auto_drop_nonmanifold=false` and keep
+  `strict_nonmanifold=true`.
 
 **Returns:** named tuple containing:
 - `mesh::TriMesh`: repaired mesh
 - `before`, `cleaned`, `after`: quality reports before cleaning, after cleaning, and after orientation fix
 - `removed_invalid`, `removed_degenerate`: indices of removed triangles
+- `removed_nonmanifold::Int`: count of triangles dropped during non-manifold cleanup
 - `flipped_triangles`: indices of triangles whose orientation was flipped
 - `area_tol_abs`: absolute area tolerance used
 
@@ -309,7 +316,9 @@ mesh_sim = coarse.mesh
 ## Code Mapping
 
 - Full implementation: `src/Mesh.jl`
-- Mesh tutorials: `examples/ex_repair_obj_mesh.jl`, `examples/ex_airplane_rcs.jl`
+- Unified mesh/RCS workflow: `examples/ex_obj_rcs_pipeline.jl`
+- Compatibility wrappers: `examples/ex_repair_obj_mesh.jl`, `examples/ex_airplane_rcs.jl`
+- MAT-to-OBJ helper script (SciPy): `examples/convert_aircraft_mat_to_obj.py`
 
 ---
 

@@ -730,11 +730,16 @@ end
     repair_mesh_for_simulation(mesh;
         allow_boundary=true, require_closed=false, area_tol_rel=1e-12,
         drop_invalid=true, drop_degenerate=true,
-        fix_orientation=true, strict_nonmanifold=true)
+        fix_orientation=true, strict_nonmanifold=true,
+        auto_drop_nonmanifold=true)
 
 Repair a triangle mesh so it can pass solver prechecks:
 - optionally remove invalid/degenerate triangles,
+- optionally drop triangles causing non-manifold edges (enabled by default),
 - orient triangles consistently across manifold interior edges.
+
+Set `auto_drop_nonmanifold=false` when you want strict fail-fast behavior on
+non-manifold edges.
 
 Returns a named tuple containing the repaired mesh and before/after reports.
 """
@@ -745,7 +750,8 @@ function repair_mesh_for_simulation(mesh::TriMesh;
                                     drop_invalid::Bool=true,
                                     drop_degenerate::Bool=true,
                                     fix_orientation::Bool=true,
-                                    strict_nonmanifold::Bool=true)
+                                    strict_nonmanifold::Bool=true,
+                                    auto_drop_nonmanifold::Bool=true)
     report_before = mesh_quality_report(mesh; area_tol_rel=area_tol_rel, check_orientation=true)
 
     cleaned_mesh, removed_invalid, removed_degenerate, area_tol_abs = _clean_mesh_triangles(
@@ -755,6 +761,14 @@ function repair_mesh_for_simulation(mesh::TriMesh;
         area_tol_rel=area_tol_rel,
     )
     report_cleaned = mesh_quality_report(cleaned_mesh; area_tol_rel=area_tol_rel, check_orientation=true)
+    removed_nonmanifold = 0
+
+    if auto_drop_nonmanifold && report_cleaned.n_nonmanifold_edges > 0
+        mesh_nm = drop_nonmanifold_triangles(cleaned_mesh)
+        removed_nonmanifold = ntriangles(cleaned_mesh) - ntriangles(mesh_nm)
+        cleaned_mesh = mesh_nm
+        report_cleaned = mesh_quality_report(cleaned_mesh; area_tol_rel=area_tol_rel, check_orientation=true)
+    end
 
     if strict_nonmanifold && report_cleaned.n_nonmanifold_edges > 0
         error("Mesh repair cannot continue with non-manifold edges ($(report_cleaned.n_nonmanifold_edges)).")
@@ -782,6 +796,7 @@ function repair_mesh_for_simulation(mesh::TriMesh;
         after = report_after,
         removed_invalid = removed_invalid,
         removed_degenerate = removed_degenerate,
+        removed_nonmanifold = removed_nonmanifold,
         flipped_triangles = flipped_triangles,
         area_tol_abs = area_tol_abs,
     )

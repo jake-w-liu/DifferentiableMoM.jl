@@ -44,9 +44,20 @@ julia --project=. examples/ex_horn_pattern_import_demo.jl examples/antenna_patte
 For OBJ-based workflows:
 
 ```bash
-julia --project=. examples/ex_repair_obj_mesh.jl input.obj [output.obj]
+julia --project=. examples/ex_obj_rcs_pipeline.jl
+julia --project=. examples/ex_obj_rcs_pipeline.jl full input.obj [freq_GHz] [scale_to_m] [target_rwg] [tag]
+julia --project=. examples/ex_obj_rcs_pipeline.jl full input.mat [freq_GHz] [scale_to_m] [target_rwg] [tag]
+julia --project=. examples/ex_obj_rcs_pipeline.jl repair input.obj [output.obj] [scale_to_m]
+julia --project=. examples/ex_obj_rcs_pipeline.jl repair input.mat [output.obj] [scale_to_m]
+julia --project=. examples/ex_obj_rcs_pipeline.jl plot [data_dir] [out_dir] [tag]
 julia --project=. examples/ex_visualize_simulation_mesh.jl [repaired.obj] [coarse.obj] [output_prefix]
 ```
+
+`examples/demo_aircraft.obj` is a built-in moderate-detail aircraft mesh
+(converted from a compact MAT source) so the workflow runs out-of-the-box
+without large external assets. You can always pass your own OBJ, or pass a MAT
+mesh (`coord` + `facet`) and let the pipeline convert it automatically.
+
 
 For an external sphere mesh:
 
