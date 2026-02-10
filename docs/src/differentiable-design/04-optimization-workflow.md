@@ -73,10 +73,12 @@ Both support box constraints (`lb`, `ub`), reactive/resistive parameterization, 
 
 ### 2.3 Objective Matrices
 
-- **Quadratic objective**: Define $\mathbf{Q}$ using `assemble_Q_cone`, `assemble_Q_total`, or custom constructions.
-- **Ratio objective**: Define both $\mathbf{Q}_t$ (target region) and $\mathbf{Q}_{\mathrm{tot}}$ (total region). Common choices:
-  - `assemble_Q_cone` for a conical target region.
-  - `assemble_Q_total` for the whole sphere or a hemisphere.
+- Build radiation vectors once: `G = radiation_vectors(mesh, rwg, grid, k)`.
+- Use `build_Q(G, grid, pol; mask=...)` to construct:
+  - $\mathbf{Q}_t$: target-region mask (e.g., cone around steering angle).
+  - $\mathbf{Q}_{\mathrm{tot}}$: total-region mask (or `mask=nothing` for full sphere).
+- Use `cap_mask` directly for broadside cones; for off-broadside targets,
+  provide a custom Boolean mask over `grid.theta`/`grid.phi`.
 
 ### 2.4 Initial Parameter Vector
 
@@ -211,18 +213,20 @@ Z_efie = assemble_Z_efie(mesh, rwg, k)
 # 6. Objective matrices
 # ------------------------------
 θ_steer = 30.0   # degrees
-cone_width = 10.0
-Q_target = assemble_Q_cone(mesh, rwg, k,
-                           θ_center=θ_steer, ϕ_center=0.0,
-                           Δθ=cone_width, Δϕ=360.0,
-                           polarization=:θ)
-Q_total = assemble_Q_total(mesh, rwg, k, polarization=:θ)
+grid = make_sph_grid(64, 128)
+G = radiation_vectors(mesh, rwg, grid, k)
+pol = pol_linear_x(grid)
+θ0 = deg2rad(θ_steer)
+Δθ = deg2rad(10.0)
+mask_target = abs.(grid.theta .- θ0) .<= Δθ
+Q_target = build_Q(G, grid, pol; mask=mask_target)
+Q_total = build_Q(G, grid, pol)   # full-sphere reference
 
 # ------------------------------
 # 7. Initial parameters (phase‑ramp for steering)
 # ------------------------------
 beta = 10.0   # scaling factor
-theta0 = phase_ramp_initialization(mesh, partition, β, θ_steer)  # hypothetical
+theta0 = phase_ramp_initialization(mesh, partition, β, θ_steer)  # user-defined helper
 
 # ------------------------------
 # 8. Bounds (realistic reactance limits)

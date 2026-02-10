@@ -1,6 +1,6 @@
 # Mesh.jl — Simple mesh generation and geometry utilities
 
-export make_rect_plate, read_obj_mesh, triangle_area, triangle_center, triangle_normal
+export make_rect_plate, make_parabolic_reflector, read_obj_mesh, triangle_area, triangle_center, triangle_normal
 export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
 export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles
@@ -55,6 +55,75 @@ function make_rect_plate(Lx::Real, Ly::Real, Nx::Int, Ny::Int)
             tri[1, tidx] = v1
             tri[2, tidx] = v3
             tri[3, tidx] = v4
+        end
+    end
+
+    return TriMesh(xyz, tri)
+end
+
+"""
+    make_parabolic_reflector(D, f, Nr, Nphi; center=Vec3(0,0,0))
+
+Generate a triangulated open parabolic reflector with aperture diameter `D`
+and focal length `f`, aligned with +z:
+
+`z = (x² + y²)/(4f)`, for `x² + y² ≤ (D/2)²`.
+
+The mesh uses `Nr` radial rings and `Nphi` azimuth samples per ring.
+Returns a `TriMesh` suitable for open-surface EFIE runs (`allow_boundary=true`).
+"""
+function make_parabolic_reflector(D::Real, f::Real, Nr::Int, Nphi::Int;
+                                  center::Vec3=Vec3(0.0, 0.0, 0.0))
+    D > 0 || error("Reflector diameter D must be positive.")
+    f > 0 || error("Reflector focal length f must be positive.")
+    Nr >= 2 || error("Nr must be at least 2.")
+    Nphi >= 3 || error("Nphi must be at least 3.")
+
+    R = D / 2
+    Nv = 1 + Nr * Nphi
+    Nt = Nphi + 2 * (Nr - 1) * Nphi
+
+    xyz = zeros(3, Nv)
+    tri = zeros(Int, 3, Nt)
+
+    # Vertex 1: apex
+    xyz[:, 1] = center
+
+    @inline vid(ir, j) = 2 + (ir - 1) * Nphi + (j - 1)  # ir=1:Nr, j=1:Nphi
+    @inline jnext(j) = (j == Nphi) ? 1 : (j + 1)
+
+    # Ring vertices
+    for ir in 1:Nr
+        r = R * ir / Nr
+        z = r^2 / (4f)
+        for j in 1:Nphi
+            ϕ = 2π * (j - 1) / Nphi
+            idx = vid(ir, j)
+            xyz[1, idx] = center[1] + r * cos(ϕ)
+            xyz[2, idx] = center[2] + r * sin(ϕ)
+            xyz[3, idx] = center[3] + z
+        end
+    end
+
+    # Center fan
+    tid = 0
+    for j in 1:Nphi
+        tid += 1
+        tri[:, tid] = [1, vid(1, j), vid(1, jnext(j))]
+    end
+
+    # Ring-to-ring quads split into 2 triangles
+    for ir in 1:(Nr - 1)
+        for j in 1:Nphi
+            v00 = vid(ir, j)
+            v01 = vid(ir, jnext(j))
+            v10 = vid(ir + 1, j)
+            v11 = vid(ir + 1, jnext(j))
+
+            tid += 1
+            tri[:, tid] = [v00, v10, v11]
+            tid += 1
+            tri[:, tid] = [v00, v11, v01]
         end
     end
 

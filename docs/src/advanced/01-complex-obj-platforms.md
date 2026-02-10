@@ -218,7 +218,7 @@ Plot `backscatter_db` vs. `targets` to identify the “knee” where further ref
 
 - **`src/Mesh.jl`** – contains `read_obj_mesh`, `write_obj_mesh`, `repair_mesh_for_simulation`, `coarsen_mesh_to_target_rwg`, `mesh_quality_report`, and `mesh_wireframe_segments`. This module handles all geometry import, repair, coarsening, and quality diagnostics.
 - **`src/Visualization.jl`** – provides `plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview` for visual validation.
-- **`src/ForwardPipeline.jl`** (indirectly) – assembles EFIE matrix and right‑hand side for the coarsened mesh.
+- **`src/EFIE.jl`**, **`src/Excitation.jl`**, **`src/Solve.jl`** – assemble and solve the forward system on the coarsened mesh.
 
 ### 5.2 Example Scripts
 
@@ -227,8 +227,7 @@ Plot `backscatter_db` vs. `targets` to identify the “knee” where further ref
 
 ### 5.3 Supporting Utilities
 
-- **`src/Geometry.jl`** – vector operations, triangle areas, centroids, normals.
-- **`src/Performance.jl`** – `estimate_dense_matrix_gib` for memory planning.
+- **`src/Mesh.jl`** – triangle operations (`triangle_area`, `triangle_center`, `triangle_normal`) and `estimate_dense_matrix_gib`.
 
 ---
 

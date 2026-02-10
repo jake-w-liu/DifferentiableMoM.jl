@@ -651,7 +651,8 @@ The function `analytical_integral_1overR` should be tested against known analyti
 - **Point on an edge**: The integral should be finite and match the result from splitting the triangle into two sub‑triangles.
 - **Point at a vertex**: The integral should be finite and symmetric with respect to the adjacent edges.
 
-The test suite in `test/singular_integrals.jl` contains such unit tests; running `] test DifferentiableMoM` executes them.
+These checks are covered in the package test suite (`test/runtests.jl`);
+running `julia --project=. test/runtests.jl` executes them.
 
 ### 7.6 Near‑Singular Integration Test
 
@@ -679,16 +680,16 @@ This section provides a roadmap to the source files that implement singular inte
 
 | File | Purpose | Key functions |
 |------|---------|---------------|
-| `src/Greens.jl` | Green’s function evaluation and kernel splitting. | `greens_smooth`, `green`, `grad_green` |
+| `src/Greens.jl` | Green’s function evaluation and kernel splitting. | `greens`, `greens_smooth`, `grad_greens` |
 | `src/SingularIntegrals.jl` | Analytical integration of singular kernels. | `analytical_integral_1overR`, `self_cell_contribution` |
-| `src/EFIE.jl` | EFIE matrix assembly with self/non‑self branching. | `assemble_Z_efie`, `_assemble_block` |
+| `src/EFIE.jl` | EFIE matrix assembly with self/non‑self branching. | `assemble_Z_efie` (self-cell path calls `self_cell_contribution`) |
 | `src/Quadrature.jl` | Gaussian quadrature rules on triangles. | `tri_quad_rule`, `tri_quad_points` |
-| `src/RWG.jl` | RWG basis function evaluation. | `rwg_value`, `div_rwg`, `basis_triangles` |
-| `test/singular_integrals.jl` | Unit tests for singular integration. | Tests for `analytical_integral_1overR` |
+| `src/RWG.jl` | RWG basis function evaluation. | `eval_rwg`, `div_rwg`, `basis_triangles` |
+| `test/runtests.jl` | Unit/integration tests for singular integration and convergence gates. | Includes checks for `analytical_integral_1overR` usage via EFIE assembly |
 
 ### 8.2 Key Functions and Their Roles
 
-#### `greens_smooth(k, R)` (in `src/Greens.jl`)
+#### `greens_smooth(r, rp, k)` (in `src/Greens.jl`)
 Computes the smooth part of the Green’s function:
 ```math
 G_{\mathrm{smooth}}(k,R) = \frac{e^{-ikR} - 1}{4\pi R}.

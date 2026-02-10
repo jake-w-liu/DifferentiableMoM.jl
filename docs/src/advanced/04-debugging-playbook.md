@@ -111,8 +111,10 @@ far‑field projection.
 
 **Tools**:
 ```julia
-grad_adj = compute_adjoint_gradient(...)
-grad_fd = finite_difference_gradient(f, θ0; h=1e-6)
+I = solve_forward(Z, v)
+lambda = solve_adjoint(Z, Q, I)
+grad_adj = gradient_impedance(Mp, I, lambda; reactive=true)
+grad_fd = [fd_grad(p -> objective_with_theta(p), θ0, p; h=1e-6) for p in eachindex(θ0)]
 max_rel_err = maximum(abs.(grad_adj - grad_fd) ./ max.(abs.(grad_adj), 1e-12))
 ```
 
@@ -332,8 +334,8 @@ gradient > 1e‑6.
 4. **Verify gradient on a small problem** (`Nt ≤ 10`) where finite differences
    are cheap and reliable.
 
-**Source functions**: `src/Adjoint.jl` (`compute_adjoint_gradient`),
-`src/Solve.jl` (`transform_patch_matrices`), `src/Verification.jl` (if present).
+**Source functions**: `src/Adjoint.jl` (`solve_adjoint`, `gradient_impedance`),
+`src/Solve.jl` (`transform_patch_matrices`), `src/Verification.jl` (`fd_grad`).
 
 ---
 
@@ -353,8 +355,10 @@ c0 = 299792458.0
 freq = 3e9   # double‑check units: Hz, not GHz!
 λ = c0 / freq
 
-# Characteristic length: bounding‑box diagonal
-L = _bbox_diagonal(mesh)
+# Characteristic length: bounding-box diagonal
+mins = [minimum(@view mesh.xyz[i, :]) for i in 1:3]
+maxs = [maximum(@view mesh.xyz[i, :]) for i in 1:3]
+L = sqrt(sum((maxs .- mins).^2))
 println("Electrical size L/λ = $(L/λ)")
 ```
 
@@ -655,13 +659,14 @@ println(report)
 
 ### Gradient Verification
 
-On a small problem, compare adjoint and finite‑difference gradients:
+On a small problem, run the package test suite (which includes gradient gates):
 
 ```bash
-julia --project=. test/verify_gradients.jl   # if such a script exists
+julia --project=. test/runtests.jl
 ```
 
-Or write a minimal verification script (see Exercise 8).
+Or write a minimal verification script using `solve_adjoint`, `gradient_impedance`,
+and `fd_grad` (see Exercise 8).
 
 ### Profiling and Benchmarking
 
@@ -680,12 +685,12 @@ Or use `@time` inside your script to time assembly, solve, and far‑field steps
 | Component | Source File | Key Functions |
 |-----------|-------------|---------------|
 | Mesh diagnostics, repair, coarsening | `src/Mesh.jl` | `mesh_quality_report`, `repair_mesh_for_simulation`, `coarsen_mesh_to_target_rwg`, `estimate_dense_matrix_gib` |
-| EFIE assembly | `src/EFIE.jl` | `assemble_Z_efie`, `assemble_v_plane_wave` |
-| Solving and conditioning | `src/Solve.jl` | `solve_forward`, `make_left_preconditioner`, `prepare_conditioned_system`, `condition_diagnostics` |
+| EFIE assembly | `src/EFIE.jl`, `src/Excitation.jl` | `assemble_Z_efie`, `assemble_v_plane_wave` |
+| Solving and conditioning | `src/Solve.jl` | `solve_forward`, `make_left_preconditioner`, `prepare_conditioned_system` |
 | Far‑field and Q matrices | `src/FarField.jl`, `src/QMatrix.jl` | `radiation_vectors`, `compute_farfield`, `build_Q` |
-| Diagnostics | `src/Diagnostics.jl` | `energy_ratio`, `check_energy_consistency`, `check_objective_consistency` |
-| Adjoint gradient | `src/Adjoint.jl` (or `src/Optimize.jl`) | `compute_adjoint_gradient` |
-| Gradient verification | `src/Verification.jl` (if present) | `finite_difference_gradient`, `compare_gradients` |
+| Diagnostics | `src/Diagnostics.jl` | `energy_ratio`, `condition_diagnostics`, `bistatic_rcs`, `backscatter_rcs` |
+| Adjoint gradient | `src/Adjoint.jl` | `solve_adjoint`, `gradient_impedance`, `compute_objective` |
+| Gradient verification | `src/Verification.jl` | `fd_grad`, `complex_step_grad`, `verify_gradient` |
 | End‑to‑end tests | `test/runtests.jl` | Test suite that exercises all components |
 
 > Note: The exact location of adjoint and verification functions may vary; check
@@ -759,5 +764,4 @@ Before moving to the next chapter, verify you can:
 - **MoM Validation Techniques**: *Accuracy Considerations for Integral Equation MoM* (Peterson et al., 1998) – discusses convergence tests, residual norms, and cross‑validation.
 
 ---
-
 

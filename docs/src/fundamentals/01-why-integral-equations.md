@@ -24,7 +24,7 @@ After this chapter, you should be able to:
 
 ### 1.1 Time-Harmonic Maxwell's Equations
 
-We begin with time-harmonic Maxwell's equations in free space (using the $e^{+i\omega t}$ convention):
+We begin with time-harmonic Maxwell's equations in free space (using the \(e^{+i\omega t}\) convention):
 
 ```math
 \begin{aligned}
@@ -44,33 +44,33 @@ For scattering problems, we decompose the total field into incident and scattere
 \end{aligned}
 ```
 
-The incident field $(\mathbf{E}^{\text{inc}}, \mathbf{H}^{\text{inc}})$ is known (e.g., a plane wave), while the scattered field $(\mathbf{E}^{\text{sca}}, \mathbf{H}^{\text{sca}})$ arises from interaction with scattering objects.
+The incident field \((\mathbf{E}^{\text{inc}}, \mathbf{H}^{\text{inc}})\) is known (e.g., a plane wave), while the scattered field \((\mathbf{E}^{\text{sca}}, \mathbf{H}^{\text{sca}})\) arises from interaction with scattering objects.
 
 ### 1.2 Boundary Conditions for Perfect Electric Conductors (PEC)
 
-For a perfect electric conductor (PEC), the tangential component of the total electric field must vanish on the surface $\Gamma$:
+For a perfect electric conductor (PEC), the tangential component of the total electric field must vanish on the surface \(\Gamma\):
 
 ```math
 \hat{\mathbf{n}} \times \mathbf{E}^{\text{tot}}(\mathbf{r}) = \mathbf{0}, \quad \mathbf{r} \in \Gamma
 ```
 
-where $\hat{\mathbf{n}}$ is the outward unit normal to the surface. This implies:
+where \(\hat{\mathbf{n}}\) is the outward unit normal to the surface. This implies:
 
 ```math
 \hat{\mathbf{n}} \times \mathbf{E}^{\text{sca}}(\mathbf{r}) = -\hat{\mathbf{n}} \times \mathbf{E}^{\text{inc}}(\mathbf{r}), \quad \mathbf{r} \in \Gamma
 ```
 
-The scattered field is radiated by equivalent surface currents $\mathbf{J}_s$ and $\mathbf{M}_s$ on $\Gamma$, but for PEC scattering, we only need the electric surface current $\mathbf{J}_s$ (since $\mathbf{M}_s = \mathbf{0}$ on PEC).
+The scattered field is radiated by equivalent surface currents \(\mathbf{J}_s\) and \(\mathbf{M}_s\) on \(\Gamma\), but for PEC scattering, we only need the electric surface current \(\mathbf{J}_s\) (since \(\mathbf{M}_s = \mathbf{0}\) on PEC).
 
 ### 1.3 Impedance Boundary Condition (Generalization)
 
-For surfaces with finite impedance $Z_s$, the boundary condition is:
+For surfaces with finite impedance \(Z_s\), the boundary condition is:
 
 ```math
 \hat{\mathbf{n}} \times \mathbf{E}^{\text{tot}}(\mathbf{r}) = Z_s \mathbf{J}_s(\mathbf{r}), \quad \mathbf{r} \in \Gamma
 ```
 
-where $\mathbf{J}_s$ is the surface current density. This reduces to the PEC case when $Z_s = 0$.
+where \(\mathbf{J}_s\) is the surface current density. This reduces to the PEC case when \(Z_s = 0\).
 
 ---
 
@@ -78,13 +78,13 @@ where $\mathbf{J}_s$ is the surface current density. This reduces to the PEC cas
 
 ### 2.1 Free-Space Green's Function
 
-The free-space scalar Green's function $G(\mathbf{r},\mathbf{r}')$ satisfies the inhomogeneous Helmholtz equation:
+The free-space scalar Green's function \(G(\mathbf{r},\mathbf{r}')\) satisfies the inhomogeneous Helmholtz equation:
 
 ```math
 (\nabla^2 + k^2) G(\mathbf{r},\mathbf{r}') = -\delta(\mathbf{r} - \mathbf{r}')
 ```
 
-with outgoing wave boundary condition, where $k = \omega\sqrt{\mu_0\epsilon_0}$ is the wavenumber. The solution is:
+with outgoing wave boundary condition, where \(k = \omega\sqrt{\mu_0\epsilon_0}\) is the wavenumber. The solution is:
 
 ```math
 G(\mathbf{r},\mathbf{r}') = \frac{e^{-ik|\mathbf{r} - \mathbf{r}'|}}{4\pi|\mathbf{r} - \mathbf{r}'|}
@@ -94,7 +94,7 @@ This Green's function automatically satisfies the radiation condition at infinit
 
 ### 2.2 Vector Potential Formulation
 
-The scattered electric field due to a surface current $\mathbf{J}_s$ can be expressed using the magnetic vector potential $\mathbf{A}$:
+The scattered electric field due to a surface current \(\mathbf{J}_s\) can be expressed using the magnetic vector potential \(\mathbf{A}\):
 
 ```math
 \begin{aligned}
@@ -104,7 +104,7 @@ The scattered electric field due to a surface current $\mathbf{J}_s$ can be expr
 \end{aligned}
 ```
 
-where $\phi$ is the electric scalar potential. Combining these gives the electric field integral operator:
+where \(\phi\) is the electric scalar potential. Combining these gives the electric field integral operator:
 
 ```math
 \mathbf{E}^{\text{sca}}(\mathbf{r}) = -i\omega\mu_0 \int_\Gamma \left[\mathbf{I} + \frac{1}{k^2}\nabla\nabla\right] G(\mathbf{r},\mathbf{r}') \mathbf{J}_s(\mathbf{r}') \, dS'
@@ -118,7 +118,7 @@ This is the core operator that maps surface currents to scattered fields.
 
 ### 3.1 Tangential Projection
 
-Applying the tangential projection operator $\hat{\mathbf{n}} \times (\hat{\mathbf{n}} \times \cdot)$ to the scattered field expression and enforcing the PEC boundary condition gives:
+Applying the tangential projection operator \(\hat{\mathbf{n}} \times (\hat{\mathbf{n}} \times \cdot)\) to the scattered field expression and enforcing the PEC boundary condition gives:
 
 ```math
 \hat{\mathbf{n}} \times \hat{\mathbf{n}} \times \mathbf{E}^{\text{sca}}(\mathbf{r}) = -\hat{\mathbf{n}} \times \hat{\mathbf{n}} \times \mathbf{E}^{\text{inc}}(\mathbf{r}), \quad \mathbf{r} \in \Gamma
@@ -132,7 +132,7 @@ Substituting the integral operator leads to the Electric Field Integral Equation
 
 ### 3.2 Mixed-Potential Form
 
-A more computationally friendly form is obtained by integrating the $\nabla\nabla$ operator by parts:
+A more computationally friendly form is obtained by integrating the \(\nabla\nabla\) operator by parts:
 
 ```math
 \begin{aligned}
@@ -151,7 +151,7 @@ The EFIE has the form:
 \mathcal{T}[\mathbf{J}_s](\mathbf{r}) = -\mathbf{E}^{\text{inc}}_t(\mathbf{r}), \quad \mathbf{r} \in \Gamma
 ```
 
-where $\mathcal{T}$ is a linear integral operator mapping the unknown surface current $\mathbf{J}_s$ to the tangential scattered field. This is a **Fredholm integral equation of the first kind**—the unknown function appears only inside the integral.
+where \(\mathcal{T}\) is a linear integral operator mapping the unknown surface current \(\mathbf{J}_s\) to the tangential scattered field. This is a **Fredholm integral equation of the first kind**—the unknown function appears only inside the integral.
 
 ---
 
@@ -159,33 +159,33 @@ where $\mathcal{T}$ is a linear integral operator mapping the unknown surface cu
 
 ### 4.1 Scaling Laws for Unknown Counts
 
-Consider scattering from an object with characteristic size $L$ discretized with resolution $h$ (typical element size). The number of unknowns scales as:
+Consider scattering from an object with characteristic size \(L\) discretized with resolution \(h\) (typical element size). The number of unknowns scales as:
 
-- **Volume methods (FEM, FDTD):** $N_{\text{vol}} \sim (L/h)^3$
-- **Surface methods (MoM, BEM):** $N_{\text{surf}} \sim (L/h)^2$
+- **Volume methods (FEM, FDTD):** \(N_{\text{vol}} \sim (L/h)^3\)
+- **Surface methods (MoM, BEM):** \(N_{\text{surf}} \sim (L/h)^2\)
 
-For example, with $L = 1\ \text{m}$ and $h = 1\ \text{cm}$:
-- Volume: $N_{\text{vol}} \sim 100^3 = 10^6$ unknowns
-- Surface: $N_{\text{surf}} \sim 100^2 = 10^4$ unknowns
+For example, with \(L = 1\ \text{m}\) and \(h = 1\ \text{cm}\):
+- Volume: \(N_{\text{vol}} \sim 100^3 = 10^6\) unknowns
+- Surface: \(N_{\text{surf}} \sim 100^2 = 10^4\) unknowns
 
-The surface method reduces the unknown count by **one order of magnitude** in terms of $L/h$.
+The surface method reduces the unknown count by **one order of magnitude** in terms of \(L/h\).
 
 ### 4.2 Why This Matters for High-Frequency Problems
 
-At high frequencies, $h$ must be small relative to wavelength $\lambda$ (typically $h < \lambda/10$). As frequency increases:
-- $\lambda$ decreases → $h$ must decrease
-- $L/h$ increases rapidly
+At high frequencies, \(h\) must be small relative to wavelength \(\lambda\) (typically \(h < \lambda/10\)). As frequency increases:
+- \(\lambda\) decreases → \(h\) must decrease
+- \(L/h\) increases rapidly
 - Volume methods become prohibitively expensive due to cubic scaling
 
 Surface methods mitigate this through quadratic rather than cubic scaling, making them attractive for high-frequency scattering.
 
 ### 4.3 The Dense Matrix Trade-off
 
-While surface methods have fewer unknowns, the EFIE operator $\mathcal{T}$ is **non-local**—every basis function couples to every other basis function through the Green's function. This leads to dense matrices:
+While surface methods have fewer unknowns, the EFIE operator \(\mathcal{T}\) is **non-local**—every basis function couples to every other basis function through the Green's function. This leads to dense matrices:
 
-- **Storage:** $O(N^2)$ for dense $N \times N$ matrix
-- **Direct solve cost:** $O(N^3)$ for LU factorization
-- **Matrix-vector multiply:** $O(N^2)$ (no sparsity)
+- **Storage:** \(O(N^2)\) for dense \(N \times N\) matrix
+- **Direct solve cost:** \(O(N^3)\) for LU factorization
+- **Matrix-vector multiply:** \(O(N^2)\) (no sparsity)
 
 This is the fundamental trade-off: fewer unknowns but dense coupling versus more unknowns but sparse coupling (in volume methods).
 
@@ -201,7 +201,7 @@ The Method of Moments discretizes the integral equation by expanding the unknown
 \mathbf{J}_s(\mathbf{r}) \approx \sum_{n=1}^N I_n \mathbf{f}_n(\mathbf{r})
 ```
 
-where $\{\mathbf{f}_n\}_{n=1}^N$ are vector basis functions defined on the surface $\Gamma$, and $\{I_n\}_{n=1}^N$ are complex expansion coefficients.
+where \(\{\mathbf{f}_n\}_{n=1}^N\) are vector basis functions defined on the surface \(\Gamma\), and \(\{I_n\}_{n=1}^N\) are complex expansion coefficients.
 
 ### 5.2 Testing (Weighted Residual Method)
 
@@ -211,17 +211,17 @@ We form the residual:
 \mathcal{R}(\mathbf{r}) = \mathcal{T}\left[\sum_{n=1}^N I_n \mathbf{f}_n\right](\mathbf{r}) + \mathbf{E}^{\text{inc}}_t(\mathbf{r})
 ```
 
-and enforce orthogonality to a set of testing functions $\{\mathbf{w}_m\}_{m=1}^N$:
+and enforce orthogonality to a set of testing functions \(\{\mathbf{w}_m\}_{m=1}^N\):
 
 ```math
 \langle \mathbf{w}_m, \mathcal{R} \rangle = 0, \quad m = 1,\dots,N
 ```
 
-where $\langle \cdot, \cdot \rangle$ denotes an appropriate inner product on $\Gamma$.
+where \(\langle \cdot, \cdot \rangle\) denotes an appropriate inner product on \(\Gamma\).
 
 ### 5.3 Galerkin Method
 
-In the Galerkin approach, we choose testing functions equal to basis functions: $\mathbf{w}_m = \mathbf{f}_m$. This leads to a symmetric system (for self-adjoint operators) and often provides optimal convergence properties.
+In the Galerkin approach, we choose testing functions equal to basis functions: \(\mathbf{w}_m = \mathbf{f}_m\). This leads to a symmetric system (for self-adjoint operators) and often provides optimal convergence properties.
 
 The discretized system becomes:
 
@@ -288,7 +288,7 @@ This package focuses on the **dense MoM reference implementation** for accuracy 
 
 ### 7.1 Memory Requirements
 
-For $N$ RWG unknowns, a dense complex matrix requires:
+For \(N\) RWG unknowns, a dense complex matrix requires:
 
 ```math
 \text{Memory (GiB)} = \frac{16 N^2}{1024^3}
@@ -298,19 +298,19 @@ where 16 bytes = 8 bytes for real part + 8 bytes for imaginary part (double prec
 
 ### 7.2 Operation Counts
 
-- **Matrix fill:** $O(N^2)$ operations (each $Z_{mn}$ requires numerical integration)
-- **Direct solve (LU):** $O(N^3)$ operations
-- **Matrix-vector multiply:** $O(N^2)$ operations
-- **Iterative solve (CG/GMRES):** $O(kN^2)$ operations for $k$ iterations
+- **Matrix fill:** \(O(N^2)\) operations (each \(Z_{mn}\) requires numerical integration)
+- **Direct solve (LU):** \(O(N^3)\) operations
+- **Matrix-vector multiply:** \(O(N^2)\) operations
+- **Iterative solve (CG/GMRES):** \(O(kN^2)\) operations for \(k\) iterations
 
 ### 7.3 Practical Scaling Limits
 
 For a typical workstation with 64 GB RAM:
-- Maximum $N \approx \sqrt{64\times 1024^3 / 16} \approx 65,\!000$
-- LU factorization time: $O((6.5\times 10^4)^3) \sim 2.7\times 10^{14}$ operations
-- At 100 GFLOP/s: $\sim 2.7\times 10^3$ seconds $\approx 45$ minutes
+- Maximum \(N \approx \sqrt{64\times 1024^3 / 16} \approx 65,\!000\)
+- LU factorization time: \(O((6.5\times 10^4)^3) \sim 2.7\times 10^{14}\) operations
+- At 100 GFLOP/s: \(\sim 2.7\times 10^3\) seconds \(\approx 45\) minutes
 
-This illustrates why dense MoM is practical for moderate-sized problems ($N < 10^4$) but requires acceleration techniques (FMM, FFT) or iterative methods for larger problems.
+This illustrates why dense MoM is practical for moderate-sized problems (\(N < 10^4\)) but requires acceleration techniques (FMM, FFT) or iterative methods for larger problems.
 
 ---
 
@@ -323,11 +323,11 @@ The `DifferentiableMoM.jl` package solves the discretized EFIE system:
 ```
 
 where:
-- $\mathbf{Z} \in \mathbb{C}^{N\times N}$ is the MoM impedance matrix
-- $\mathbf{I} \in \mathbb{C}^{N}$ is the vector of RWG expansion coefficients
-- $\mathbf{V} \in \mathbb{C}^{N}$ is the excitation vector from incident field
+- \(\mathbf{Z} \in \mathbb{C}^{N\times N}\) is the MoM impedance matrix
+- \(\mathbf{I} \in \mathbb{C}^{N}\) is the vector of RWG expansion coefficients
+- \(\mathbf{V} \in \mathbb{C}^{N}\) is the excitation vector from incident field
 
-Once $\mathbf{I}$ is computed, all derived quantities are obtained through linear or quadratic operations:
+Once \(\mathbf{I}\) is computed, all derived quantities are obtained through linear or quadratic operations:
 
 ```math
 \begin{aligned}
@@ -345,26 +345,26 @@ This structure enables efficient gradient computation for optimization, which is
 
 ### 9.1 Why Integral Equations for Open-Region Scattering?
 
-1. **Exact radiation condition:** The free-space Green's function $G(\mathbf{r},\mathbf{r}')$ automatically satisfies the Sommerfeld radiation condition, eliminating the need for artificial absorbing boundaries.
+1. **Exact radiation condition:** The free-space Green's function \(G(\mathbf{r},\mathbf{r}')\) automatically satisfies the Sommerfeld radiation condition, eliminating the need for artificial absorbing boundaries.
 
-2. **Dimensional reduction:** Surface discretization reduces the unknown count from $O((L/h)^3)$ to $O((L/h)^2)$, where $L$ is object size and $h$ is mesh resolution.
+2. **Dimensional reduction:** Surface discretization reduces the unknown count from \(O((L/h)^3)\) to \(O((L/h)^2)\), where \(L\) is object size and \(h\) is mesh resolution.
 
-3. **Physical transparency:** Surface currents $\mathbf{J}_s$ have direct physical interpretation as actual induced currents on conductors.
+3. **Physical transparency:** Surface currents \(\mathbf{J}_s\) have direct physical interpretation as actual induced currents on conductors.
 
 4. **Accuracy for smooth surfaces:** For perfectly conducting or impedance surfaces, the surface current representation is mathematically exact (no volumetric field approximation needed).
 
 ### 9.2 Trade-offs and Practical Considerations
 
-1. **Dense matrices:** While having fewer unknowns, MoM produces fully populated matrices requiring $O(N^2)$ storage and $O(N^3)$ direct solve time.
+1. **Dense matrices:** While having fewer unknowns, MoM produces fully populated matrices requiring \(O(N^2)\) storage and \(O(N^3)\) direct solve time.
 
-2. **Singular integrals:** The Green's function singularity at $\mathbf{r} = \mathbf{r}'$ requires special quadrature techniques (discussed in Chapter 4).
+2. **Singular integrals:** The Green's function singularity at \(\mathbf{r} = \mathbf{r}'\) requires special quadrature techniques (discussed in Chapter 4).
 
 3. **Frequency scaling:** MoM complexity increases with frequency due to:
-   - Finer mesh required ($h \propto \lambda$)
-   - Larger electrical size ($L/\lambda$ increases)
+   - Finer mesh required (\(h \propto \lambda\))
+   - Larger electrical size (\(L/\lambda\) increases)
    - Potential ill-conditioning at low frequencies
 
-4. **Acceleration methods:** For large problems, fast algorithms (FMM, FFT, MLFMA) reduce matrix-vector products from $O(N^2)$ to $O(N\log N)$ or $O(N)$.
+4. **Acceleration methods:** For large problems, fast algorithms (FMM, FFT, MLFMA) reduce matrix-vector products from \(O(N^2)\) to \(O(N\log N)\) or \(O(N)\).
 
 ### 9.3 The DifferentiableMoM.jl Philosophy
 
@@ -384,27 +384,27 @@ While dense MoM limits problem size, it provides a gold standard for verifying a
 ### 10.1 Conceptual Questions
 
 1. **Derivation practice:** Starting from Maxwell's equations in differential form, derive the vector potential expression for the scattered electric field:
-   $\mathbf{E}^{\text{sca}} = -i\omega\mathbf{A} - \nabla\phi$.
+   \(\mathbf{E}^{\text{sca}} = -i\omega\mathbf{A} - \nabla\phi\).
 
-2. **Boundary condition analysis:** Explain why the impedance boundary condition $\hat{\mathbf{n}} \times \mathbf{E}^{\text{tot}} = Z_s \mathbf{J}_s$ reduces to the PEC condition when $Z_s = 0$, and to the PMC (perfect magnetic conductor) condition when $Z_s \to \infty$.
+2. **Boundary condition analysis:** Explain why the impedance boundary condition \(\hat{\mathbf{n}} \times \mathbf{E}^{\text{tot}} = Z_s \mathbf{J}_s\) reduces to the PEC condition when \(Z_s = 0\), and to the PMC (perfect magnetic conductor) condition when \(Z_s \to \infty\).
 
-3. **Green's function properties:** Prove that the free-space Green's function $G(\mathbf{r},\mathbf{r}') = e^{-ikR}/(4\pi R)$ satisfies:
-   - The Helmholtz equation: $(\nabla^2 + k^2)G = -\delta(\mathbf{r}-\mathbf{r}')$
-   - The reciprocity relation: $G(\mathbf{r},\mathbf{r}') = G(\mathbf{r}',\mathbf{r})$
-   - The far-field approximation: $G(\mathbf{r},\mathbf{r}') \sim e^{-ikr}/(4\pi r) e^{ik\hat{\mathbf{r}}\cdot\mathbf{r}'}$ as $r \to \infty$
+3. **Green's function properties:** Prove that the free-space Green's function \(G(\mathbf{r},\mathbf{r}') = e^{-ikR}/(4\pi R)\) satisfies:
+   - The Helmholtz equation: \((\nabla^2 + k^2)G = -\delta(\mathbf{r}-\mathbf{r}')\)
+   - The reciprocity relation: \(G(\mathbf{r},\mathbf{r}') = G(\mathbf{r}',\mathbf{r})\)
+   - The far-field approximation: \(G(\mathbf{r},\mathbf{r}') \sim e^{-ikr}/(4\pi r) e^{ik\hat{\mathbf{r}}\cdot\mathbf{r}'}\) as \(r \to \infty\)
 
 ### 10.2 Numerical Estimation Problems
 
-1. **Memory estimation:** For a spherical scatterer of radius $a = 1\ \text{m}$ at frequency $f = 300\ \text{MHz}$ ($\lambda = 1\ \text{m}$), estimate the number of RWG unknowns $N$ assuming 10 triangles per wavelength squared. Compute the dense matrix memory requirement in GiB.
+1. **Memory estimation:** For a spherical scatterer of radius \(a = 1\ \text{m}\) at frequency \(f = 300\ \text{MHz}\) (\(\lambda = 1\ \text{m}\)), estimate the number of RWG unknowns \(N\) assuming 10 triangles per wavelength squared. Compute the dense matrix memory requirement in GiB.
 
-2. **Scaling analysis:** Show analytically that doubling the electrical size of an object (keeping mesh density constant in terms of $\lambda$) increases:
+2. **Scaling analysis:** Show analytically that doubling the electrical size of an object (keeping mesh density constant in terms of \(\lambda\)) increases:
    - Surface unknown count by 4×
    - Dense matrix memory by 16×  
-   - Direct solve time by 64× (for $O(N^3)$ scaling)
+   - Direct solve time by 64× (for \(O(N^3)\) scaling)
 
-3. **Comparison study:** Compare MoM and FEM for a $1\ \text{m} \times 1\ \text{m}$ plate at 3 GHz ($\lambda = 0.1\ \text{m}$). Assume:
-   - MoM: 100 triangles/$\lambda^2$, $h = \lambda/10$
-   - FEM: Volume extends $\lambda/2$ from plate, 10 cells/$\lambda$
+3. **Comparison study:** Compare MoM and FEM for a \(1\ \text{m} \times 1\ \text{m}\) plate at 3 GHz (\(\lambda = 0.1\ \text{m}\)). Assume:
+   - MoM: 100 triangles/\(\lambda^2\), \(h = \lambda/10\)
+   - FEM: Volume extends \(\lambda/2\) from plate, 10 cells/\(\lambda\)
    Compute and compare unknown counts for both methods.
 
 ### 10.3 Implementation Exercises
@@ -491,9 +491,9 @@ Before proceeding, ensure you understand:
 - [ ] The derivation of EFIE from Maxwell's equations
 - [ ] The physical meaning of surface equivalence principles
 - [ ] Why Green's functions automatically satisfy radiation conditions
-- [ ] The scaling laws: $N_{\text{surf}} \sim (L/h)^2$ vs $N_{\text{vol}} \sim (L/h)^3$
+- [ ] The scaling laws: \(N_{\text{surf}} \sim (L/h)^2\) vs \(N_{\text{vol}} \sim (L/h)^3\)
 - [ ] The dense matrix trade-off: fewer unknowns but full coupling
 - [ ] How the Method of Moments discretizes integral equations
-- [ ] The computational complexity: $O(N^2)$ storage, $O(N^3)$ direct solve
+- [ ] The computational complexity: \(O(N^2)\) storage, \(O(N^3)\) direct solve
 
 If any items are unclear, review the relevant sections or consult the mathematical prerequisites appendix.

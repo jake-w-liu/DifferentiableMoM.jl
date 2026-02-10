@@ -291,8 +291,9 @@ For each perturbed scenario, ask:
    - Sudden jumps or non‑monotonic changes may indicate mesh or quadrature issues.
 
 4. **Are there internal‑consistency warnings?**
-   - The script calls `check_energy_consistency` and `check_objective_consistency`.
-   - Any warning printed to console should be investigated.
+   - Inspect `energy_ratio(I, v, E_ff, grid)` and objective consistency
+     `abs(real(dot(I, Q*I)) - projected_power(...))`.
+   - Any large mismatch should be investigated.
 
 5. **Do very small perturbations produce discontinuous jumps?**
    - Changing frequency by 0.1 % should change metrics by a small amount.
@@ -359,8 +360,9 @@ function robust_gradient(theta, scenarios)
         Z = assemble_Z_efie(..., ξ)
         v = assemble_v_plane_wave(..., ξ)
         I = solve_forward(Z, v)
-        # Adjoint solve (paper Eq. 25)
-        grad_s = compute_adjoint_gradient(Z, v, I, Q_target, Q_total, ...)
+        # Adjoint solve + impedance gradient
+        λ = solve_adjoint(Z, Q_target, I)
+        grad_s = gradient_impedance(Mp, I, λ; reactive=true)
         grad_total .+= grad_s
     end
     return grad_total / length(scenarios)
@@ -430,11 +432,11 @@ sets a clear baseline for comparing different robust‑design strategies.
 | Component | Source File | Key Functions / Lines |
 |-----------|-------------|-----------------------|
 | Robustness sweep driver | `validation/robustness/run_robustness_sweep.jl` | `main()` (line 38), `build_target_mask` (line 20), `mean_dir_at_theta` (line 31) |
-| Beam‑steering objective & gradient | `src/Optimize.jl` | `optimize_lbfgs` (line 55), `compute_adjoint_gradient` (line …) |
+| Beam‑steering objective & gradient | `src/Optimize.jl`, `src/Adjoint.jl` | `optimize_directivity`, `solve_adjoint`, `gradient_impedance` |
 | EFIE assembly | `src/EFIE.jl` | `assemble_Z_efie` (line …) |
 | Excitation assembly | `src/Excitation.jl` | `assemble_v_plane_wave` (line …) |
-| Far‑field matrices | `src/FarField.jl` | `build_Q` (line …), `radiation_vectors` (line …) |
-| Diagnostics | `src/Diagnostics.jl` | `check_energy_consistency`, `check_objective_consistency` |
+| Far‑field matrices | `src/FarField.jl`, `src/QMatrix.jl` | `radiation_vectors`, `build_Q` |
+| Diagnostics | `src/Diagnostics.jl` | `energy_ratio`, `projected_power`, `condition_diagnostics` |
 | Mesh & RWG utilities | `src/Mesh.jl`, `src/RWG.jl` | `make_rect_plate`, `build_rwg` |
 
 > Note: Line numbers are approximate; refer to the latest source files.
@@ -507,5 +509,4 @@ Before moving to the next chapter, verify you can:
 - **Beam‑Steering Bandwidth Fundamentals**: *Array Antenna Handbook* (Hansen, 2009) – covers phased‑array bandwidth limitations, relevant to impedance‑surface steering.
 
 ---
-
 

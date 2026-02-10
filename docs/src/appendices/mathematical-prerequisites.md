@@ -312,7 +312,7 @@ where `t̂` is the tangent to the boundary curve.
 
 ## Code Mapping
 
-- Vector operations: `src/Geometry.jl`
+- Vector and triangle operations: `src/Mesh.jl`
 - Quadrature rules: `src/Quadrature.jl`
 - Green's function: `src/Greens.jl`
 - Linear algebra utilities: `src/Solve.jl`

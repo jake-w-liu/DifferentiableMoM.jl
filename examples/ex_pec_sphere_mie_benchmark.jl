@@ -123,7 +123,10 @@ println("  Estimated radius: $(round(a_est, digits=6)) m  (std=$(round(a_std, di
 
 println("\n── MoM solve ──")
 Z = assemble_Z_efie(mesh, rwg, k; quad_order=3, eta0=eta0)
-v = assemble_v_plane_wave(mesh, rwg, k_vec, 1.0, pol; quad_order=3)
+v_legacy = assemble_v_plane_wave(mesh, rwg, k_vec, 1.0, pol; quad_order=3)
+v = assemble_excitation(mesh, rwg, make_plane_wave(k_vec, 1.0, pol); quad_order=3)
+rhs_diff = norm(v - v_legacy) / max(norm(v_legacy), 1e-30)
+println("  RHS new-vs-legacy relative difference: $rhs_diff")
 I = solve_forward(Z, v)
 res = norm(Z * I - v) / max(norm(v), 1e-30)
 println("  Relative residual: $res")
@@ -187,14 +190,24 @@ csv_sum = joinpath(DATADIR, "sphere_mie_benchmark_summary.csv")
 CSV.write(csv_sum, df_summary)
 
 plot_path = joinpath(DATADIR, "sphere_mie_benchmark_phi_cut.png")
-p = plot(rad2deg.(γ), dB_mom;
+p1 = plot(rad2deg.(γ), dB_mom;
     lw=2,
     label="MoM",
     xlabel="Scattering angle γ (deg)",
     ylabel="Bistatic RCS (dBsm)",
     title="PEC sphere: MoM vs Mie (φ=$(round(rad2deg(phi_target), digits=2))° cut)")
-plot!(p, rad2deg.(γ), dB_mie; lw=2, ls=:dash, label="Mie (PEC sphere)")
-savefig(p, plot_path)
+plot!(p1, rad2deg.(γ), dB_mie; lw=2, ls=:dash, label="Mie (PEC sphere)")
+
+p2 = plot(rad2deg.(γ), ΔdB;
+    lw=2,
+    color=:black,
+    label="Δ(dB) = MoM - Mie",
+    xlabel="Scattering angle γ (deg)",
+    ylabel="Δ(dB)",
+    title="Deviation")
+hline!(p2, [0.0], ls=:dot, color=:gray, label=nothing)
+
+savefig(plot(p1, p2; layout=(2, 1), size=(900, 700)), plot_path)
 
 println("\n── Outputs ──")
 println("  Comparison CSV: $csv_cmp")

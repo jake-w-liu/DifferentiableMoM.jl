@@ -198,19 +198,10 @@ I = solve_forward(Z, v)  # Uses LU factorization (LAPACK)
 - $O(N^3)$ time complexity
 - $O(N^2)$ memory for factors
 
-#### Iterative Solution
-```julia
-I, history = solve_iterative(Z, v; 
-    solver=:gmres, 
-    tol=1e-6, 
-    maxiter=200,
-    preconditioner=:none)
-```
-
-**When to use:**
-- Large problems ($N > 50,000$)
-- Multiple RHS with good preconditioner
-- Memory-constrained environments
+#### Iterative Solution (Roadmap)
+An iterative solver interface is not implemented in the current release.
+The existing conditioned-system API (`prepare_conditioned_system`) is
+designed to remain compatible with future Krylov integration.
 
 ### 2.7 Preconditioning and Conditioning
 
@@ -218,19 +209,17 @@ The EFIE operator becomes increasingly ill-conditioned with mesh refinement. The
 
 ```julia
 # Automatic preconditioner selection
-M_eff, enabled, stats = select_preconditioner(Mp; 
-    mode=:auto, 
-    iterative_solver=true)
+M_eff, enabled, reason = select_preconditioner(Mp;
+    mode=:auto,
+    iterative_solver=false)
 
 # Prepare conditioned system
-Z_cond, v_cond, back_transforms = prepare_conditioned_system(Z_full, v;
+Z_cond, v_cond, fac = prepare_conditioned_system(Z_full, v;
     preconditioner_M=M_eff)
 
 # Solve conditioned system
 I_cond = solve_system(Z_cond, v_cond)
-
-# Transform back to original basis
-I = back_transforms(I_cond)
+I = I_cond
 ```
 
 **Preconditioner types:**
@@ -462,14 +451,14 @@ Combine with other techniques:
 - **EFIE operator assembly**: `src/EFIE.jl`
   - `assemble_Z_efie`, singularity extraction, quadrature
 
-- **Impedance loading**: `src/Impedance.jl`
-  - `precompute_patch_mass`, `assemble_full_Z`, patch partitioning
+- **Impedance loading**: `src/Impedance.jl` + `src/Solve.jl`
+  - `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_full_Z`
 
 - **Excitation assembly**: `src/Excitation.jl`
   - `assemble_v_plane_wave`, incident field integration
 
 - **Linear algebra solvers**: `src/Solve.jl`
-  - `solve_forward`, `solve_system`, `solve_iterative`
+  - `solve_forward`, `solve_system`
   - `select_preconditioner`, `prepare_conditioned_system`
 
 - **Diagnostics**: `src/Diagnostics.jl`
@@ -478,14 +467,14 @@ Combine with other techniques:
 ### 6.2 Supporting Modules
 
 - **Basis functions**: `src/RWG.jl` (RWG construction)
-- **Geometry utilities**: `src/Geometry.jl` (triangle operations)
-- **Performance utilities**: `src/Performance.jl` (memory estimation)
+- **Geometry utilities**: `src/Mesh.jl` (triangle operations)
+- **Green kernels and quadrature**: `src/Greens.jl`, `src/Quadrature.jl`
 
 ### 6.3 Example Scripts
 
-- **Forward solve demonstration**: `examples/ex_convergence.jl`
-- **Impedance study**: `examples/ex_impedance_sweep.jl`
-- **Frequency sweep**: `examples/ex_frequency_sweep.jl`
+- **Forward solve / convergence**: `examples/ex_convergence.jl`
+- **Beam objective workflow**: `examples/ex_beam_steer.jl`
+- **Complex mesh forward solve**: `examples/ex_airplane_rcs.jl`
 
 ---
 

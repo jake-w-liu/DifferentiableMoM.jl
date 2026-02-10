@@ -36,6 +36,9 @@ julia --project=. examples/ex_beam_steer.jl
 julia --project=. examples/ex_auto_preconditioning.jl
 julia --project=. examples/ex_pec_sphere_rcs.jl
 julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
+julia --project=. examples/ex_radiationpatterns_adapter.jl
+julia --project=. examples/ex_horn_pattern_import_demo.jl
+julia --project=. examples/ex_horn_pattern_import_demo.jl examples/antenna_pattern.csv 28.0 reflector
 ```
 
 For OBJ-based workflows:
@@ -43,7 +46,6 @@ For OBJ-based workflows:
 ```bash
 julia --project=. examples/ex_repair_obj_mesh.jl input.obj [output.obj]
 julia --project=. examples/ex_visualize_simulation_mesh.jl [repaired.obj] [coarse.obj] [output_prefix]
-julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 For an external sphere mesh:
@@ -89,7 +91,6 @@ Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 - Bempp-cl cross-validation workflows:
   see `validation/bempp/README.md`.
 
-`data/` and `figs/` are generated artifacts and are intentionally git-ignored.
 
 ## Repository Layout
 
@@ -97,8 +98,7 @@ Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 - `examples/` — runnable examples and demos
 - `test/` — automated validation and gates
 - `validation/` — external cross-validation scripts
-- `data/` — generated numeric outputs (not tracked)
-- `figs/` — generated figures (not tracked)
+
 
 ## Citation
 

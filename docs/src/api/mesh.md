@@ -23,6 +23,35 @@ Creates a triangulated rectangular plate in the `xy` plane centered at origin.
 
 ---
 
+### `make_parabolic_reflector(D, f, Nr, Nphi; center=Vec3(0,0,0))`
+
+Creates an open parabolic reflector mesh aligned with `+z`, with surface
+
+```math
+z = \frac{x^2 + y^2}{4f}, \qquad x^2 + y^2 \le (D/2)^2.
+```
+
+**Parameters:**
+- `D::Real`: aperture diameter (meters)
+- `f::Real`: focal length (meters)
+- `Nr::Int`: number of radial rings (≥2)
+- `Nphi::Int`: number of azimuth samples per ring (≥3)
+- `center::Vec3=Vec3(0,0,0)`: reflector apex location
+
+**Returns:** `TriMesh` with `1 + Nr*Nphi` vertices and
+`Nphi + 2*(Nr-1)*Nphi` triangles.
+
+Use `allow_boundary=true` when checking/open-surface solving.
+
+**Example:**
+```julia
+mesh = make_parabolic_reflector(0.30, 0.105, 8, 28)
+report = assert_mesh_quality(mesh; allow_boundary=true, require_closed=false)
+println((nvertices(mesh), ntriangles(mesh)))
+```
+
+---
+
 ### `read_obj_mesh(path)`
 
 Reads a triangle mesh from a Wavefront OBJ file.
