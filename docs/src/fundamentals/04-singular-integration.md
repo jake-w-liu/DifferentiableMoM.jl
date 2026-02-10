@@ -707,8 +707,11 @@ using the closed‑form edge‑log formula described in Section 3. The argumen
 
 The function returns a real number (the value of $S(\mathbf{P})$). Special cases (point on edge, point at vertex) are handled with care to avoid division by zero.
 
-#### `self_cell_contribution(mesh, rwg, quad_rule, k, tm, tn)` (in `src/SingularIntegrals.jl`)
-Accumulates the singular contributions for a pair of triangles `tm` and `tn` that are **the same** (self‑interaction) or **share an edge/vertex**. It performs the following steps:
+#### `self_cell_contribution(...)` (in `src/SingularIntegrals.jl`)
+Accumulates the singular contribution for a **self triangle pair** (`tm == tn`).
+In the current implementation, near-neighbor non-self pairs are handled by
+standard Gaussian quadrature; only exact self-cell pairs use singular extraction.
+The self-cell routine performs the following steps:
 
 1. Loops over outer quadrature points $\mathbf{P}$ on triangle `tm`.
 2. For each $\mathbf{P}$, computes $S(\mathbf{P})$ analytically.
@@ -719,19 +722,19 @@ Accumulates the singular contributions for a pair of triangles `tm` and `tn` tha
 5. Multiplies by weights and Jacobians and returns the total contribution.
 
 #### `assemble_Z_efie` (in `src/EFIE.jl`)
-This is the top‑level assembly routine that decides whether to call `self_cell_contribution` or use standard quadrature. The decision logic is:
+This is the top‑level assembly routine that decides whether to call
+`self_cell_contribution` or use standard product quadrature. The current
+decision logic is:
 
 ```julia
-if tm == tn || triangles_share_edge(tm, tn) || triangles_share_vertex(tm, tn)
+if tm == tn
     # Use singular integration
-    Zblock += self_cell_contribution(mesh, rwg, quad_rule, k, tm, tn)
+    Zblock += self_cell_contribution(...)
 else
     # Use standard product Gaussian quadrature
-    Zblock += regular_cell_contribution(mesh, rwg, quad_rule, k, tm, tn)
+    Zblock += regular_product_quadrature(...)
 end
 ```
-
-The function `triangles_share_edge` and `triangles_share_vertex` are defined in `src/Mesh.jl` and check geometric adjacency.
 
 ### 8.3 Data Flow for a Self‑Interaction
 
@@ -741,7 +744,7 @@ To illustrate how the pieces fit together, here is the data flow for computing a
 2. **`self_cell_contribution`** is called with `tm`, `tn`.
 3. **Outer loop** over quadrature points $\mathbf{P}$ on `tm`:
    - `tri_quad_points` provides $\mathbf{P}$ and weights.
-   - `rwg_value` evaluates $\mathbf{f}_m(\mathbf{P})$ and $\mathbf{f}_n(\mathbf{P})$.
+   - `eval_rwg` evaluates $\mathbf{f}_m(\mathbf{P})$ and $\mathbf{f}_n(\mathbf{P})$.
    - `div_rwg` provides $\nabla_s\cdot\mathbf{f}_m$ and $\nabla_s\cdot\mathbf{f}_n$.
 4. **Inner singular integral**:
    - `analytical_integral_1overR` computes $S(\mathbf{P})$.

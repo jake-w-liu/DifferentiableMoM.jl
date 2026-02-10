@@ -317,7 +317,7 @@ mesh_sim = coarse.mesh
 
 - Full implementation: `src/Mesh.jl`
 - Unified mesh/RCS workflow: `examples/ex_obj_rcs_pipeline.jl`
-- Compatibility wrappers: `examples/ex_repair_obj_mesh.jl`, `examples/ex_airplane_rcs.jl`
+- Mesh visualization workflow: `examples/ex_visualize_simulation_mesh.jl`
 - MAT-to-OBJ helper script (SciPy): `examples/convert_aircraft_mat_to_obj.py`
 
 ---

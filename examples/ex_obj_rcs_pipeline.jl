@@ -7,10 +7,9 @@
 #
 # Examples:
 #   julia --project=. examples/ex_obj_rcs_pipeline.jl
-#   julia --project=. examples/ex_obj_rcs_pipeline.jl full ../su27.obj 3.0 0.001 300 su27
-#   julia --project=. examples/ex_obj_rcs_pipeline.jl full ../airplane.mat 3.0 1.0 300 airplane_mat
-#   julia --project=. examples/ex_obj_rcs_pipeline.jl repair ../su27.obj ../su27_repaired.obj 0.001
-#   julia --project=. examples/ex_obj_rcs_pipeline.jl plot ../data ../figs su27
+#   julia --project=. julia --project=. examples/ex_obj_rcs_pipeline.jl full ../su27b.obj 3.0 0.001 4000 su27b
+#   julia --project=. examples/ex_obj_rcs_pipeline.jl repair ../su27.obj ../su27b_repaired.obj 0.001
+#   julia --project=. examples/ex_obj_rcs_pipeline.jl plot ../data ../figs su27b
 
 push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
 

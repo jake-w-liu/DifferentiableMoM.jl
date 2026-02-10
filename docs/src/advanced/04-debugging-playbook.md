@@ -625,7 +625,7 @@ or environment mismatch.
 If you have a problematic OBJ file, repair it and inspect the changes:
 
 ```bash
-julia --project=. examples/ex_repair_obj_mesh.jl input.obj repaired.obj
+julia --project=. examples/ex_obj_rcs_pipeline.jl repair input.obj repaired.obj
 ```
 
 The script prints a mesh‑quality report before and after repair, and saves the
@@ -636,7 +636,7 @@ repaired mesh for later use.
 Test the complete workflow (repair, coarsen, solve, RCS) on a complex platform:
 
 ```bash
-julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 This command scales the OBJ by 0.001 (mm to m), repairs, coarsens to ≈300 RWG
@@ -673,7 +673,7 @@ and `fd_grad` (see Exercise 8).
 To identify performance bottlenecks, run with Julia’s built‑in profiler:
 
 ```bash
-julia --project=. --track-allocation=user examples/ex_airplane_rcs.jl ...
+julia --project=. --track-allocation=user examples/ex_obj_rcs_pipeline.jl ...
 ```
 
 Or use `@time` inside your script to time assembly, solve, and far‑field steps.
@@ -764,4 +764,3 @@ Before moving to the next chapter, verify you can:
 - **MoM Validation Techniques**: *Accuracy Considerations for Integral Equation MoM* (Peterson et al., 1998) – discusses convergence tests, residual norms, and cross‑validation.
 
 ---
-

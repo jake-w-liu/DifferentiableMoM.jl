@@ -504,7 +504,7 @@ Output CSV files are saved to `data/` for further analysis.
 
 ### 3.6 Airplane RCS Demonstration
 
-The script `examples/ex_airplane_rcs.jl` demonstrates RCS computation for a complex CAD geometry (an airplane model). It includes automatic mesh repair, coarsening to a target RWG count, and far‑field analysis.
+The script `examples/ex_obj_rcs_pipeline.jl` demonstrates RCS computation for a complex CAD geometry (an airplane model). It includes automatic mesh repair, coarsening to a target RWG count, and far‑field analysis.
 
 **Key features:**
 - **Mesh repair:** Automatically fixes orientation, removes degenerate triangles, and ensures manifold edges.
@@ -514,7 +514,7 @@ The script `examples/ex_airplane_rcs.jl` demonstrates RCS computation for a comp
 
 **Typical usage:**
 ```bash
-julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
 ```
 Arguments: OBJ path, frequency (GHz), scale factor (to meters), target RWG count.
 
@@ -719,7 +719,7 @@ end
 - **Sphere benchmark**: `examples/ex_pec_sphere_mie_benchmark.jl`
 - **RCS pattern analysis**: `examples/ex_pec_sphere_rcs.jl`
 - **Beam steering optimization**: `examples/ex_beam_steer.jl`
-- **Platform RCS**: `examples/ex_airplane_rcs.jl`
+- **Platform RCS**: `examples/ex_obj_rcs_pipeline.jl`
 
 ### 7.3 Supporting Utilities
 

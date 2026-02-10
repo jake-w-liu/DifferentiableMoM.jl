@@ -247,7 +247,7 @@ gr()  # or pyplot(), plotlyjs()
 - Wireframe segment generation: `src/Mesh.jl`
 - End-to-end examples:
   - `examples/ex_visualize_simulation_mesh.jl`
-  - `examples/ex_airplane_rcs.jl`
+  - `examples/ex_obj_rcs_pipeline.jl`
 
 ---
 
@@ -279,4 +279,4 @@ Before relying on visualization for mesh validation, ensure you can:
 - **Plots.jl documentation:** [http://docs.juliaplots.org/stable/](http://docs.juliaplots.org/stable/) – comprehensive guide to the plotting library used by the package.
 - **Mesh processing for EM:** Shepard, *Mesh Generation and Quality Criteria for Computational Electromagnetics* (2002).
 - **Visual debugging in scientific computing:** Johansson & Forssén, *Visualization as a Tool for Debugging Numerical Software* (2016).
-- **Package examples:** `examples/ex_visualize_simulation_mesh.jl` and `examples/ex_airplane_rcs.jl` demonstrate end‑to‑end workflows.
+- **Package examples:** `examples/ex_visualize_simulation_mesh.jl` and `examples/ex_obj_rcs_pipeline.jl` demonstrate end‑to‑end workflows.
