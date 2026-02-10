@@ -21,7 +21,7 @@ You will learn to:
 After this tutorial, you should be able to:
 
 1. **Diagnose mesh quality issues** using `mesh_quality_report` and interpret its output.
-2. **Repair OBJ files** via command‑line script (`ex_repair_obj_mesh.jl`) and programmatic API (`repair_mesh_for_simulation`).
+2. **Repair OBJ files** via command‑line workflow (`ex_obj_rcs_pipeline.jl repair ...`) and programmatic API (`repair_mesh_for_simulation`).
 3. **Choose appropriate repair flags** for open surfaces, closed scatterers, and partially defective meshes.
 4. **Estimate memory footprint** with `estimate_dense_matrix_gib` and decide whether coarsening is needed.
 5. **Generate wireframe previews** with `save_mesh_preview` to visually compare original, repaired, and coarsened versions.
@@ -80,7 +80,7 @@ Verdict: FAIL – needs repair
 The simplest repair uses the bundled script:
 
 ```bash
-julia --project=. examples/ex_repair_obj_mesh.jl ../Airplane.obj ../Airplane_repaired.obj
+julia --project=. examples/ex_obj_rcs_pipeline.jl repair ../Airplane.obj ../Airplane_repaired.obj
 ```
 
 The script calls `repair_obj_mesh` with conservative defaults:
@@ -131,7 +131,7 @@ println("Removed $(length(result.removed_degenerate)) degenerate triangles")
 println("Removed $(length(result.removed_invalid)) invalid triangles")
 ```
 
-The function returns a `RepairResult` containing before/after statistics and lists of modified triangles.
+The function returns a named tuple containing before/after statistics and lists of modified triangles.
 
 ### 4) Estimate Memory Footprint
 
@@ -186,8 +186,6 @@ julia --project=. examples/ex_visualize_simulation_mesh.jl \
 Or programmatically:
 
 ```julia
-using .Visualization
-
 seg_rep = mesh_wireframe_segments(mesh_repaired)
 seg_coa = mesh_wireframe_segments(mesh_coarse)
 
@@ -279,15 +277,15 @@ If any condition fails, `assert_mesh_quality` throws an informative error. This 
 
 **Adjustment:** Multiply the estimate by your storage factor (e.g., 0.5 for single precision, 0.1 for sparse‑matrix format).
 
-### Visualization fails with GLMakie error
+### Visualization backend fails to initialize
 
-**Cause:** GLMakie requires a working OpenGL backend, which may be missing on headless servers.
+**Cause:** `Plots.jl` backend (typically GR) is not available or cannot initialize in the current environment.
 
 **Solutions:**
 
-- Install `GLMakie` and ensure OpenGL drivers are present.
-- Use `plot_mesh_wireframe` with the `PyPlot` backend (requires `PyPlot.jl`).
-- Skip visualization and inspect OBJ files directly in MeshLab.
+- Ensure `Plots.jl` and its backend dependencies are installed (`Pkg.instantiate()` in project root).
+- On headless servers, prefer non-interactive runs and write files via `save_mesh_preview(...)`.
+- If plotting is unavailable, skip preview generation and inspect OBJ files directly in MeshLab/Blender.
 
 ---
 
@@ -307,7 +305,7 @@ If any condition fails, `assert_mesh_quality` throws an informative error. This 
 
 **Scripts:**
 
-- `examples/ex_repair_obj_mesh.jl` – command‑line repair utility.
+- `examples/ex_obj_rcs_pipeline.jl` – command‑line repair utility.
 - `examples/ex_visualize_simulation_mesh.jl` – side‑by‑side mesh preview.
 
 ---
@@ -317,7 +315,7 @@ If any condition fails, `assert_mesh_quality` throws an informative error. This 
 ### Basic (45 minutes)
 
 1. **Diagnose a defective mesh**: Download an OBJ from an online repository (e.g., Thingiverse). Run `mesh_quality_report` and list all defects.
-2. **Repair with default flags**: Use `ex_repair_obj_mesh.jl` to produce a repaired OBJ. Verify that the output passes `assert_mesh_quality`.
+2. **Repair with default flags**: Use `ex_obj_rcs_pipeline.jl repair ...` to produce a repaired OBJ. Verify that the output passes `assert_mesh_quality`.
 3. **Estimate memory**: Build RWG for the repaired mesh and compute dense‑matrix memory. Would it fit on your machine?
 
 ### Practical (90 minutes)

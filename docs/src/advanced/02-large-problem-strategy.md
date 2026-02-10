@@ -216,10 +216,10 @@ Coarsening reduces geometric detail, which affects:
 
 ### Example: Airplane RCS with Coarsening
 
-The script `examples/ex_airplane_rcs.jl` demonstrates the complete workflow:
+The script `examples/ex_obj_rcs_pipeline.jl` demonstrates the complete workflow:
 
 ```bash
-julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 This loads an OBJ, scales it to meters, repairs, coarsens to ≈300 RWG unknowns,
@@ -427,10 +427,10 @@ for larger‑scale electromagnetics.
 
 ```bash
 # Step 1: Repair the input mesh (optional, but recommended)
-julia --project=. examples/ex_repair_obj_mesh.jl ../Airplane.obj ../Airplane_repaired.obj
+julia --project=. examples/ex_obj_rcs_pipeline.jl repair ../Airplane.obj ../Airplane_repaired.obj
 
 # Step 2: Run RCS with automatic coarsening
-julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 The second command scales the OBJ by 0.001 (mm to m), repairs, coarsens to ≈300
@@ -581,8 +581,8 @@ println(report)
 | Mesh repair | `src/Mesh.jl` | `repair_mesh_for_simulation` (line …) |
 | Preconditioner construction | `src/Solve.jl` | `make_left_preconditioner` (line 67), `select_preconditioner` (line 106) |
 | Conditioned system solve | `src/Solve.jl` | `prepare_conditioned_system` (line 179) |
-| Optimization with preconditioning | `src/Optimize.jl` | `optimize_lbfgs` (line 55), `optimize_forward_gradient` (line 249) |
-| Large OBJ demo | `examples/ex_airplane_rcs.jl` | Full workflow with repair, coarsen, solve, RCS |
+| Optimization with preconditioning | `src/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
+| Large OBJ demo | `examples/ex_obj_rcs_pipeline.jl` | Full workflow with repair, coarsen, solve, RCS |
 | Auto‑preconditioning example | `examples/ex_auto_preconditioning.jl` | Decision logic and recommended settings |
 
 ---
@@ -602,7 +602,7 @@ println(report)
 
 ### Practical
 
-4. **Two‑level RCS comparison**: Run `ex_airplane_rcs.jl` with `target_rwg=200`
+4. **Two‑level RCS comparison**: Run `ex_obj_rcs_pipeline.jl` with `target_rwg=200`
    and `target_rwg=500`. Compare the monostatic RCS (dBsm), solver residual,
    and total runtime. Are the results qualitatively similar?
 5. **Mesh‑quality audit**: Take a complex OBJ (e.g., from the `data/` directory),
@@ -654,5 +654,3 @@ Before moving to the next chapter, verify you can:
 - **Mesh Processing**: *Polygon Mesh Processing* (Botsch et al., 2010) – algorithms for mesh repair, coarsening, and quality metrics.
 
 ---
-
-

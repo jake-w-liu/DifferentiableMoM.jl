@@ -376,10 +376,10 @@ The subtraction reflects the minus sign in the formula $Z_{mn}= -i\omega\mu_0[V_
 
 #### Code location and function calls
 
-- **Entry point**: `assemble_Z_efie(mesh, rwg, quad_rule, k, impedance=0.0)` in `src/EFIE.jl`.
-- **Quadrature evaluation**: `tri_quad_points` and `tri_quad_weights` from `src/Quadrature.jl`.
-- **RWG evaluation**: `rwg_value(rwg, n, tidx, r)` and `div_rwg(rwg, n, tidx)` from `src/RWG.jl`.
-- **Green’s function**: `green(k, R)` defined in `src/Green.jl`.
+- **Entry point**: `assemble_Z_efie(mesh, rwg, k; quad_order=3)` in `src/EFIE.jl`.
+- **Quadrature evaluation**: `tri_quad_rule` and `tri_quad_points` from `src/Quadrature.jl`.
+- **RWG evaluation**: `eval_rwg(rwg, n, r, tidx)` and `div_rwg(rwg, n, tidx)` from `src/RWG.jl`.
+- **Green’s function**: `greens(r, rp, k)` defined in `src/Greens.jl`.
 
 The assembly loops are written in a vectorized style that processes multiple quadrature points simultaneously, improving performance on modern CPUs.
 
@@ -432,30 +432,25 @@ The factor $2A_T$ appears **outside** the sum because the Jacobian is constant o
 
 The quadrature module provides two key functions:
 
-- `tri_quad_rule([order])` → returns a `QuadRule` struct containing `points` (array of $(\xi,\eta)$ coordinates) and `weights` (array of $w_q$).
-- `tri_quad_points(tri_verts, quad_rule)` → maps the reference‑triangle quadrature points to physical coordinates for a given triangle.
+- `tri_quad_rule(order)` → returns `(xi, w)` where `xi` is a vector of
+  reference-triangle points `(ξ,η)` and `w` is the corresponding weight vector.
+- `tri_quad_points(mesh, t, xi)` → maps the reference‑triangle quadrature points to physical coordinates for a given triangle.
 
 **Example usage**:
 
 ```julia
-using DifferentiableMoM.Quadrature
+using DifferentiableMoM
 
-rule = tri_quad_rule()               # default 7‑point rule
-points_ref = rule.points             # shape (2,7)
-weights = rule.weights               # length 7
-
-# For triangle with vertices v1, v2, v3
-v1 = [0.0, 0.0, 0.0]
-v2 = [1.0, 0.0, 0.0]
-v3 = [0.0, 1.0, 0.0]
-points_phys = tri_quad_points([v1,v2,v3], rule)  # shape (3,7)
+mesh = make_rect_plate(0.1, 0.1, 2, 2)
+xi, w = tri_quad_rule(7)             # 7-point rule
+points_phys = tri_quad_points(mesh, 1, xi)
 ```
 
 During EFIE assembly, `tri_quad_points` is called once per triangle and the results are cached to avoid repeated computation. The weights and Jacobian factor $2A_T$ are combined into a single weight vector `w_q * (2A_T)` for efficiency.
 
 ### 5.4 Accuracy and Convergence Considerations
 
-The choice of quadrature rule affects both accuracy and computational cost. For well‑separated triangle pairs, the integrand is smooth and a moderate‑order rule (e.g., 7 points) yields high accuracy. When triangles are close together or share an edge/vertex, the Green’s function $G(\mathbf{r},\mathbf{r}')$ becomes nearly singular, and standard Gaussian quadrature may lose accuracy. The current version of `DifferentiableMoM.jl` does **not** implement specialized singular integration techniques; instead, it relies on mesh refinement to keep triangles small relative to the wavelength, which mitigates the singularity issue.
+The choice of quadrature rule affects both accuracy and computational cost. For well‑separated triangle pairs, the integrand is smooth and a moderate‑order rule (e.g., 7 points) yields high accuracy. When the source and test triangles coincide, the Green’s kernel is singular. In `DifferentiableMoM.jl`, that self-cell singularity is handled by analytical extraction (`src/SingularIntegrals.jl`) rather than by increasing quadrature order alone.
 
 A useful rule of thumb: the quadrature rule should integrate polynomials of degree $2p$ exactly, where $p$ is the polynomial degree of the basis functions. Since RWG functions are linear (affine) on each triangle, $p=1$, so a rule that integrates degree‑2 polynomials exactly is sufficient for the vector part $\mathbf{f}_m\cdot\mathbf{f}_n$. However, the Green’s function adds complexity, and a higher‑order rule is often used in practice to maintain accuracy across a range of distances.
 
@@ -496,7 +491,7 @@ The report also includes quantitative statistics such as min/max triangle area, 
 To inspect a mesh before building RWG functions, call:
 
 ```julia
-using DifferentiableMoM.Mesh
+using DifferentiableMoM
 
 mesh = make_rect_plate(0.1, 0.1, 10, 10)   # example mesh
 report = mesh_quality_report(mesh)
@@ -515,7 +510,7 @@ The keyword arguments control whether boundary edges (edges belonging to only on
 
 By default, `build_rwg(mesh; precheck=true)` calls `mesh_quality_report` internally and throws an informative error if any critical defect is found. This prevents silent failures later during matrix assembly. If you are confident that your mesh is valid (e.g., it comes from a trusted meshing tool), you can disable the precheck with `precheck=false` for a slight speed gain.
 
-**Code location**: The mesh‑quality routines are implemented in `src/Mesh.jl`, functions `mesh_quality_report`, `mesh_quality_ok`, and `_check_mesh_topology`. The RWG constructor `build_rwg` is in `src/RWG.jl` and calls these checks when the `precheck` flag is set.
+**Code location**: The mesh‑quality routines are implemented in `src/Mesh.jl` (notably `mesh_quality_report`, `mesh_quality_ok`, and `assert_mesh_quality`). The RWG constructor `build_rwg` in `src/RWG.jl` calls these checks when `precheck=true`.
 
 ---
 
@@ -533,11 +528,11 @@ using DifferentiableMoM
 # Create a 0.1 m × 0.1 m plate meshed with 4×4 subdivisions
 mesh = make_rect_plate(0.1, 0.1, 4, 4)
 
-println("Mesh vertices: ", mesh.nvertices)
-println("Mesh triangles: ", mesh.ntriangles)
+println("Mesh vertices: ", nvertices(mesh))
+println("Mesh triangles: ", ntriangles(mesh))
 ```
 
-The resulting mesh contains `mesh.nvertices` vertices and `mesh.ntriangles` triangles. Because the plate is open (a single surface), all edges on the boundary belong to only one triangle, while interior edges are shared by two triangles.
+The resulting mesh contains `nvertices(mesh)` vertices and `ntriangles(mesh)` triangles. Because the plate is open (a single surface), all edges on the boundary belong to only one triangle, while interior edges are shared by two triangles.
 
 ### 7.2 Building RWG Basis Functions
 
@@ -565,12 +560,10 @@ end
 To see the actual geometry, we can retrieve the edge length and triangle areas:
 
 ```julia
-using DifferentiableMoM.RWG: edge_length, triangle_area
-
 n = 1
-ℓ = edge_length(rwg, n)
-A_plus = triangle_area(rwg, rwg.plus_triangles[n])
-A_minus = triangle_area(rwg, rwg.minus_triangles[n])
+ℓ = rwg.len[n]
+A_plus = triangle_area(mesh, rwg.tplus[n])
+A_minus = triangle_area(mesh, rwg.tminus[n])
 
 println("Edge length ℓ_$n = $ℓ m")
 println("Area of T⁺ = $A_plus m², Area of T⁻ = $A_minus m²")
@@ -588,8 +581,8 @@ A_n^- \times (\nabla_s\cdot\mathbf{f}_n \text{ on } T_n^-) = -\ell_n.
 We can check this numerically using `div_rwg`:
 
 ```julia
-div_plus = div_rwg(rwg, n, rwg.plus_triangles[n])
-div_minus = div_rwg(rwg, n, rwg.minus_triangles[n])
+div_plus = div_rwg(rwg, n, rwg.tplus[n])
+div_minus = div_rwg(rwg, n, rwg.tminus[n])
 
 println("∇·f_$n on T⁺ = $div_plus")
 println("∇·f_$n on T⁻ = $div_minus")
@@ -601,16 +594,19 @@ The two products should equal $+\ell_n$ and $-\ell_n$ up to rounding error (typi
 
 ### 7.5 Visualizing Current Flow (Optional)
 
-Although `DifferentiableMoM.jl` does not include built‑in plotting, the RWG data can be exported to any plotting package that handles triangular meshes. The following snippet shows how to extract the current direction at the centroid of each support triangle:
+`DifferentiableMoM.jl` includes mesh-level visualization utilities in
+`src/Visualization.jl`, and RWG values can also be inspected directly. The
+following snippet shows how to extract the current direction at the centroid of
+each support triangle:
 
 ```julia
 using LinearAlgebra
 
 # Evaluate f_n at the centroid of its plus triangle
-centroid_plus = (mesh.vertices[mesh.triangles[tp,1]] +
-                 mesh.vertices[mesh.triangles[tp,2]] +
-                 mesh.vertices[mesh.triangles[tp,3]]) / 3
-f_plus = rwg_value(rwg, n, tp, centroid_plus)
+centroid_plus = (Vec3(mesh.xyz[:, mesh.tri[1, tp]]) +
+                 Vec3(mesh.xyz[:, mesh.tri[2, tp]]) +
+                 Vec3(mesh.xyz[:, mesh.tri[3, tp]])) / 3
+f_plus = eval_rwg(rwg, n, centroid_plus, tp)
 
 println("f_$n at centroid of T⁺ = $f_plus (direction: $(normalize(f_plus)))")
 ```
@@ -630,11 +626,11 @@ function inspect_rwg(mesh, max_to_show=5)
     println("RWG basis count: ", rwg.nedges)
     println("\nChecking consistency for the first ", max_to_show, " bases:")
     for n in 1:min(max_to_show, rwg.nedges)
-        tp = rwg.plus_triangles[n]
-        tm = rwg.minus_triangles[n]
-        ℓ = edge_length(rwg, n)
-        A⁺ = triangle_area(rwg, tp)
-        A⁻ = triangle_area(rwg, tm)
+        tp = rwg.tplus[n]
+        tm = rwg.tminus[n]
+        ℓ = rwg.len[n]
+        A⁺ = triangle_area(mesh, tp)
+        A⁻ = triangle_area(mesh, tm)
         div⁺ = div_rwg(rwg, n, tp)
         div⁻ = div_rwg(rwg, n, tm)
         err⁺ = abs(A⁺ * div⁺ - ℓ)
@@ -661,50 +657,53 @@ This section provides a concise roadmap to the source files that implement the R
 
 | File | Purpose | Key contents |
 |------|---------|--------------|
-| `src/RWG.jl` | Construction and evaluation of RWG basis functions. | `struct RWG`, `build_rwg`, `rwg_value`, `div_rwg`, `edge_length`, `triangle_area`, `basis_triangles`. |
-| `src/Mesh.jl` | Mesh data structure and quality checks. | `struct Mesh`, `make_rect_plate`, `mesh_quality_report`, `mesh_quality_ok`, topology validation routines. |
-| `src/Quadrature.jl` | Gaussian quadrature rules on triangles. | `struct QuadRule`, `tri_quad_rule`, `tri_quad_points`, `tri_quad_weights`. |
-| `src/EFIE.jl` | Assembly of the EFIE impedance matrix. | `assemble_Z_efie`, `assemble_Z_imp`, inner loops that compute `vec_part - scl_part`. |
-| `src/Green.jl` | Free‑space Green’s function. | `green(k, R)` and its gradient `grad_green`. |
-| `src/Impedance.jl` | Impedance boundary condition handling. | `impedance_matrix`, `surface_impedance`. |
-| `src/MoM.jl` | High‑level MoM solver interface. | `solve_mom`, `compute_current`, `near_field`, `radar_cross_section`. |
+| `src/RWG.jl` | Construction and evaluation of RWG basis functions. | `RWGData`, `build_rwg`, `eval_rwg`, `div_rwg`, `basis_triangles`. |
+| `src/Mesh.jl` | Mesh types, geometry helpers, and quality checks. | `TriMesh`, `make_rect_plate`, `triangle_area`, `mesh_quality_report`, `assert_mesh_quality`. |
+| `src/Quadrature.jl` | Gaussian quadrature rules on triangles. | `tri_quad_rule`, `tri_quad_points`. |
+| `src/Greens.jl` | Free‑space Green’s function utilities. | `greens`, `greens_smooth`, `grad_greens`. |
+| `src/SingularIntegrals.jl` | Self-cell singularity extraction. | `analytical_integral_1overR`, `self_cell_contribution`. |
+| `src/EFIE.jl` | Assembly of the EFIE operator matrix. | `assemble_Z_efie`. |
+| `src/Impedance.jl` | Impedance-term assembly and derivatives. | `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_dZ_dtheta`. |
+| `src/Solve.jl` | Linear solves and conditioned systems. | `solve_forward`, `solve_system`, `assemble_full_Z`, `prepare_conditioned_system`. |
 
 ### 8.2 Key Data Structures
 
-**`RWG`** (defined in `src/RWG.jl`):
-- `plus_triangles::Vector{Int}` – indices of the “plus” triangle for each basis.
-- `minus_triangles::Vector{Int}` – indices of the “minus” triangle for each basis.
-- `plus_vertices::Vector{Int}` – vertex opposite the shared edge in the plus triangle.
-- `minus_vertices::Vector{Int}` – vertex opposite the shared edge in the minus triangle.
+**`RWGData`** (defined in `src/Types.jl` / constructed in `src/RWG.jl`):
+- `tplus::Vector{Int}` – indices of the “plus” triangle for each basis.
+- `tminus::Vector{Int}` – indices of the “minus” triangle for each basis.
+- `vplus_opp::Vector{Int}` – vertex opposite the shared edge in the plus triangle.
+- `vminus_opp::Vector{Int}` – vertex opposite the shared edge in the minus triangle.
+- `evert::Matrix{Int}` – edge-vertex indices for each basis.
 - `nedges::Int` – number of interior edges (equal to number of RWG basis functions).
-- `mesh::Mesh` – reference to the underlying mesh.
+- `mesh::TriMesh` – reference to the underlying mesh.
+- `len`, `area_plus`, `area_minus` – geometric factors used by `eval_rwg` and `div_rwg`.
 
-**`Mesh`** (defined in `src/Mesh.jl`):
-- `vertices::Matrix{Float64}` – `(3, nvertices)` array of vertex coordinates.
-- `triangles::Matrix{Int}` – `(3, ntriangles)` array of triangle vertex indices.
-- `nvertices`, `ntriangles` – counts.
+**`TriMesh`** (defined in `src/Types.jl`):
+- `xyz::Matrix{Float64}` – `(3, Nv)` array of vertex coordinates.
+- `tri::Matrix{Int}` – `(3, Nt)` array of triangle vertex indices.
+- `nvertices(mesh)` / `ntriangles(mesh)` – helper accessors.
 
 ### 8.3 Important Functions for Evaluation and Assembly
 
 | Function | File | Description |
 |----------|------|-------------|
-| `rwg_value(rwg, n, tidx, r)` | `src/RWG.jl` | Evaluate $\mathbf{f}_n(\mathbf{r})$ on triangle `tidx` at point `r`. |
+| `eval_rwg(rwg, n, r, tidx)` | `src/RWG.jl` | Evaluate $\mathbf{f}_n(\mathbf{r})$ on triangle `tidx` at point `r`. |
 | `div_rwg(rwg, n, tidx)` | `src/RWG.jl` | Return $\nabla_s\cdot\mathbf{f}_n$ on triangle `tidx` (constant). |
-| `edge_length(rwg, n)` | `src/RWG.jl` | Length $\ell_n$ of the edge associated with basis $n$. |
-| `triangle_area(rwg, tidx)` | `src/RWG.jl` | Area of triangle `tidx`. |
+| `rwg.len[n]` | `src/RWG.jl` | Length $\ell_n$ of the edge associated with basis $n$. |
+| `triangle_area(mesh, tidx)` | `src/Mesh.jl` | Area of triangle `tidx`. |
 | `basis_triangles(rwg, n)` | `src/RWG.jl` | Return `(plus_triangle, minus_triangle)` for basis $n$. |
-| `tri_quad_points(tri_verts, quad_rule)` | `src/Quadrature.jl` | Map quadrature points from reference to physical triangle. |
-| `assemble_Z_efie(mesh, rwg, quad_rule, k, impedance)` | `src/EFIE.jl` | Assemble the full EFIE impedance matrix. |
-| `green(k, R)` | `src/Green.jl` | Compute $e^{-ikR}/(4\pi R)$. |
+| `tri_quad_points(mesh, t, xi)` | `src/Quadrature.jl` | Map quadrature points from reference to physical triangle. |
+| `assemble_Z_efie(mesh, rwg, k; quad_order=3)` | `src/EFIE.jl` | Assemble the full EFIE impedance matrix. |
+| `greens(r, rp, k)` | `src/Greens.jl` | Compute $e^{-ikR}/(4\pi R)$. |
 
 ### 8.4 How to Extend the Code
 
 If you wish to implement a different integral equation (e.g., Magnetic Field Integral Equation, MFIE) or a higher‑order basis function, the following steps are recommended:
 
-1. **Add new basis functions** in a separate file (e.g., `src/HigherOrderBasis.jl`) following the pattern of `src/RWG.jl`. Provide evaluation and divergence routines.
-2. **Create a new assembly routine** in a file like `src/MFIE.jl` that mirrors the structure of `src/EFIE.jl` but implements the MFIE operator.
+1. **Add new basis functions** in a new source file under `src/` (for example, a future `HigherOrderBasis.jl`) following the pattern of `src/RWG.jl`. Provide evaluation and divergence routines.
+2. **Create a new assembly routine** in a new file under `src/` (for example, a future `MFIE.jl`) that mirrors the structure of `src/EFIE.jl` but implements the desired operator.
 3. **Extend the mesh quality checks** if the new basis requires additional geometric constraints (e.g., curved elements).
-4. **Integrate with the high‑level solver** by adding a new method to `solve_mom` in `src/MoM.jl` that selects the appropriate assembly routine.
+4. **Integrate with the solve path** by adding a wrapper that assembles your new operator and calls `solve_forward`/`solve_system` consistently.
 
 The modular design of `DifferentiableMoM.jl` separates geometry, basis functions, quadrature, and operator assembly, making such extensions straightforward.
 
@@ -742,11 +741,11 @@ The following exercises reinforce the key concepts of this chapter, ranging from
 
 ### 9.3 Coding and Verification
 
-9. **Mesh inspection script**: Write a Julia script that loads a mesh from a file (using `load_mesh` if available, or create one with `make_rect_plate`), runs `mesh_quality_report`, and prints a summary of any defects. Extend the script to compute the minimum and maximum triangle area, edge‑length ratio, and dihedral angle.
+9. **Mesh inspection script**: Write a Julia script that loads a mesh from a file (using `read_obj_mesh`, or create one with `make_rect_plate`), runs `mesh_quality_report`, and prints a summary of any defects.
 
 10. **RWG consistency check**: Implement the function `verify_rwg_consistency(rwg)` that loops over all basis functions and verifies the edge‑length relations from Exercise 7. The function should return `true` if all checks pass within a tolerance of $10^{-12}$ and `false` otherwise.
 
-11. **Quadrature convergence**: Choose a simple analytic function $f(\mathbf{r}) = x^2 + y^2$ defined on a triangle. Compute its integral over the triangle using the quadrature rules `tri_quad_rule(1)`, `tri_quad_rule(2)`, and `tri_quad_rule(3)` (increasing order). Compare with the exact integral obtained from analytic geometry and plot the error vs. number of quadrature points.
+11. **Quadrature convergence**: Choose a simple analytic function $f(\mathbf{r}) = x^2 + y^2$ defined on a triangle. Compute its integral over the triangle using `tri_quad_rule(1)`, `tri_quad_rule(3)`, `tri_quad_rule(4)`, and `tri_quad_rule(7)`. Compare with the exact integral obtained from analytic geometry and plot the error vs. number of quadrature points.
 
 12. **Basis function plotter**: Using a plotting package of your choice (e.g., `Plots.jl` with `pyplot` backend), visualize the vector field of an RWG basis function on its two supporting triangles. Represent the current direction with arrows and use a color map to indicate the magnitude.
 
@@ -756,7 +755,7 @@ The following exercises reinforce the key concepts of this chapter, ranging from
 
 14. **Singular integration**: Investigate the accuracy of Gaussian quadrature for the double‑surface integral $V_{mn}$ when triangles $T_m$ and $T_n$ are close together. Write a script that computes $V_{mn}$ for a fixed pair of triangles as their separation distance $d$ decreases from $0.1\lambda$ to $10^{-6}\lambda$. Plot the relative error (compared to a reference high‑order quadrature) vs. $d$ and discuss the onset of the “singular integration” problem.
 
-15. **Differentiable assembly**: The package is called `DifferentiableMoM.jl` because its assembly routines are differentiable with respect to parameters like frequency or impedance. Write a simple test that uses `Zygote.jl` or `ForwardDiff.jl` to compute the derivative $\partial Z_{mn}/\partial k$ for a few matrix entries and verify the result against a finite‑difference approximation.
+15. **Differentiable assembly**: The package provides derivative-verification utilities (`complex_step_grad`, `fd_grad`) in `src/Verification.jl`. Write a small test that checks ``\partial Z_{mn}/\partial k`` for selected entries against a centered finite-difference estimate.
 
 ---
 

@@ -194,15 +194,17 @@ rwg = build_rwg(mesh)
 # ------------------------------
 # 3. Patch partition (e.g., 10×10 patches)
 # ------------------------------
-nx_patches, ny_patches = 10, 10
-partition = create_grid_partition(mesh, nx_patches, ny_patches)  # hypothetical function
+ntri = ntriangles(mesh)
+partition = PatchPartition(collect(1:ntri), ntri)  # one patch per triangle (simple runnable setup)
 Mp = precompute_patch_mass(mesh, rwg, partition; quad_order=3)
 P = length(Mp)
 
 # ------------------------------
 # 4. Incident field (broadside)
 # ------------------------------
-v = assemble_v_plane_wave(mesh, rwg, k, 0.0, 0.0, 1.0, :θ)
+k_vec = Vec3(0.0, 0.0, -k)
+pol_inc = Vec3(1.0, 0.0, 0.0)
+v = assemble_v_plane_wave(mesh, rwg, k_vec, 1.0, pol_inc; quad_order=3)
 
 # ------------------------------
 # 5. EFIE matrix (parameter‑independent)
@@ -402,7 +404,7 @@ Use this checklist when an optimization fails or behaves unexpectedly:
 - **`src/QMatrix.jl`** – Objective matrix construction.
 - **`src/Visualization.jl`** – Plotting impedance distributions and far‑field patterns.
 - **`examples/ex_beam_steer.jl`** – Complete beam‑steering example.
-- **`examples/ex_optimization_workflow.jl`** – Demonstration of the full workflow.
+- **`examples/ex_beam_steer.jl`** – Demonstration of the full workflow.
 
 ---
 

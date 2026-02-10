@@ -52,7 +52,7 @@ The example expects an OBJ file named `Airplane.obj` in the parent directory. Yo
 From the project root:
 
 ```bash
-julia --project=. examples/ex_airplane_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 **Arguments:**
@@ -128,7 +128,7 @@ Open the saved OBJ files in a mesh viewer (e.g., MeshLab, Blender) to verify rep
 A separate plotting script reads the CSV files and creates a two‑panel figure:
 
 ```bash
-julia --project=. examples/plot_airplane_rcs.jl
+julia --project=. examples/ex_obj_rcs_pipeline.jl
 ```
 
 This produces `figs/airplane_rcs_heuristic.{png,pdf}` with:
@@ -163,7 +163,9 @@ CAD models often use arbitrary units (mm, inches, dimensionless). The `scale_to_
 | `allow_boundary=true` | Permit open surfaces (e.g., aircraft without interior) |
 | `require_closed=false` | Do not insist on watertight mesh |
 
-The function returns a `RepairResult` with counters of flipped triangles, removed vertices, etc.
+The function returns a named tuple with before/after quality reports and
+repair counters (flipped triangles, removed invalid/degenerate/non-manifold
+triangles, and final mesh quality status).
 
 ### Coarsening to Target RWG Count
 
@@ -287,8 +289,8 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 | **RWG building** | `build_rwg` | `src/RWG.jl` | 50–80 |
 | **Memory estimate** | `estimate_dense_matrix_gib` | `src/Mesh.jl` | 200–220 |
 | **Mesh preview** | `save_mesh_preview` | `src/Visualization.jl` | 150–200 |
-| **Complete pipeline** | `ex_airplane_rcs.jl` | `examples/` | full script |
-| **Plotting** | `plot_airplane_rcs.jl` | `examples/` | full script |
+| **Complete pipeline (repair + solve + plot)** | `ex_obj_rcs_pipeline.jl` | `examples/` | full script (`full`, `repair`, `plot` subcommands) |
+| **Plotting-only mode** | `ex_obj_rcs_pipeline.jl plot ...` | `examples/` | same script, plot subcommand |
 
 ---
 
@@ -298,13 +300,13 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 
 1. **Run the pipeline** with a simple sphere OBJ (generate with `write_icosphere_obj`). Compare monostatic RCS with the Mie solution (Tutorial 4). How does coarsening affect accuracy?
 2. **Vary target RWG** (200, 400, 600) and plot monostatic RCS vs unknown count. Is there convergence?
-3. **Inspect coarsening artifacts**: Load `airplane_coarse.obj` in a mesh viewer and identify regions where triangle density is disproportionately reduced.
+3. **Inspect coarsening artifacts**: Load the generated `<tag>_coarse.obj` (for the default run: `data/demo_aircraft_coarse.obj`) in a mesh viewer and identify regions where triangle density is disproportionately reduced.
 
 ### Practical (90 minutes)
 
 1. **Import a real CAD model** (e.g., vehicle, drone). Adjust `scale_to_m` to achieve plausible physical size (e.g., 5 m wingspan). Run the pipeline and discuss plausible vs unphysical RCS features.
 2. **Implement adaptive coarsening**: Modify the script to coarsen until memory estimate ≤ 2 GiB (instead of fixed RWG target). Use `estimate_dense_matrix_gib` in the loop.
-3. **Add incidence‑angle sweep**: Modify `ex_airplane_rcs.jl` to compute monostatic RCS for 5 incidence directions (θ = 0°, 45°, 90°, 135°, 180°). Plot RCS vs incidence angle.
+3. **Add incidence‑angle sweep**: Modify `ex_obj_rcs_pipeline.jl` (`run_full`) to compute monostatic RCS for 5 incidence directions (θ = 0°, 45°, 90°, 135°, 180°). Plot RCS vs incidence angle.
 
 ### Advanced (2 hours)
 

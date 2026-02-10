@@ -7,10 +7,10 @@ This document outlines the development path to evolve `DifferentiableMoM.jl` fro
 The codebase currently provides:
 - **Specialization**: Differentiable EFIE-MoM for reactive impedance metasurface design
 - **Completeness**: Full forward-adjoint-gradient pipeline with verification
-- **Validation**: Internal consistency, Mie benchmarks, Bempp-cl cross-validation
-- **Scope**: PEC + surface impedance sheets only, dense assembly, direct solves
+- **Validation**: Internal consistency, dipole/loop analytical gates, Mie benchmarks, Bempp-cl cross-validation
+- **Scope**: PEC + surface impedance sheets only, dense assembly, direct solves, strong excitation/mesh tooling
 
-For a general EM MoM solver, the codebase is approximately **20-30% complete** in terms of feature coverage.
+For a general EM MoM solver, the codebase is approximately **30-40% complete** in terms of feature coverage.
 
 ## Development Philosophy
 1. **Maintain differentiable first**: All new features must support adjoint gradients
@@ -45,10 +45,23 @@ For a general EM MoM solver, the codebase is approximately **20-30% complete** i
 
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
-| **Port excitations** | Waveguide, coax, delta-gap sources | Modal expansion, voltage/current sources | [x] (basic edge/delta-gap model) |
-| **Near-field sources** | Dipoles, loops, arbitrary current sources | Analytical or imported field patterns | [x] |
+| **Port excitations** | Waveguide, coax, delta-gap sources | Modal expansion, voltage/current sources | [ ] (basic edge/delta-gap implemented; waveguide/coax modal ports pending) |
+| **Near-field sources** | Dipoles, loops, arbitrary current sources | Analytical or imported field patterns | [x] (dipole/loop + analytical CI gates) |
 | **Multiple excitations** | Simultaneous multi-source problems | Multi-RHS solves, block operations | [x] |
 | **Incident field import** | Measured/numerical incident fields | Field interpolation onto mesh | [x] |
+| **Pattern-feed import** | Imported spherical ``E_\theta/E_\phi`` data | Bilinear interpolation + convention handling | [x] |
+| **Reflector-feed workflow** | Imported feed + reflector illumination demo | Pattern adapter + reflector mesh example | [x] |
+
+### 1.4 Geometry and Mesh Workflow
+**Priority: High** | 
+
+| Feature | Description | Implementation Path | Status |
+|---------|-------------|-------------------|--------|
+| **Mesh quality precheck** | Manifoldness/degeneracy/orientation checks | `mesh_quality_report`, `assert_mesh_quality` | [x] |
+| **Automatic mesh repair** | Drop invalid/degenerate triangles, fix orientation | `repair_mesh_for_simulation` / `repair_obj_mesh` | [x] |
+| **Automatic mesh coarsening** | Target RWG-count reduction for large OBJ meshes | `coarsen_mesh_to_target_rwg` | [x] |
+| **Reflector geometry builder** | Open parabolic reflector mesh for feed studies | `make_parabolic_reflector` | [x] |
+| **General CAD formats (STEP/IGES)** | Native CAD import without external conversion | MeshIO/geometry bridge | [ ] |
 
 ## Phase 2: Computational Scalability 
 
@@ -68,7 +81,7 @@ For a general EM MoM solver, the codebase is approximately **20-30% complete** i
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
 | **GMRES** | Generalized Minimal Residual method | `IterativeSolvers.jl` integration | [ ] |
-| **Preconditioners** | Calderón, loop-star, sparse approximate inverse | New `Preconditioners.jl` module | [x] (basic mass-based regularization/left preconditioning) |
+| **Preconditioners** | Calderón, loop-star, sparse approximate inverse | New `Preconditioners.jl` module | [ ] (mass-based regularization/left preconditioning + `:auto` implemented) |
 | **Deflation** | Deflated GMRES for multiple RHS | Spectral information reuse | [ ] |
 | **Krylov recycling** | Recycled Krylov subspaces | For parameter sweeps | [ ] |
 
@@ -121,9 +134,9 @@ For a general EM MoM solver, the codebase is approximately **20-30% complete** i
 
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
-| **Benchmark suite** | Standard test cases (NASA almond, etc.) | Reference solutions database | [x] (initial suite: sphere-Mie + cross-validation workflows) |
+| **Benchmark suite** | Standard test cases (sphere, canonical PEC bodies, etc.) | Reference solutions database + CI gates | [x] (sphere-Mie + dipole/loop + pattern-feed + cross-validation workflows) |
 | **Measurement validation** | Comparison with experimental data | Import/export utilities | [ ] |
-| **Multi-solver validation** | Cross-validation with 3+ other solvers | Automated comparison framework | [ ] |
+| **Multi-solver validation** | Cross-validation with 3+ other solvers | Automated comparison framework | [ ] (initial Bempp-cl workflow exists; additional solvers pending) |
 | **Uncertainty quantification** | Numerical error estimation | Sensitivity to discretization parameters | [ ] |
 
 ### 4.2 User Experience and Integration
@@ -132,6 +145,7 @@ For a general EM MoM solver, the codebase is approximately **20-30% complete** i
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
 | **GUI/Visualization** | Interactive simulation setup and results | `Makie.jl`/`Pluto.jl` integration | [ ] |
+| **OBJ/MAT geometry workflow** | Practical import/repair/coarsen/plot pipeline | `ex_obj_rcs_pipeline.jl` | [x] |
 | **CAD import/export** | Standard format support (STEP, IGES) | `MeshIO.jl` extensions | [ ] |
 | **Python interface** | PyCall/Juliacall for Python users | Wrapper generation | [ ] |
 | **Cloud deployment** | Web interface for educational use | `Genie.jl` web framework | [ ] |
@@ -185,4 +199,4 @@ For a general EM MoM solver, the codebase is approximately **20-30% complete** i
 
 
 ---
-*Last updated: February 2026*
+*Last updated: February 10, 2026*

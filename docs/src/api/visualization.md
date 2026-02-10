@@ -91,7 +91,7 @@ println(preview.png_path)
 
 - Implementation: `src/Visualization.jl`
 - Mesh segment source: `src/Mesh.jl` (`mesh_wireframe_segments`)
-- Example usage: `examples/ex_visualize_simulation_mesh.jl`, `examples/ex_airplane_rcs.jl`
+- Example usage: `examples/ex_visualize_simulation_mesh.jl`, `examples/ex_obj_rcs_pipeline.jl`
 
 ---
 

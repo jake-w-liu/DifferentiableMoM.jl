@@ -399,9 +399,9 @@ solution_coarse = solve_efie(mesh_coarse, rwg_coarse)
 
 ### 6.2 Example Scripts
 
-- **Mesh repair demonstration**: `examples/ex_repair_obj_mesh.jl`
-- **Aircraft RCS workflow**: `examples/ex_airplane_rcs.jl`
-- **Coarsening in pipeline**: `examples/ex_airplane_rcs.jl`
+- **Mesh repair demonstration**: `examples/ex_obj_rcs_pipeline.jl`
+- **Aircraft RCS workflow**: `examples/ex_obj_rcs_pipeline.jl`
+- **Coarsening in pipeline**: `examples/ex_obj_rcs_pipeline.jl`
 
 ### 6.3 Supporting Functions
 

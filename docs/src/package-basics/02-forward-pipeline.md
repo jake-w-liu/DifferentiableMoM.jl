@@ -474,7 +474,7 @@ Combine with other techniques:
 
 - **Forward solve / convergence**: `examples/ex_convergence.jl`
 - **Beam objective workflow**: `examples/ex_beam_steer.jl`
-- **Complex mesh forward solve**: `examples/ex_airplane_rcs.jl`
+- **Complex mesh forward solve**: `examples/ex_obj_rcs_pipeline.jl`
 
 ---
 

@@ -38,7 +38,7 @@ Complex CAD meshes exported as OBJ files often contain geometric and topological
 
 - **`mesh_quality_report(mesh)`** – prints counts of vertices, triangles, manifold edges, boundary edges, non‑manifold edges, degenerate triangles, and connected components.
 - **`plot_mesh_wireframe`** – visual inspection of overall shape, scale, and connectivity.
-- **`repair_mesh_for_simulation`** – returns a `RepairResult` structure detailing flipped triangles, removed triangles, and topology changes.
+- **`repair_mesh_for_simulation`** – returns a named tuple detailing flipped triangles, removed triangles, and before/after topology diagnostics.
 
 **Reference:** Part II, Chapter 1 (Mesh Pipeline) provides a comprehensive treatment of mesh quality criteria and repair algorithms.
 
@@ -195,7 +195,7 @@ Complex CAD platforms typically contain $10^4$–$10^6$ triangles, far beyond th
 
 ### 4.3 Example: Aircraft RCS Convergence
 
-The script `examples/ex_airplane_rcs.jl` includes an optional coarsening step. Extend it to loop over target RWG counts and produce a convergence table:
+The script `examples/ex_obj_rcs_pipeline.jl` includes an optional coarsening step. Extend it to loop over target RWG counts and produce a convergence table:
 
 ```julia
 targets = [200, 400, 800, 1600, 3200]
@@ -222,7 +222,7 @@ Plot `backscatter_db` vs. `targets` to identify the “knee” where further ref
 
 ### 5.2 Example Scripts
 
-- **`examples/ex_airplane_rcs.jl`** – complete workflow for a complex platform: import, repair, coarsening, solve, far‑field and RCS extraction. This script is the reference implementation for this chapter.
+- **`examples/ex_obj_rcs_pipeline.jl`** – complete workflow for a complex platform: import, repair, coarsening, solve, far‑field and RCS extraction. This script is the reference implementation for this chapter.
 - **`examples/ex_visualize_simulation_mesh.jl`** – focuses on visualization and comparison of repaired vs. simulation meshes.
 
 ### 5.3 Supporting Utilities
@@ -269,4 +269,4 @@ Before applying the platform workflow to a new CAD model, ensure you can:
 - **CAD for EM:** Davidson, *CAD for Microwave and Electromagnetic Systems* (2012) – discusses geometry cleanup and meshing for computational electromagnetics.
 - **Mesh repair algorithms:** Attene et al., *Mesh Repair* (2013) – survey of techniques for fixing non‑manifold edges, degenerate triangles, and orientation inconsistencies.
 - **Platform RCS prediction:** Knott et al., *Radar Cross Section* (1993) – classic text on scattering from complex targets.
-- **Package examples:** `examples/ex_airplane_rcs.jl` – a ready‑to‑run implementation of the workflow described in this chapter.
+- **Package examples:** `examples/ex_obj_rcs_pipeline.jl` – a ready‑to‑run implementation of the workflow described in this chapter.
