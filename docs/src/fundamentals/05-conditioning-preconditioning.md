@@ -23,13 +23,13 @@ After this chapter, you should be able to:
 
 ### 1.1 Mathematical Definition of Condition Number
 
-For a non‑singular matrix ``\mathbf{Z} \in \mathbb{C}^{N\times N}``, the condition number with respect to the Euclidean (spectral) norm is defined as
+For a non‑singular matrix $\mathbf{Z} \in \mathbb{C}^{N\times N}$, the condition number with respect to the Euclidean (spectral) norm is defined as
 
 ```math
 \kappa(\mathbf{Z}) = \|\mathbf{Z}\|_2 \cdot \|\mathbf{Z}^{-1}\|_2 = \frac{\sigma_{\max}(\mathbf{Z})}{\sigma_{\min}(\mathbf{Z})},
 ```
 
-where ``\sigma_{\max}`` and ``\sigma_{\min}`` are the largest and smallest singular values of ``\mathbf{Z}``. The condition number measures the sensitivity of the solution ``\mathbf{I}`` to perturbations in the data (``\mathbf{v}``) or in the matrix itself. Specifically, for the perturbed system
+where $\sigma_{\max}$ and $\sigma_{\min}$ are the largest and smallest singular values of $\mathbf{Z}$. The condition number measures the sensitivity of the solution $\mathbf{I}$ to perturbations in the data ($\mathbf{v}$) or in the matrix itself. Specifically, for the perturbed system
 
 ```math
 (\mathbf{Z} + \delta\mathbf{Z})(\mathbf{I} + \delta\mathbf{I}) = \mathbf{v} + \delta\mathbf{v},
@@ -41,27 +41,27 @@ the relative error in the solution satisfies (to first order)
 \frac{\|\delta\mathbf{I}\|}{\|\mathbf{I}\|} \lesssim \kappa(\mathbf{Z})\left(\frac{\|\delta\mathbf{Z}\|}{\|\mathbf{Z}\|} + \frac{\|\delta\mathbf{v}\|}{\|\mathbf{v}\|}\right).
 ```
 
-Thus, when ``\kappa(\mathbf{Z})`` is large, small errors in the matrix entries or the right‑hand side can be amplified dramatically in the computed solution.
+Thus, when $\kappa(\mathbf{Z})$ is large, small errors in the matrix entries or the right‑hand side can be amplified dramatically in the computed solution.
 
 ### 1.2 Why EFIE Matrices Are Ill‑Conditioned
 
-The EFIE operator ``\mathcal{T}`` defined in Chapter 2 is a **first‑kind integral operator** mapping surface currents to tangential electric fields. Such operators are known to be **ill‑posed** in the sense of Hadamard: their discretizations yield matrices with rapidly decaying singular values, leading to large condition numbers. Two primary mechanisms contribute to the ill‑conditioning of ``\mathbf{Z}^{\mathrm{EFIE}}``:
+The EFIE operator $\mathcal{T}$ defined in Chapter 2 is a **first‑kind integral operator** mapping surface currents to tangential electric fields. Such operators are known to be **ill‑posed** in the sense of Hadamard: their discretizations yield matrices with rapidly decaying singular values, leading to large condition numbers. Two primary mechanisms contribute to the ill‑conditioning of $\mathbf{Z}^{\mathrm{EFIE}}$:
 
-1. **Low‑frequency breakdown**: At frequencies where ``k h \ll 1`` (electrically small triangles), the scalar‑potential term ``S_{mn}`` dominates and scales as ``O(1/k^2)``, while the vector‑potential term ``V_{mn}`` scales as ``O(1)``. This imbalance makes the matrix **nearly singular**, with ``\kappa(\mathbf{Z}) \sim O(1/k^2)`` as ``k\to 0``.
+1. **Low‑frequency breakdown**: At frequencies where $k h \ll 1$ (electrically small triangles), the scalar‑potential term $S_{mn}$ dominates and scales as $O(1/k^2)$, while the vector‑potential term $V_{mn}$ scales as $O(1)$. This imbalance makes the matrix **nearly singular**, with $\kappa(\mathbf{Z}) \sim O(1/k^2)$ as $k\to 0$.
 
-2. **Mesh refinement**: For a fixed frequency, refining the mesh (decreasing triangle size ``h``) increases the condition number as ``\kappa(\mathbf{Z}) \sim O(1/h)`` for EFIE discretized with RWG basis functions. This growth occurs because finer meshes better approximate the null‑space of the continuous operator.
+2. **Mesh refinement**: For a fixed frequency, refining the mesh (decreasing triangle size $h$) increases the condition number as $\kappa(\mathbf{Z}) \sim O(1/h)$ for EFIE discretized with RWG basis functions. This growth occurs because finer meshes better approximate the null‑space of the continuous operator.
 
 3. **High‑aspect‑ratio geometry**: Structures with thin features or large aspect ratios produce matrices with widely varying entries, further exacerbating ill‑conditioning.
 
 ### 1.3 Physical Interpretation of Ill‑Conditioning
 
-Physically, a large condition number indicates that the surface current solution ``\mathbf{J}`` is **highly sensitive** to the incident field ``\mathbf{E}^{\mathrm{inc}}``. In the limit ``k\to 0``, the EFIE reduces to the static electric field integral equation, which has a non‑trivial null‑space: any **solenoidal** (divergence‑free) current produces zero tangential electric field. At low but nonzero frequencies, these near‑null modes correspond to **loop currents** that hardly radiate. The matrix ``\mathbf{Z}`` has very small singular values associated with these modes, making them difficult to resolve numerically.
+Physically, a large condition number indicates that the surface current solution $\mathbf{J}$ is **highly sensitive** to the incident field $\mathbf{E}^{\mathrm{inc}}$. In the limit $k\to 0$, the EFIE reduces to the static electric field integral equation, which has a non‑trivial null‑space: any **solenoidal** (divergence‑free) current produces zero tangential electric field. At low but nonzero frequencies, these near‑null modes correspond to **loop currents** that hardly radiate. The matrix $\mathbf{Z}$ has very small singular values associated with these modes, making them difficult to resolve numerically.
 
 From an energy perspective, ill‑conditioning manifests as a huge disparity between the **easiest** and **hardest** current distributions to excite: the dominant singular vectors correspond to currents that efficiently radiate (dipole‑like), while the weakest singular vectors correspond to currents that store energy in near‑fields without radiating (loop‑like).
 
 ### 1.4 Symptoms of Poor Conditioning
 
-When ``\kappa(\mathbf{Z})`` exceeds ``10^8``–``10^{12}`` (typical for EFIE at low frequencies or on fine meshes), one observes:
+When $\kappa(\mathbf{Z})$ exceeds $10^8$–$10^{12}$ (typical for EFIE at low frequencies or on fine meshes), one observes:
 
 - **Slow iterative convergence**: Krylov methods like GMRES or Bi‑CGSTAB require many iterations to reduce the residual, because the eigenvalue spectrum is widely spread.
 - **Loss of numerical precision**: Direct solves (LU factorization) may produce solutions with fewer than half the machine‑precision digits, due to amplification of rounding errors during back‑substitution.
@@ -82,19 +82,19 @@ println("Largest singular value = ", stats.sv_max)
 println("Smallest singular value = ", stats.sv_min)
 ```
 
-The function computes the singular values via a full SVD (feasible for ``N \lesssim 5000``) and returns a named tuple with the condition number and the extreme singular values. For larger matrices, estimating the condition number without a full SVD is possible via iterative methods, but this is not currently implemented in the package.
+The function computes the singular values via a full SVD (feasible for $N \lesssim 5000$) and returns a named tuple with the condition number and the extreme singular values. For larger matrices, estimating the condition number without a full SVD is possible via iterative methods, but this is not currently implemented in the package.
 
 **Interpretation guidelines**:
-- ``\kappa < 10^6``: well‑conditioned, direct solves are accurate.
-- ``10^6 \le \kappa < 10^{10}``: moderately ill‑conditioned, may benefit from preconditioning.
-- ``\kappa \ge 10^{10}``: severely ill‑conditioned, preconditioning or regularization is essential.
+- $\kappa < 10^6$: well‑conditioned, direct solves are accurate.
+- $10^6 \le \kappa < 10^{10}$: moderately ill‑conditioned, may benefit from preconditioning.
+- $\kappa \ge 10^{10}$: severely ill‑conditioned, preconditioning or regularization is essential.
 
 ### 1.6 Connection to Low‑Frequency Stabilization Techniques
 
 The ill‑conditioning of the EFIE at low frequencies has motivated several stabilization techniques in the literature, including:
 - **Loop‑tree decomposition**: Separates solenoidal (loop) and non‑solenoidal (tree) components of the current, preconditioning each subspace differently.
 - **Augmented EFIE (A‑EFIE)**: Adds a charge neutrality constraint to suppress the near‑null space.
-- **Calderón preconditioning**: Uses the operator product ``\mathcal{T}^2`` which is better conditioned than ``\mathcal{T}``.
+- **Calderón preconditioning**: Uses the operator product $\mathcal{T}^2$ which is better conditioned than $\mathcal{T}$.
 
 `DifferentiableMoM.jl` adopts a simpler, more general approach: **mass‑based regularization** and **left preconditioning**, described in the following sections. These methods are easier to implement, preserve differentiability, and work adequately for many practical scenarios.
 
@@ -102,7 +102,7 @@ The ill‑conditioning of the EFIE at low frequencies has motivated several stab
 
 ## 2. Regularization: Adding a Stabilizing Shift
 
-Regularization is a simple yet effective technique for stabilizing ill‑conditioned EFIE matrices. By adding a small, positive‑definite perturbation ``\alpha\mathbf{R}`` to the impedance matrix ``\mathbf{Z}``, we shift its eigenvalues away from zero, thereby improving the condition number and numerical stability of the linear solve. This section explains the mathematical foundation of regularization, its physical interpretation, practical guidelines for choosing the regularization parameter ``\alpha`` and matrix ``\mathbf{R}``, and how regularization is implemented in `DifferentiableMoM.jl`.
+Regularization is a simple yet effective technique for stabilizing ill‑conditioned EFIE matrices. By adding a small, positive‑definite perturbation $\alpha\mathbf{R}$ to the impedance matrix $\mathbf{Z}$, we shift its eigenvalues away from zero, thereby improving the condition number and numerical stability of the linear solve. This section explains the mathematical foundation of regularization, its physical interpretation, practical guidelines for choosing the regularization parameter $\alpha$ and matrix $\mathbf{R}$, and how regularization is implemented in `DifferentiableMoM.jl`.
 
 ### 2.1 Mathematical Formulation
 
@@ -112,23 +112,23 @@ The regularized system is defined as
 \mathbf{Z}_\alpha = \mathbf{Z} + \alpha\mathbf{R}, \qquad \alpha \ge 0,
 ```
 
-where ``\mathbf{R} \succeq 0`` is a **Hermitian positive semi‑definite** matrix. The regularization term ``\alpha\mathbf{R}`` acts as a **Tikhonov regularizer** that penalizes solutions with large “energy” measured by the quadratic form ``\mathbf{I}^\dagger\mathbf{R}\mathbf{I}``. The regularized linear system becomes
+where $\mathbf{R} \succeq 0$ is a **Hermitian positive semi‑definite** matrix. The regularization term $\alpha\mathbf{R}$ acts as a **Tikhonov regularizer** that penalizes solutions with large “energy” measured by the quadratic form $\mathbf{I}^\dagger\mathbf{R}\mathbf{I}$. The regularized linear system becomes
 
 ```math
 (\mathbf{Z} + \alpha\mathbf{R})\mathbf{I} = \mathbf{v}.
 ```
 
-If ``\mathbf{R}`` is positive definite, the eigenvalues ``\lambda_i(\mathbf{Z}_\alpha)`` satisfy
+If $\mathbf{R}$ is positive definite, the eigenvalues $\lambda_i(\mathbf{Z}_\alpha)$ satisfy
 
 ```math
 \lambda_i(\mathbf{Z}_\alpha) = \lambda_i(\mathbf{Z}) + \alpha\lambda_i(\mathbf{R}) \quad \text{for } i=1,\dots,N.
 ```
 
-Since ``\lambda_i(\mathbf{R}) \ge 0``, the regularization shifts all eigenvalues to the right (in the complex plane), moving small eigenvalues away from the origin and reducing the condition number.
+Since $\lambda_i(\mathbf{R}) \ge 0$, the regularization shifts all eigenvalues to the right (in the complex plane), moving small eigenvalues away from the origin and reducing the condition number.
 
 ### 2.2 Physical Interpretation
 
-What does regularization mean physically? For the EFIE, the matrix ``\mathbf{Z}`` represents the mapping from surface currents to tangential electric fields. The regularization term ``\alpha\mathbf{R}`` can be interpreted as adding a small **artificial impedance** to the scatterer. Specifically, if ``\mathbf{R}`` is chosen as the **mass matrix** (Gram matrix of the RWG basis functions), then
+What does regularization mean physically? For the EFIE, the matrix $\mathbf{Z}$ represents the mapping from surface currents to tangential electric fields. The regularization term $\alpha\mathbf{R}$ can be interpreted as adding a small **artificial impedance** to the scatterer. Specifically, if $\mathbf{R}$ is chosen as the **mass matrix** (Gram matrix of the RWG basis functions), then
 
 ```math
 \mathbf{I}^\dagger\mathbf{R}\mathbf{I} = \int_\Gamma |\mathbf{J}(\mathbf{r})|^2\, dS
@@ -140,35 +140,35 @@ measures the total squared magnitude of the surface current. The regularized equ
 \mathcal{T}[\mathbf{J}] + \alpha\mathbf{J} = -\mathbf{E}_t^{\mathrm{inc}}
 ```
 
-corresponds to adding a resistive sheet with surface impedance ``\alpha`` (in ohms) everywhere on the scatterer. This resistive term dissipates energy, making the problem **less singular** and stabilizing the numerical solution.
+corresponds to adding a resistive sheet with surface impedance $\alpha$ (in ohms) everywhere on the scatterer. This resistive term dissipates energy, making the problem **less singular** and stabilizing the numerical solution.
 
-### 2.3 Choice of Regularization Matrix ``\mathbf{R}``
+### 2.3 Choice of Regularization Matrix $\mathbf{R}$
 
-The package provides two main choices for ``\mathbf{R}``:
+The package provides two main choices for $\mathbf{R}$:
 
-1. **Identity matrix** (``\mathbf{R} = \mathbf{I}``): The simplest regularizer, which penalizes the Euclidean norm of the coefficient vector ``\mathbf{I}``. This corresponds to adding a uniform resistive sheet with isotropic surface impedance ``\alpha``. While easy to implement, it lacks geometric invariance and may distort the physical solution more than necessary.
+1. **Identity matrix** ($\mathbf{R} = \mathbf{I}$): The simplest regularizer, which penalizes the Euclidean norm of the coefficient vector $\mathbf{I}$. This corresponds to adding a uniform resistive sheet with isotropic surface impedance $\alpha$. While easy to implement, it lacks geometric invariance and may distort the physical solution more than necessary.
 
-2. **Patch mass matrix** (``\mathbf{R} = \sum_p \mathbf{M}_p``): The default choice in `DifferentiableMoM.jl`. Here ``\mathbf{M}_p`` are the patch mass matrices introduced in Chapter 3 for impedance boundary conditions. The sum ``\sum_p \mathbf{M}_p`` is the **global mass matrix** of the RWG basis, which respects the geometry of the discretization and yields a regularizer that is **dimensionally consistent** with the EFIE operator.
+2. **Patch mass matrix** ($\mathbf{R} = \sum_p \mathbf{M}_p$): The default choice in `DifferentiableMoM.jl`. Here $\mathbf{M}_p$ are the patch mass matrices introduced in Chapter 3 for impedance boundary conditions. The sum $\sum_p \mathbf{M}_p$ is the **global mass matrix** of the RWG basis, which respects the geometry of the discretization and yields a regularizer that is **dimensionally consistent** with the EFIE operator.
 
 
-### 2.4 Selecting the Regularization Parameter ``\alpha``
+### 2.4 Selecting the Regularization Parameter $\alpha$
 
-The parameter ``\alpha`` controls the trade‑off between stability and accuracy:
-- **Too small** (``\alpha \ll \sigma_{\min}(\mathbf{Z})``): insufficient stabilization, condition number remains large.
-- **Too large** (``\alpha \gg \sigma_{\min}(\mathbf{Z})``): solution is overly damped, physical fidelity is lost.
+The parameter $\alpha$ controls the trade‑off between stability and accuracy:
+- **Too small** ($\alpha \ll \sigma_{\min}(\mathbf{Z})$): insufficient stabilization, condition number remains large.
+- **Too large** ($\alpha \gg \sigma_{\min}(\mathbf{Z})$): solution is overly damped, physical fidelity is lost.
 
-A practical heuristic is to choose ``\alpha`` relative to the **average diagonal entry** of ``\mathbf{Z}`` or the **trace** of ``\mathbf{R}``. The package uses the scale
+A practical heuristic is to choose $\alpha$ relative to the **average diagonal entry** of $\mathbf{Z}$ or the **trace** of $\mathbf{R}$. The package uses the scale
 
 ```math
 \alpha = \epsilon \cdot \frac{\operatorname{tr}(\mathbf{R})}{N},
 ```
 
-where ``\epsilon`` is a user‑supplied relative tolerance (typically ``10^{-8}`` to ``10^{-12}``). This ensures that the regularization perturbation is small compared to the typical magnitude of ``\mathbf{Z}``.
+where $\epsilon$ is a user‑supplied relative tolerance (typically $10^{-8}$ to $10^{-12}$). This ensures that the regularization perturbation is small compared to the typical magnitude of $\mathbf{Z}$.
 
 **Recommended values**:
-- ``\epsilon = 10^{-10}`` for moderate ill‑conditioning (``\kappa \sim 10^8``).
-- ``\epsilon = 10^{-8}`` for severe ill‑conditioning (``\kappa \sim 10^{12}``).
-- ``\epsilon = 0`` (no regularization) for well‑conditioned problems.
+- $\epsilon = 10^{-10}$ for moderate ill‑conditioning ($\kappa \sim 10^8$).
+- $\epsilon = 10^{-8}$ for severe ill‑conditioning ($\kappa \sim 10^{12}$).
+- $\epsilon = 0$ (no regularization) for well‑conditioned problems.
 
 ### 2.5 Implementation in `prepare_conditioned_system`
 
@@ -191,29 +191,29 @@ If `regularization_alpha` is nonzero and `regularization_R` is provided, the fun
 \mathbf{v}_{\mathrm{eff}} = \mathbf{v}.
 ```
 
-The regularized matrix ``\mathbf{Z}_{\mathrm{eff}}`` is then passed to the linear solver (direct or iterative).
+The regularized matrix $\mathbf{Z}_{\mathrm{eff}}$ is then passed to the linear solver (direct or iterative).
 
 ### 2.6 Adjoint Consistency
 
-When regularization is used in **forward solves**, the **adjoint solves** must employ the **same regularized operator** to guarantee consistent gradients. This is automatically handled by `prepare_conditioned_system`: both forward and adjoint solves receive the same ``\mathbf{Z}_{\mathrm{eff}}``.
+When regularization is used in **forward solves**, the **adjoint solves** must employ the **same regularized operator** to guarantee consistent gradients. This is automatically handled by `prepare_conditioned_system`: both forward and adjoint solves receive the same $\mathbf{Z}_{\mathrm{eff}}$.
 
-Mathematically, the adjoint variable ``\boldsymbol{\lambda}`` satisfies
+Mathematically, the adjoint variable $\boldsymbol{\lambda}$ satisfies
 
 ```math
 (\mathbf{Z} + \alpha\mathbf{R})^\dagger \boldsymbol{\lambda} = \frac{\partial \Phi}{\partial \mathbf{I}^*},
 ```
 
-where ``\Phi`` is the objective function. Using a different operator in the adjoint equation would yield incorrect gradients, potentially breaking gradient‑based optimization.
+where $\Phi$ is the objective function. Using a different operator in the adjoint equation would yield incorrect gradients, potentially breaking gradient‑based optimization.
 
 ### 2.7 When to Use Regularization
 
 Regularization is particularly beneficial in the following scenarios:
 
-1. **Low‑frequency EFIE**: When ``k h \ll 1``, the scalar term ``S_{mn}`` dominates, making ``\mathbf{Z}`` nearly singular. A tiny regularization (``\alpha \sim 10^{-12}``) can prevent solver failures without noticeably affecting accuracy.
+1. **Low‑frequency EFIE**: When $k h \ll 1$, the scalar term $S_{mn}$ dominates, making $\mathbf{Z}$ nearly singular. A tiny regularization ($\alpha \sim 10^{-12}$) can prevent solver failures without noticeably affecting accuracy.
 
-2. **Fine meshes**: As ``h \to 0``, the condition number grows as ``O(1/h)``. Regularization helps maintain solver accuracy across mesh refinements.
+2. **Fine meshes**: As $h \to 0$, the condition number grows as $O(1/h)$. Regularization helps maintain solver accuracy across mesh refinements.
 
-3. **Impedance sheets with very small resistance**: When optimizing for sheet resistance ``\theta_p \to 0``, the matrix ``\mathbf{Z} = \mathbf{Z}_{\mathrm{EFIE}} - \sum_p \theta_p \mathbf{M}_p`` becomes nearly singular. Regularization stabilizes the solve during optimization iterations.
+3. **Impedance sheets with very small resistance**: When optimizing for sheet resistance $\theta_p \to 0$, the matrix $\mathbf{Z} = \mathbf{Z}_{\mathrm{EFIE}} - \sum_p \theta_p \mathbf{M}_p$ becomes nearly singular. Regularization stabilizes the solve during optimization iterations.
 
 4. **Noisy gradient detection**: If adjoint gradients appear excessively noisy, adding a small regularization can smooth the gradient landscape, aiding convergence.
 
@@ -259,11 +259,11 @@ The regularized solve typically yields a solution with **better numerical accura
 
 ## 3. Left Preconditioning: Improving the Matrix Spectrum
 
-Left preconditioning is a more sophisticated technique than regularization: instead of perturbing the matrix, it multiplies the linear system by an approximate inverse ``\mathbf{M}^{-1}`` that clusters the eigenvalues of the preconditioned matrix ``\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}``, thereby accelerating iterative convergence and improving numerical stability. This section describes the mathematical theory of left preconditioning, the mass‑based preconditioner implemented in `DifferentiableMoM.jl`, the user modes `:off`, `:on`, and `:auto`, and how preconditioning integrates with forward and adjoint solves.
+Left preconditioning is a more sophisticated technique than regularization: instead of perturbing the matrix, it multiplies the linear system by an approximate inverse $\mathbf{M}^{-1}$ that clusters the eigenvalues of the preconditioned matrix $\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}$, thereby accelerating iterative convergence and improving numerical stability. This section describes the mathematical theory of left preconditioning, the mass‑based preconditioner implemented in `DifferentiableMoM.jl`, the user modes `:off`, `:on`, and `:auto`, and how preconditioning integrates with forward and adjoint solves.
 
 ### 3.1 Mathematical Formulation
 
-Given a nonsingular preconditioner matrix ``\mathbf{M} \approx \mathbf{Z}``, the left‑preconditioned system is
+Given a nonsingular preconditioner matrix $\mathbf{M} \approx \mathbf{Z}$, the left‑preconditioned system is
 
 ```math
 \tilde{\mathbf{Z}} \mathbf{I} = \tilde{\mathbf{v}}, \qquad
@@ -271,29 +271,29 @@ Given a nonsingular preconditioner matrix ``\mathbf{M} \approx \mathbf{Z}``, the
 \tilde{\mathbf{v}} = \mathbf{M}^{-1}\mathbf{v}.
 ```
 
-Solving the preconditioned system yields the same solution ``\mathbf{I}`` as the original system ``\mathbf{Z}\mathbf{I} = \mathbf{v}``, but the condition number of ``\tilde{\mathbf{Z}}`` can be much smaller:
+Solving the preconditioned system yields the same solution $\mathbf{I}$ as the original system $\mathbf{Z}\mathbf{I} = \mathbf{v}$, but the condition number of $\tilde{\mathbf{Z}}$ can be much smaller:
 
 ```math
 \kappa(\tilde{\mathbf{Z}}) = \frac{\sigma_{\max}(\mathbf{M}^{-1}\mathbf{Z})}{\sigma_{\min}(\mathbf{M}^{-1}\mathbf{Z})} \ll \kappa(\mathbf{Z})
 ```
 
-provided ``\mathbf{M}`` approximates ``\mathbf{Z}`` well. For EFIE matrices, a good preconditioner should capture the **low‑frequency behavior** (dominant scalar term) and the **geometry** of the discretization.
+provided $\mathbf{M}$ approximates $\mathbf{Z}$ well. For EFIE matrices, a good preconditioner should capture the **low‑frequency behavior** (dominant scalar term) and the **geometry** of the discretization.
 
 ### 3.2 Physical Interpretation
 
-Preconditioning can be viewed as **changing the inner product** in the test space. The original Galerkin discretization uses the ``L^2`` inner product ``\langle \mathbf{f}_m, \mathbf{f}_n \rangle``. Left preconditioning with ``\mathbf{M}^{-1}`` corresponds to using the inner product induced by ``\mathbf{M}^{-1}``, which effectively **rescales** the basis functions according to their spatial support. When ``\mathbf{M}`` is the mass matrix, the preconditioned system weights each current element by its area, making the matrix more balanced.
+Preconditioning can be viewed as **changing the inner product** in the test space. The original Galerkin discretization uses the $L^2$ inner product $\langle \mathbf{f}_m, \mathbf{f}_n \rangle$. Left preconditioning with $\mathbf{M}^{-1}$ corresponds to using the inner product induced by $\mathbf{M}^{-1}$, which effectively **rescales** the basis functions according to their spatial support. When $\mathbf{M}$ is the mass matrix, the preconditioned system weights each current element by its area, making the matrix more balanced.
 
 Physically, the mass‑based preconditioner **counteracts the ill‑scaling** between the vector and scalar terms of the EFIE at low frequencies, mitigating the low‑frequency breakdown.
 
 ### 3.3 Mass‑Based Preconditioner Construction
 
-The function `make_left_preconditioner` (in `src/Solve.jl`) builds a preconditioner from the patch mass matrices ``\mathbf{M}_p``:
+The function `make_left_preconditioner` (in `src/Solve.jl`) builds a preconditioner from the patch mass matrices $\mathbf{M}_p$:
 
 ```math
 \mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}, \qquad \mathbf{R} = \sum_p \mathbf{M}_p,
 ```
 
-where ``\epsilon = \epsilon_{\text{rel}} \cdot \max(\operatorname{tr}(\mathbf{R})/N, 1)`` is a small diagonal shift that ensures invertibility. The shift parameter `eps_rel` defaults to ``10^{-8}``. The resulting ``\mathbf{M}`` is Hermitian positive definite and its inverse can be applied via an LU factorization.
+where $\epsilon = \epsilon_{\text{rel}} \cdot \max(\operatorname{tr}(\mathbf{R})/N, 1)$ is a small diagonal shift that ensures invertibility. The shift parameter `eps_rel` defaults to $10^{-8}$. The resulting $\mathbf{M}$ is Hermitian positive definite and its inverse can be applied via an LU factorization.
 
 ### 3.4 Implementation in `select_preconditioner` and `prepare_conditioned_system`
 
@@ -301,7 +301,7 @@ The package decides whether to apply preconditioning via `select_preconditioner`
 
 - **`:off`**: No preconditioning (default for small problems).
 - **`:on`**: Always build and apply the mass‑based preconditioner.
-- **`:auto`**: Enable preconditioning only when `iterative_solver=true` or ``N \ge n_{\text{threshold}}`` (default 256).
+- **`:auto`**: Enable preconditioning only when `iterative_solver=true` or $N \ge n_{\text{threshold}}$ (default 256).
 
 A user‑supplied preconditioner matrix `preconditioner_M` overrides the automatic selection.
 
@@ -317,7 +317,7 @@ Z_eff, rhs_eff, fac = prepare_conditioned_system(
 )
 ```
 
-If `preconditioner_M` is provided, it computes ``\mathbf{Z}_{\text{eff}} = \mathbf{M}^{-1}\mathbf{Z}_{\text{reg}}`` and ``\mathbf{v}_{\text{eff}} = \mathbf{M}^{-1}\mathbf{v}``, returning also the LU factorization `fac` of ``\mathbf{M}`` for reuse in adjoint solves.
+If `preconditioner_M` is provided, it computes $\mathbf{Z}_{\text{eff}} = \mathbf{M}^{-1}\mathbf{Z}_{\text{reg}}$ and $\mathbf{v}_{\text{eff}} = \mathbf{M}^{-1}\mathbf{v}$, returning also the LU factorization `fac` of $\mathbf{M}$ for reuse in adjoint solves.
 
 ### 3.5 Adjoint Consistency with Preconditioning
 
@@ -327,20 +327,20 @@ When left preconditioning is used, the adjoint equation must be formulated with 
 \tilde{\mathbf{Z}}^{\dagger} \boldsymbol{\lambda} = \frac{\partial \Phi}{\partial \mathbf{I}^*}.
 ```
 
-Since ``\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}``, the adjoint equation becomes
+Since $\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}$, the adjoint equation becomes
 
 ```math
 \mathbf{Z}^{\dagger} \mathbf{M}^{-\dagger} \boldsymbol{\lambda} = \frac{\partial \Phi}{\partial \mathbf{I}^*}.
 ```
 
-The package handles this automatically: `prepare_conditioned_system` returns the preconditioned matrix ``\tilde{\mathbf{Z}}``, and both forward and adjoint solves use it.
+The package handles this automatically: `prepare_conditioned_system` returns the preconditioned matrix $\tilde{\mathbf{Z}}$, and both forward and adjoint solves use it.
 
 ### 3.6 When to Use Preconditioning
 
 Preconditioning is recommended in the following scenarios:
 
 1. **Iterative solves**: Krylov methods (GMRES, Bi‑CGSTAB) converge much faster with a good preconditioner.
-2. **Large problems** (``N \ge 1000``): The ``O(N^3)`` cost of direct solves becomes prohibitive; preconditioned iterative methods offer better scalability.
+2. **Large problems** ($N \ge 1000$): The $O(N^3)$ cost of direct solves becomes prohibitive; preconditioned iterative methods offer better scalability.
 3. **Low‑frequency EFIE**: The mass‑based preconditioner significantly improves conditioning at low frequencies.
 4. **Optimization loops**: When solving many similar systems (e.g., during gradient‑based optimization), the preconditioner can be factored once and reused, amortizing the setup cost.
 
@@ -378,9 +378,9 @@ I = Z_eff \ v_eff  # Preconditioned solve
 
 ### 3.8 Limitations and Trade‑Offs
 
-- **Setup cost**: Factoring ``\mathbf{M}`` costs ``O(N^3)`` (though ``\mathbf{M}`` is often sparser than ``\mathbf{Z}``). For small ``N``, preconditioning may not be worth the overhead.
+- **Setup cost**: Factoring $\mathbf{M}$ costs $O(N^3)$ (though $\mathbf{M}$ is often sparser than $\mathbf{Z}$). For small $N$, preconditioning may not be worth the overhead.
 - **Memory**: Storing the preconditioner matrix and its factorization increases memory usage.
-- **Adjoint consistency**: Must reuse the same preconditioner in forward and adjoint solves; changing ``\mathbf{M}`` between solves breaks gradient accuracy.
+- **Adjoint consistency**: Must reuse the same preconditioner in forward and adjoint solves; changing $\mathbf{M}$ between solves breaks gradient accuracy.
 
 Despite these trade‑offs, preconditioning is often the most effective way to solve large, ill‑conditioned EFIE problems in practice.
 
@@ -394,18 +394,18 @@ The function `select_preconditioner` provides three simple modes that let you co
 
 **`:off`** – No automatic preconditioning.
 - **Behavior**: `select_preconditioner` returns `nothing` and sets `enabled=false`.
-- **Use case**: Baseline validation runs, small problems (``N < 100``), debugging, or when you want full control over preconditioning via a user‑supplied matrix.
+- **Use case**: Baseline validation runs, small problems ($N < 100$), debugging, or when you want full control over preconditioning via a user‑supplied matrix.
 - **Rationale**: Keeps the solve identical to the raw EFIE, ensuring reproducibility and simplifying comparison across different solvers.
 
 **`:on`** – Always build and apply the mass‑based preconditioner.
-- **Behavior**: `select_preconditioner` calls `make_left_preconditioner` and returns the resulting matrix ``\mathbf{M}``; `enabled=true`.
+- **Behavior**: `select_preconditioner` calls `make_left_preconditioner` and returns the resulting matrix $\mathbf{M}$; `enabled=true`.
 - **Use case**: Problems where you know preconditioning is beneficial (e.g., low‑frequency EFIE, iterative solves) and you want to guarantee its use.
 - **Rationale**: Eliminates any guesswork; the same preconditioner is used regardless of problem size or solver type.
 
 **`:auto`** – Conservative automatic activation.
 - **Behavior**: The function decides based on two criteria:
   1. **Iterative solver**: If `iterative_solver=true`, preconditioning is enabled.
-  2. **Problem size**: If ``N \ge n_{\text{threshold}}`` (default 256), preconditioning is enabled.
+  2. **Problem size**: If $N \ge n_{\text{threshold}}$ (default 256), preconditioning is enabled.
 - **Use case**: Exploratory studies where problem size and solver choice may vary; you want preconditioning for “hard” cases but avoid overhead for “easy” ones.
 - **Rationale**: Balances performance (no extra cost for small direct solves) with robustness (preconditioning for large/iterative solves).
 
@@ -452,9 +452,9 @@ The returned `enabled` will be `true` and `reason` will be `"user‑provided pre
 
 1. **Start with `:off`** when debugging or running small validation cases. This ensures the raw EFIE matrix is solved, making it easier to spot implementation errors.
 
-2. **Switch to `:auto`** for production runs or parameter sweeps where problem size may grow. The default threshold ``N=256`` works well for most applications; you may lower it if you encounter ill‑conditioning at smaller ``N``.
+2. **Switch to `:auto`** for production runs or parameter sweeps where problem size may grow. The default threshold $N=256$ works well for most applications; you may lower it if you encounter ill‑conditioning at smaller $N$.
 
-3. **Use `:on`** for low‑frequency problems (``k h \ll 1``) even with small ``N``, because the ill‑conditioning is frequency‑driven, not size‑driven.
+3. **Use `:on`** for low‑frequency problems ($k h \ll 1$) even with small $N$, because the ill‑conditioning is frequency‑driven, not size‑driven.
 
 4. **Record the reason string** in your experiment logs. Knowing *why* preconditioning was enabled/disabled is crucial for reproducing results later.
 
@@ -486,13 +486,13 @@ Left preconditioning is a powerful technique for mitigating the ill‑conditioni
 
 #### 5.1.1 Faster Iterative Convergence
 
-The primary benefit of a good preconditioner is **accelerated convergence of Krylov subspace methods** (GMRES, Bi‑CGSTAB, etc.). Without preconditioning, the widely spread eigenvalues of ``\mathbf{Z}`` force these methods to take many iterations to reduce the residual below a given tolerance. Preconditioning clusters the eigenvalues near 1, enabling convergence in far fewer iterations.
+The primary benefit of a good preconditioner is **accelerated convergence of Krylov subspace methods** (GMRES, Bi‑CGSTAB, etc.). Without preconditioning, the widely spread eigenvalues of $\mathbf{Z}$ force these methods to take many iterations to reduce the residual below a given tolerance. Preconditioning clusters the eigenvalues near 1, enabling convergence in far fewer iterations.
 
-**Typical improvement**: For a well‑conditioned mass‑based preconditioner ``\mathbf{M}``, the iteration count for GMRES can drop from ``O(N)`` to ``O(\sqrt{N})`` or even ``O(1)`` for problems where ``\mathbf{M}`` captures the dominant low‑frequency behavior of ``\mathbf{Z}``.
+**Typical improvement**: For a well‑conditioned mass‑based preconditioner $\mathbf{M}$, the iteration count for GMRES can drop from $O(N)$ to $O(\sqrt{N})$ or even $O(1)$ for problems where $\mathbf{M}$ captures the dominant low‑frequency behavior of $\mathbf{Z}$.
 
 #### 5.1.2 Better Numerical Accuracy in Direct Solves
 
-Even when using a direct solver (LU factorization), preconditioning can improve the **accuracy of the computed solution**. The reason is that the LU decomposition of a well‑conditioned matrix suffers less from round‑off error propagation during forward/backward substitution. For extremely ill‑conditioned EFIE matrices (``\kappa > 10^{12}``), a direct solve of ``\mathbf{Z}`` may lose 10–12 decimal digits of accuracy, while solving the preconditioned system ``\tilde{\mathbf{Z}}`` can preserve full double‑precision accuracy.
+Even when using a direct solver (LU factorization), preconditioning can improve the **accuracy of the computed solution**. The reason is that the LU decomposition of a well‑conditioned matrix suffers less from round‑off error propagation during forward/backward substitution. For extremely ill‑conditioned EFIE matrices ($\kappa > 10^{12}$), a direct solve of $\mathbf{Z}$ may lose 10–12 decimal digits of accuracy, while solving the preconditioned system $\tilde{\mathbf{Z}}$ can preserve full double‑precision accuracy.
 
 #### 5.1.3 Smoother Gradients in Adjoint‑Based Optimization
 
@@ -500,29 +500,29 @@ When gradients are computed via the adjoint method, small numerical errors in th
 
 #### 5.1.4 Stabilization of Low‑Frequency Breakdown
 
-The mass‑based preconditioner ``\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}`` directly counteracts the **scaling imbalance** between the vector‑potential term ``V_{mn}`` (``O(1)``) and the scalar‑potential term ``S_{mn}`` (``O(1/k^2)``) at low frequencies. By weighting each current element by its spatial support, ``\mathbf{M}^{-1}`` re‑balances the matrix, preventing the near‑singularity that occurs as ``k \to 0``.
+The mass‑based preconditioner $\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}$ directly counteracts the **scaling imbalance** between the vector‑potential term $V_{mn}$ ($O(1)$) and the scalar‑potential term $S_{mn}$ ($O(1/k^2)$) at low frequencies. By weighting each current element by its spatial support, $\mathbf{M}^{-1}$ re‑balances the matrix, preventing the near‑singularity that occurs as $k \to 0$.
 
 #### 5.1.5 Reusability Across Similar Solves
 
-In optimization loops or parameter sweeps where many linear systems with **similar geometry** must be solved, the preconditioner can be factored once and reused for all solves. This amortizes the ``O(N^3)`` factorization cost over many right‑hand sides, making the overall computation more efficient.
+In optimization loops or parameter sweeps where many linear systems with **similar geometry** must be solved, the preconditioner can be factored once and reused for all solves. This amortizes the $O(N^3)$ factorization cost over many right‑hand sides, making the overall computation more efficient.
 
 ### 5.2 What Preconditioning Does NOT Improve
 
 #### 5.2.1 Asymptotic Complexity of Dense Direct Solves
 
-Preconditioning does **not** change the fundamental ``O(N^3)`` floating‑point operation count of a dense LU factorization. The cost of factoring ``\mathbf{Z}`` and the cost of factoring ``\mathbf{M}`` are both ``O(N^3)``. If you use a direct solver for ``\mathbf{Z}``, adding preconditioning effectively doubles the factorization work (factor ``\mathbf{M}`` and factor ``\tilde{\mathbf{Z}}``). For this reason, preconditioning is most beneficial when **iterative solvers** are employed, because the reduction in iteration count can outweigh the preconditioner setup cost.
+Preconditioning does **not** change the fundamental $O(N^3)$ floating‑point operation count of a dense LU factorization. The cost of factoring $\mathbf{Z}$ and the cost of factoring $\mathbf{M}$ are both $O(N^3)$. If you use a direct solver for $\mathbf{Z}$, adding preconditioning effectively doubles the factorization work (factor $\mathbf{M}$ and factor $\tilde{\mathbf{Z}}$). For this reason, preconditioning is most beneficial when **iterative solvers** are employed, because the reduction in iteration count can outweigh the preconditioner setup cost.
 
 #### 5.2.2 Memory Footprint of Dense Matrices
 
-The storage requirement for a dense EFIE matrix ``\mathbf{Z}`` is ``O(N^2)``. Preconditioning adds storage for ``\mathbf{M}`` (another ``O(N^2)`` matrix) and possibly its LU factors (another ``O(N^2)``). Thus, the total memory increases by a constant factor (typically 2–3×). If memory is the limiting resource, preconditioning may not be feasible.
+The storage requirement for a dense EFIE matrix $\mathbf{Z}$ is $O(N^2)$. Preconditioning adds storage for $\mathbf{M}$ (another $O(N^2)$ matrix) and possibly its LU factors (another $O(N^2)$). Thus, the total memory increases by a constant factor (typically 2–3×). If memory is the limiting resource, preconditioning may not be feasible.
 
 #### 5.2.3 Condition Number of the Original Matrix
 
-Preconditioning transforms the system to ``\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}``, which has a better condition number than ``\mathbf{Z}``, but **does not improve the conditioning of ``\mathbf{Z}`` itself**. If you need to solve the original system ``\mathbf{Z}`` with a direct solver (e.g., for validation), preconditioning offers no benefit.
+Preconditioning transforms the system to $\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}$, which has a better condition number than $\mathbf{Z}$, but **does not improve the conditioning of $\mathbf{Z}$ itself**. If you need to solve the original system $\mathbf{Z}$ with a direct solver (e.g., for validation), preconditioning offers no benefit.
 
 #### 5.2.4 Physical Fidelity
 
-Unlike regularization, preconditioning does **not** alter the physical model: the solution ``\mathbf{I}`` of ``\tilde{\mathbf{Z}}\mathbf{I} = \tilde{\mathbf{v}}`` is exactly the same as the solution of ``\mathbf{Z}\mathbf{I} = \mathbf{v}`` (up to numerical rounding). However, if the preconditioner is poorly chosen (e.g., ``\mathbf{M}`` is singular), the transformed system may be numerically unstable, leading to inaccurate results.
+Unlike regularization, preconditioning does **not** alter the physical model: the solution $\mathbf{I}$ of $\tilde{\mathbf{Z}}\mathbf{I} = \tilde{\mathbf{v}}$ is exactly the same as the solution of $\mathbf{Z}\mathbf{I} = \mathbf{v}$ (up to numerical rounding). However, if the preconditioner is poorly chosen (e.g., $\mathbf{M}$ is singular), the transformed system may be numerically unstable, leading to inaccurate results.
 
 #### 5.2.5 Automatic Handling of All Ill‑Conditioning Sources
 
@@ -539,12 +539,12 @@ It is instructive to contrast preconditioning with the regularization technique 
 
 | Aspect | Regularization | Preconditioning |
 |--------|----------------|-----------------|
-| **Mathematical action** | Adds ``\alpha\mathbf{R}`` to ``\mathbf{Z}`` | Multiplies ``\mathbf{Z}`` by ``\mathbf{M}^{-1}`` |
+| **Mathematical action** | Adds $\alpha\mathbf{R}$ to $\mathbf{Z}$ | Multiplies $\mathbf{Z}$ by $\mathbf{M}^{-1}$ |
 | **Effect on solution** | Perturbs the physical solution | Preserves the exact solution (in exact arithmetic) |
 | **Conditioning improvement** | Shifts eigenvalues away from zero | Clusters eigenvalues around 1 |
 | **Best use case** | Stabilizing direct solves at very low frequencies | Accelerating iterative solves |
-| **Setup cost** | Negligible (matrix addition) | Moderate to high (factorization of ``\mathbf{M}``) |
-| **Adjoint consistency** | Must use same ``\alpha\mathbf{R}`` in forward/adjoint | Must use same ``\mathbf{M}^{-1}`` in forward/adjoint |
+| **Setup cost** | Negligible (matrix addition) | Moderate to high (factorization of $\mathbf{M}$) |
+| **Adjoint consistency** | Must use same $\alpha\mathbf{R}$ in forward/adjoint | Must use same $\mathbf{M}^{-1}$ in forward/adjoint |
 
 **Practical recommendation**: Use **regularization** when you need a tiny stabilization for direct solves and can tolerate a small physical error. Use **preconditioning** when you need faster iterative convergence or better accuracy without perturbing the physics.
 
@@ -552,12 +552,12 @@ It is instructive to contrast preconditioning with the regularization technique 
 
 The extra cost of building and applying a preconditioner is justified when **one or more** of the following conditions hold:
 
-1. **``N`` is large** (``\gtrsim 1000``) and you use an iterative solver – the reduction in iteration count saves more time than the preconditioner setup.
+1. **$N$ is large** ($\gtrsim 1000$) and you use an iterative solver – the reduction in iteration count saves more time than the preconditioner setup.
 2. **Low‑frequency EFIE** – the ill‑conditioning is severe enough that direct solves lose accuracy.
 3. **Many similar right‑hand sides** – the preconditioner can be reused many times, amortizing the factorization cost.
 4. **Gradient‑based optimization** – smoother gradients lead to fewer optimization iterations, outweighing the per‑iteration overhead.
 
-Conversely, for small problems (``N < 200``) solved with a direct method, preconditioning often adds unnecessary complexity and should be turned off (`mode=:off`).
+Conversely, for small problems ($N < 200$) solved with a direct method, preconditioning often adds unnecessary complexity and should be turned off (`mode=:off`).
 
 ### 5.5 Monitoring Preconditioner Effectiveness
 
@@ -574,12 +574,12 @@ To verify that your preconditioner is working as expected, you can:
    - Expect a reduction of at least 50% for a good preconditioner.
 3. **Check gradient consistency**:
    - Compute gradients with and without preconditioning for a small test problem.
-   - They should agree to within machine precision (relative error ``< 10^{-12}``).
+   - They should agree to within machine precision (relative error $< 10^{-12}$).
 
 ### 5.6 Summary: Key Takeaways
 
 - **Preconditioning improves** iterative convergence, numerical accuracy, gradient smoothness, and low‑frequency stability.
-- **Preconditioning does not improve** asymptotic complexity (``O(N^3)`` for dense direct solves) or memory footprint (``O(N^2)``).
+- **Preconditioning does not improve** asymptotic complexity ($O(N^3)$ for dense direct solves) or memory footprint ($O(N^2)$).
 - **Choose preconditioning over regularization** when you need exact physical fidelity and are willing to pay the setup cost.
 - **Monitor effectiveness** via condition‑number ratios and iteration‑count reductions.
 
@@ -593,7 +593,7 @@ This section walks through a complete, self‑contained example that demonstrate
 
 ### 6.1 Problem Setup
 
-We consider a rectangular PEC plate of size ``0.1\lambda \times 0.1\lambda`` at a moderately low frequency (``k = 0.1``), discretized with a coarse mesh of ``10\times10`` triangles. This configuration leads to a matrix of size ``N = 180`` (number of RWG edges), which is small enough for fast experimentation yet exhibits noticeable ill‑conditioning.
+We consider a rectangular PEC plate of size $0.1\lambda \times 0.1\lambda$ at a moderately low frequency ($k = 0.1$), discretized with a coarse mesh of $10\times10$ triangles. This configuration leads to a matrix of size $N = 180$ (number of RWG edges), which is small enough for fast experimentation yet exhibits noticeable ill‑conditioning.
 
 ```julia
 using DifferentiableMoM
@@ -650,7 +650,7 @@ else
 end
 ```
 
-For this example, you should see ``\kappa \approx 10^7``–``10^8``, indicating moderate ill‑conditioning.
+For this example, you should see $\kappa \approx 10^7$–$10^8$, indicating moderate ill‑conditioning.
 
 ### 6.3 Building Regularization and Preconditioning Components
 
@@ -674,7 +674,7 @@ println("Trace of mass regularizer R: ", trR)
 
 ### 6.4 Selecting and Applying Preconditioning
 
-We use the `:auto` mode, which will enable preconditioning because ``N = 180 < 256`` but we explicitly set `iterative_solver=true` to trigger it.
+We use the `:auto` mode, which will enable preconditioning because $N = 180 < 256$ but we explicitly set `iterative_solver=true` to trigger it.
 
 ```julia
 # ------------------------------
@@ -692,7 +692,7 @@ println("Preconditioning enabled: ", enabled, " (", reason, ")")
 
 ### 6.5 Regularization Parameter Choice
 
-We add a tiny regularization to further stabilize the solve. The parameter ``\alpha`` is scaled relative to the average diagonal entry of ``\mathbf{Z}``.
+We add a tiny regularization to further stabilize the solve. The parameter $\alpha$ is scaled relative to the average diagonal entry of $\mathbf{Z}$.
 
 ```julia
 # ------------------------------
@@ -722,7 +722,7 @@ println("Conditioned matrix size: ", size(Z_eff))
 
 ### 6.7 Solving the Linear System
 
-We solve the conditioned system using a direct solver (backslash). In practice, for larger ``N``, you would replace this with an iterative solver.
+We solve the conditioned system using a direct solver (backslash). In practice, for larger $N$, you would replace this with an iterative solver.
 
 ```julia
 # ------------------------------
@@ -734,7 +734,7 @@ println("Solution vector norm = ", norm(I_cond))
 
 ### 6.8 Verifying Conditioning Improvement
 
-To confirm that conditioning helped, we compute the condition number of the preconditioned matrix ``\tilde{\mathbf{Z}} = \mathbf{M}^{-1}(\mathbf{Z} + \alpha\mathbf{R})``.
+To confirm that conditioning helped, we compute the condition number of the preconditioned matrix $\tilde{\mathbf{Z}} = \mathbf{M}^{-1}(\mathbf{Z} + \alpha\mathbf{R})$.
 
 ```julia
 # ------------------------------
@@ -747,7 +747,7 @@ println("Improvement factor = ", κ_raw / κ_cond)
 println("log10(improvement) = ", log10(κ_raw / κ_cond))
 ```
 
-You should observe an improvement factor of ``10^2``–``10^4``, demonstrating that the combined regularization and preconditioning significantly reduced the condition number.
+You should observe an improvement factor of $10^2$–$10^4$, demonstrating that the combined regularization and preconditioning significantly reduced the condition number.
 
 ### 6.9 Comparing with Raw Solve
 
@@ -768,7 +768,7 @@ println("Raw residual: ", res_raw)
 println("Conditioned residual: ", res_cond)
 ```
 
-The two solutions should agree to within ``10^{-6}``–``10^{-8}``, while the conditioned solve typically yields a smaller residual because of improved numerical stability.
+The two solutions should agree to within $10^{-6}$–$10^{-8}$, while the conditioned solve typically yields a smaller residual because of improved numerical stability.
 
 ### 6.10 Full Script
 
@@ -780,8 +780,8 @@ julia examples/ex_auto_preconditioning.jl
 
 ### 6.11 Interpreting the Results
 
-- **Condition number improvement**: A reduction from ``\kappa \sim 10^8`` to ``\kappa \sim 10^4`` is typical for this problem size. Larger improvements occur for lower frequencies or finer meshes.
-- **Solution agreement**: The raw and conditioned solutions should be nearly identical (relative difference ``< 10^{-6}``). A larger discrepancy may indicate that the regularization parameter ``\alpha`` is too large.
+- **Condition number improvement**: A reduction from $\kappa \sim 10^8$ to $\kappa \sim 10^4$ is typical for this problem size. Larger improvements occur for lower frequencies or finer meshes.
+- **Solution agreement**: The raw and conditioned solutions should be nearly identical (relative difference $< 10^{-6}$). A larger discrepancy may indicate that the regularization parameter $\alpha$ is too large.
 - **Residuals**: The conditioned solve often yields a smaller residual because the better‑conditioned matrix allows the direct solver to achieve higher accuracy.
 
 ### 6.12 Extending the Example
@@ -824,12 +824,12 @@ I_baseline = solve_system(Z_eff, rhs_eff)
 
 #### Step 2: Diagnose Conditioning
 
-**Action**: Compute the condition number of ``\mathbf{Z}_{\mathrm{raw}}`` using `condition_diagnostics`.
+**Action**: Compute the condition number of $\mathbf{Z}_{\mathrm{raw}}$ using `condition_diagnostics`.
 
 **Purpose**: Quantify the severity of ill‑conditioning. Use the following guidelines:
-- ``\kappa < 10^6`` → conditioning is not a concern.
-- ``10^6 \le \kappa < 10^{10}`` → consider enabling preconditioning for iterative solves.
-- ``\kappa \ge 10^{10}`` → enable preconditioning and possibly add regularization.
+- $\kappa < 10^6$ → conditioning is not a concern.
+- $10^6 \le \kappa < 10^{10}$ → consider enabling preconditioning for iterative solves.
+- $\kappa \ge 10^{10}$ → enable preconditioning and possibly add regularization.
 
 **Code snippet**:
 ```julia
@@ -840,9 +840,9 @@ println("Condition number κ = ", κ)
 
 #### Step 3: Choose Regularization (If Needed)
 
-**Action**: If ``\kappa \ge 10^{10}`` and you are using a **direct solver**, add a small mass‑based regularization with ``\alpha = \epsilon \cdot \operatorname{tr}(\mathbf{R})/N``.
+**Action**: If $\kappa \ge 10^{10}$ and you are using a **direct solver**, add a small mass‑based regularization with $\alpha = \epsilon \cdot \operatorname{tr}(\mathbf{R})/N$.
 
-**Purpose**: Stabilize the direct solve without significantly perturbing the physics. Typical ``\epsilon`` values: ``10^{-10}`` for moderate ill‑conditioning, ``10^{-8}`` for severe ill‑conditioning.
+**Purpose**: Stabilize the direct solve without significantly perturbing the physics. Typical $\epsilon$ values: $10^{-10}$ for moderate ill‑conditioning, $10^{-8}$ for severe ill‑conditioning.
 
 **Code snippet**:
 ```julia
@@ -855,7 +855,7 @@ R = make_mass_regularizer(Mp)
 **Action**: Decide on `mode=:off`, `:on`, or `:auto` based on your problem characteristics.
 
 **Decision logic**:
-- **`:off`**: Baseline validation, small ``N`` (< 200), debugging.
+- **`:off`**: Baseline validation, small $N$ (< 200), debugging.
 - **`:on`**: Low‑frequency EFIE, iterative solves, optimization loops.
 - **`:auto`**: Exploratory studies where problem size may vary; let the package decide.
 
@@ -918,7 +918,7 @@ end
 
 #### Step 8: Log All Conditioning Parameters
 
-**Action**: Record the conditioning mode, regularization parameter ``\alpha``, preconditioner enable flag, and reason string in your experiment logs.
+**Action**: Record the conditioning mode, regularization parameter $\alpha$, preconditioner enable flag, and reason string in your experiment logs.
 
 **Purpose**: Ensure full reproducibility. Without these details, it may be impossible to reproduce the same numerical behavior later.
 
@@ -949,16 +949,16 @@ function callback(θ)
 end
 ```
 
-If ``\kappa`` suddenly spikes, consider adding adaptive regularization: increase ``\alpha`` when ``\kappa`` exceeds a threshold.
+If $\kappa$ suddenly spikes, consider adding adaptive regularization: increase $\alpha$ when $\kappa$ exceeds a threshold.
 
 #### Debugging Common Issues
 
 | Symptom | Possible cause | Remedy |
 |---------|----------------|--------|
 | **Gradients disagree** between conditioned and unconditioned solves | Different conditioning used in forward/adjoint | Ensure `prepare_conditioned_system` is called once and its outputs reused. |
-| **Iterative solver stagnates** even with preconditioning | Preconditioner too weak (e.g., ``\epsilon`` too large) | Reduce `eps_rel` in `make_left_preconditioner`. |
-| **Solution changes significantly** with tiny ``\alpha`` | Regularization too strong for low‑frequency problem | Decrease ``\alpha`` by a factor of 10. |
-| **Memory error** when building preconditioner | ``N`` too large for dense preconditioner | Switch to iterative solver with diagonal preconditioner, or use a sparse approximation. |
+| **Iterative solver stagnates** even with preconditioning | Preconditioner too weak (e.g., $\epsilon$ too large) | Reduce `eps_rel` in `make_left_preconditioner`. |
+| **Solution changes significantly** with tiny $\alpha$ | Regularization too strong for low‑frequency problem | Decrease $\alpha$ by a factor of 10. |
+| **Memory error** when building preconditioner | $N$ too large for dense preconditioner | Switch to iterative solver with diagonal preconditioner, or use a sparse approximation. |
 
 #### Verifying Gradient Accuracy
 
@@ -966,22 +966,22 @@ The gold‑standard test for conditioning consistency is the **gradient verifica
 
 1. Compute gradients using the adjoint method with conditioning enabled.
 2. Compute finite‑difference gradients (without conditioning) for a few randomly chosen parameters.
-3. Compare relative error: should be ``< 10^{-6}`` for well‑conditioned problems, ``< 10^{-4}`` for severely ill‑conditioned ones.
+3. Compare relative error: should be $< 10^{-6}$ for well‑conditioned problems, $< 10^{-4}$ for severely ill‑conditioned ones.
 
-A discrepancy larger than ``10^{-4}`` indicates that the conditioning is not being applied consistently between forward and adjoint solves.
+A discrepancy larger than $10^{-4}$ indicates that the conditioning is not being applied consistently between forward and adjoint solves.
 
 ### 7.3 Summary Checklist
 
 For quick reference, here is a condensed version of the workflow:
 
 - [ ] **Baseline**: Run with `mode=:off`, no regularization.
-- [ ] **Diagnose**: Compute ``\kappa``; if ``\kappa \ge 10^{10}``, consider regularization.
-- [ ] **Regularize** (optional): Set ``\alpha = \epsilon \cdot \operatorname{tr}(\mathbf{R})/N`` with ``\epsilon \in [10^{-12}, 10^{-8}]``.
+- [ ] **Diagnose**: Compute $\kappa$; if $\kappa \ge 10^{10}$, consider regularization.
+- [ ] **Regularize** (optional): Set $\alpha = \epsilon \cdot \operatorname{tr}(\mathbf{R})/N$ with $\epsilon \in [10^{-12}, 10^{-8}]$.
 - [ ] **Precondition**: Choose `:auto` for exploration, `:on` for low‑frequency/iterative solves.
-- [ ] **Prepare**: Call `prepare_conditioned_system` with chosen ``\alpha`` and ``\mathbf{M}``.
-- [ ] **Solve**: Compute solution, check residual ``\le 10^{-8}``.
+- [ ] **Prepare**: Call `prepare_conditioned_system` with chosen $\alpha$ and $\mathbf{M}$.
+- [ ] **Solve**: Compute solution, check residual $\le 10^{-8}$.
 - [ ] **Adjoint**: Reuse same `Z_eff` and `fac` in adjoint solve.
-- [ ] **Log**: Record mode, ``\alpha``, enable flag, reason, and ``\kappa``.
+- [ ] **Log**: Record mode, $\alpha$, enable flag, reason, and $\kappa$.
 
 Following this systematic approach will help you harness the benefits of conditioning and preconditioning while avoiding the pitfalls that lead to inaccurate results or non‑reproducible simulations.
 
@@ -995,10 +995,10 @@ This section provides a roadmap to the source files that implement conditioning 
 
 The file `src/Solve.jl` contains all the high‑level functions for regularization, preconditioning, and linear solves:
 
-- **`make_mass_regularizer(Mp)`** – builds the global mass regularizer ``\mathbf{R} = \sum_p \mathbf{M}_p`` from patch mass matrices.
-- **`make_left_preconditioner(Mp; eps_rel=1e-8)`** – constructs the mass‑based preconditioner ``\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}`` and returns its LU factorization.
+- **`make_mass_regularizer(Mp)`** – builds the global mass regularizer $\mathbf{R} = \sum_p \mathbf{M}_p$ from patch mass matrices.
+- **`make_left_preconditioner(Mp; eps_rel=1e-8)`** – constructs the mass‑based preconditioner $\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}$ and returns its LU factorization.
 - **`select_preconditioner(Mp; mode=:off, iterative_solver=false, n_threshold=256, ...)`** – implements the mode logic (`:off`, `:on`, `:auto`) and returns a triple `(M_eff, enabled, reason)`.
-- **`prepare_conditioned_system(Z, v; regularization_alpha=0.0, regularization_R=nothing, preconditioner_M=nothing, preconditioner_factor=nothing)`** – applies regularization and preconditioning in the correct order, returning the conditioned matrix ``\mathbf{Z}_{\text{eff}}``, right‑hand side ``\mathbf{v}_{\text{eff}}``, and the preconditioner factorization (if any).
+- **`prepare_conditioned_system(Z, v; regularization_alpha=0.0, regularization_R=nothing, preconditioner_M=nothing, preconditioner_factor=nothing)`** – applies regularization and preconditioning in the correct order, returning the conditioned matrix $\mathbf{Z}_{\text{eff}}$, right‑hand side $\mathbf{v}_{\text{eff}}$, and the preconditioner factorization (if any).
 - **`solve_system(Z, rhs)`** – generic linear solve (defaults to backslash, but can be extended to iterative solvers).
 
 **Location**: `src/Solve.jl`, lines ~50–150 (exact line numbers may vary with version).
@@ -1013,7 +1013,7 @@ using DifferentiableMoM: make_mass_regularizer, make_left_preconditioner,
 
 The file `src/Diagnostics.jl` provides functions for assessing matrix conditioning and solver health:
 
-- **`condition_diagnostics(Z; full=false)`** – computes the condition number ``\kappa`` and extreme singular values of ``\mathbf{Z}`` via a full SVD (if `full=true`) or an estimated condition number (if `full=false`). Returns a named tuple `(cond, sv_max, sv_min)`.
+- **`condition_diagnostics(Z; full=false)`** – computes the condition number $\kappa$ and extreme singular values of $\mathbf{Z}$ via a full SVD (if `full=true`) or an estimated condition number (if `full=false`). Returns a named tuple `(cond, sv_max, sv_min)`.
 
 **Location**: `src/Diagnostics.jl`, lines ~200–250.
 
@@ -1077,7 +1077,7 @@ prepare_conditioned_system(Z, v; regularization_R=R, preconditioner_M=M_eff)
 
 If you need to implement a custom preconditioner (e.g., block‑diagonal, incomplete LU, Calderón), follow these steps:
 
-1. Build your preconditioner matrix ``\mathbf{M}_{\text{custom}}`` (or a function that applies its inverse).
+1. Build your preconditioner matrix $\mathbf{M}_{\text{custom}}$ (or a function that applies its inverse).
 2. Pass it to `select_preconditioner` via the `preconditioner_M` keyword argument (this overrides the automatic selection).
 3. Ensure your preconditioner is invertible (add a small diagonal shift if necessary).
 4. Verify gradient consistency with a finite‑difference test.
@@ -1103,17 +1103,17 @@ This section provides hands‑on exercises to reinforce the concepts covered in 
 
 ### 9.1 Conceptual Questions
 
-1. **Condition number interpretation**: For an EFIE matrix with ``\kappa = 10^{12}``, approximately how many decimal digits of accuracy would you expect to lose in a direct solve using double‑precision arithmetic? What are the practical consequences for gradient‑based optimization?
+1. **Condition number interpretation**: For an EFIE matrix with $\kappa = 10^{12}$, approximately how many decimal digits of accuracy would you expect to lose in a direct solve using double‑precision arithmetic? What are the practical consequences for gradient‑based optimization?
 
 2. **Regularization vs. preconditioning**: Explain the fundamental difference between regularization and preconditioning in terms of their effect on the physical solution and the linear‑system conditioning. Give one scenario where regularization is preferable and one where preconditioning is preferable.
 
-3. **Auto‑mode logic**: The `:auto` mode enables preconditioning when `iterative_solver=true` or ``N \ge n_{\text{threshold}}``. Why are these two criteria used? What could go wrong if preconditioning were always enabled for iterative solves, regardless of problem size?
+3. **Auto‑mode logic**: The `:auto` mode enables preconditioning when `iterative_solver=true` or $N \ge n_{\text{threshold}}$. Why are these two criteria used? What could go wrong if preconditioning were always enabled for iterative solves, regardless of problem size?
 
 ### 9.2 Derivation Tasks
 
-1. **Condition number bound**: Show that for a Hermitian positive‑definite matrix ``\mathbf{Z}``, the condition number with respect to the Euclidean norm satisfies ``\kappa(\mathbf{Z}) = \lambda_{\max}/\lambda_{\min}``. Using this result, prove that adding a regularization term ``\alpha\mathbf{R}`` with ``\mathbf{R} \succ 0`` strictly reduces the condition number (i.e., ``\kappa(\mathbf{Z}+\alpha\mathbf{R}) < \kappa(\mathbf{Z})`` for any ``\alpha > 0``).
+1. **Condition number bound**: Show that for a Hermitian positive‑definite matrix $\mathbf{Z}$, the condition number with respect to the Euclidean norm satisfies $\kappa(\mathbf{Z}) = \lambda_{\max}/\lambda_{\min}$. Using this result, prove that adding a regularization term $\alpha\mathbf{R}$ with $\mathbf{R} \succ 0$ strictly reduces the condition number (i.e., $\kappa(\mathbf{Z}+\alpha\mathbf{R}) < \kappa(\mathbf{Z})$ for any $\alpha > 0$).
 
-2. **Mass‑based preconditioner analysis**: Let ``\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}`` where ``\mathbf{R}`` is the mass matrix. Show that the eigenvalues of the preconditioned matrix ``\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}`` satisfy
+2. **Mass‑based preconditioner analysis**: Let $\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}$ where $\mathbf{R}$ is the mass matrix. Show that the eigenvalues of the preconditioned matrix $\tilde{\mathbf{Z}} = \mathbf{M}^{-1}\mathbf{Z}$ satisfy
    ```math
    \lambda_i(\tilde{\mathbf{Z}}) = \frac{\lambda_i(\mathbf{Z})}{\lambda_i(\mathbf{R}) + \epsilon}.
    ```
@@ -1121,26 +1121,26 @@ This section provides hands‑on exercises to reinforce the concepts covered in 
 
 ### 9.3 Coding Exercises
 
-1. **Basic**: Run the example script `examples/ex_auto_preconditioning.jl` and modify it to test all three modes (`:off`, `:on`, `:auto`) for a problem with ``N=100`` and ``N=500``. Record the condition numbers and solve times for each mode. Explain the observed differences.
+1. **Basic**: Run the example script `examples/ex_auto_preconditioning.jl` and modify it to test all three modes (`:off`, `:on`, `:auto`) for a problem with $N=100$ and $N=500$. Record the condition numbers and solve times for each mode. Explain the observed differences.
 
-2. **Regularization sweep**: Create a script that solves a low‑frequency EFIE problem (``k=0.001``) for a range of regularization parameters ``\alpha = 10^{-12}, 10^{-11}, \dots, 10^{-6}``. Plot the relative error in the solution (compared to a reference solve with ``\alpha=0`` and high‑precision arithmetic) versus ``\alpha``. Identify the “sweet spot” where error is minimized.
+2. **Regularization sweep**: Create a script that solves a low‑frequency EFIE problem ($k=0.001$) for a range of regularization parameters $\alpha = 10^{-12}, 10^{-11}, \dots, 10^{-6}$. Plot the relative error in the solution (compared to a reference solve with $\alpha=0$ and high‑precision arithmetic) versus $\alpha$. Identify the “sweet spot” where error is minimized.
 
-3. **Preconditioner effectiveness**: For a problem with ``N=1000``, implement a simple iterative solver (e.g., GMRES) and compare convergence with and without the mass‑based preconditioner. Plot the residual norm versus iteration count for both cases. Compute the iteration‑count reduction factor.
+3. **Preconditioner effectiveness**: For a problem with $N=1000$, implement a simple iterative solver (e.g., GMRES) and compare convergence with and without the mass‑based preconditioner. Plot the residual norm versus iteration count for both cases. Compute the iteration‑count reduction factor.
 
-4. **Gradient consistency test**: Choose a small impedance‑optimization problem (e.g., optimizing the resistance of a single patch). Compute gradients using the adjoint method (with conditioning enabled) and compare them with finite‑difference gradients (computed without conditioning). Verify that the relative error is below ``10^{-6}``. If not, diagnose the cause.
+4. **Gradient consistency test**: Choose a small impedance‑optimization problem (e.g., optimizing the resistance of a single patch). Compute gradients using the adjoint method (with conditioning enabled) and compare them with finite‑difference gradients (computed without conditioning). Verify that the relative error is below $10^{-6}$. If not, diagnose the cause.
 
 ### 9.4 Advanced Challenges
 
-1. **Custom preconditioner**: Implement a simple diagonal preconditioner ``\mathbf{M} = \operatorname{diag}(\mathbf{Z})`` and integrate it into the conditioning framework. Compare its effectiveness with the mass‑based preconditioner for a low‑frequency problem and a high‑frequency problem. Measure the condition‑number improvement and iteration‑count reduction.
+1. **Custom preconditioner**: Implement a simple diagonal preconditioner $\mathbf{M} = \operatorname{diag}(\mathbf{Z})$ and integrate it into the conditioning framework. Compare its effectiveness with the mass‑based preconditioner for a low‑frequency problem and a high‑frequency problem. Measure the condition‑number improvement and iteration‑count reduction.
 
-2. **Adaptive regularization**: Write a function that automatically selects the regularization parameter ``\alpha`` based on the estimated condition number ``\kappa``. The function should increase ``\alpha`` when ``\kappa`` exceeds a threshold (e.g., ``10^{10}``) and decrease it when ``\kappa`` is below another threshold. Test your function on a problem where the condition number varies during optimization (e.g., as sheet resistances approach zero).
+2. **Adaptive regularization**: Write a function that automatically selects the regularization parameter $\alpha$ based on the estimated condition number $\kappa$. The function should increase $\alpha$ when $\kappa$ exceeds a threshold (e.g., $10^{10}$) and decrease it when $\kappa$ is below another threshold. Test your function on a problem where the condition number varies during optimization (e.g., as sheet resistances approach zero).
 
-3. **Conditioning‑aware mesh refinement**: Perform a mesh‑refinement study for a PEC sphere at a fixed frequency. For each mesh level, compute the condition number ``\kappa`` and the solution error (compared to an analytical Mie series solution). Determine whether preconditioning improves the error convergence rate as ``h \to 0``.
+3. **Conditioning‑aware mesh refinement**: Perform a mesh‑refinement study for a PEC sphere at a fixed frequency. For each mesh level, compute the condition number $\kappa$ and the solution error (compared to an analytical Mie series solution). Determine whether preconditioning improves the error convergence rate as $h \to 0$.
 
 ### 9.5 Solutions and Hints
 
-- **Conceptual 1**: Double‑precision has about 15–16 decimal digits. A condition number of ``10^{12}`` can lose up to 12 digits, leaving only 3–4 accurate digits. This leads to noisy gradients and stalled optimization.
-- **Derivation 1**: Use the fact that ``\mathbf{Z}`` and ``\mathbf{R}`` are Hermitian, and apply Weyl’s inequality for eigenvalues of sums of Hermitian matrices.
+- **Conceptual 1**: Double‑precision has about 15–16 decimal digits. A condition number of $10^{12}$ can lose up to 12 digits, leaving only 3–4 accurate digits. This leads to noisy gradients and stalled optimization.
+- **Derivation 1**: Use the fact that $\mathbf{Z}$ and $\mathbf{R}$ are Hermitian, and apply Weyl’s inequality for eigenvalues of sums of Hermitian matrices.
 - **Coding 1**: See `examples/ex_auto_preconditioning.jl` for a template.
 - **Advanced 1**: The diagonal preconditioner is cheap to apply but may be less effective for low‑frequency EFIE where off‑diagonal terms are significant.
 
@@ -1155,14 +1155,14 @@ After studying this chapter, you should be able to:
 - [ ] **Define** the condition number of a matrix and explain why EFIE matrices become ill‑conditioned at low frequencies and under mesh refinement.
 - [ ] **Compute** the condition number of an EFIE matrix using `condition_diagnostics`.
 - [ ] **Explain** the difference between regularization and preconditioning, and choose the appropriate technique for a given scenario.
-- [ ] **Apply** regularization by constructing a mass regularizer ``\mathbf{R}`` and selecting a suitable parameter ``\alpha``.
+- [ ] **Apply** regularization by constructing a mass regularizer $\mathbf{R}$ and selecting a suitable parameter $\alpha$.
 - [ ] **Construct** a mass‑based left preconditioner using `make_left_preconditioner`.
 - [ ] **Select** the correct preconditioning mode (`:off`, `:on`, `:auto`) based on problem size, solver type, and frequency.
 - [ ] **Prepare** a conditioned linear system using `prepare_conditioned_system` and solve it accurately.
 - [ ] **Ensure** adjoint consistency by reusing the same conditioned operator in forward and adjoint solves.
 - [ ] **Diagnose** common conditioning‑related issues (noisy gradients, solver stagnation, memory errors) and apply appropriate remedies.
 - [ ] **Verify** gradient accuracy with a finite‑difference test when conditioning is enabled.
-- [ ] **Reproduce** results by logging all conditioning parameters (mode, ``\alpha``, enable flag, reason, ``\kappa``).
+- [ ] **Reproduce** results by logging all conditioning parameters (mode, $\alpha$, enable flag, reason, $\kappa$).
 
 If you can confidently check all items, you have mastered the essentials of conditioning and preconditioning in `DifferentiableMoM.jl`.
 

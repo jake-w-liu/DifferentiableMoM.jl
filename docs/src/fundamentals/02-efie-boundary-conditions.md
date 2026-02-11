@@ -247,7 +247,7 @@ Thus we obtain the final result:
 = -\iint_{\Gamma\times\Gamma} \big[\nabla_s\cdot\mathbf{f}_m(\mathbf{r})\big]\,G(\mathbf{r},\mathbf{r}')\,\big[\nabla_s'\cdot\mathbf{f}_n(\mathbf{r}')\big]\,dS\,dS',
 ```
 
-where the overall minus sign comes from the fact that we started with $\nabla\nabla G$ and ended with a positive expression, but the original EFIE operator has a minus sign in front of the scalar potential term (see Equation \eqref{eq:Esca}).
+where the overall minus sign comes from the fact that we started with $\nabla\nabla G$ and ended with a positive expression, but the original EFIE operator has a minus sign in front of the scalar potential term (see Equation $\eqref{eq:Esca}$).
 
 
 ### 3.3 Mixed-Potential Matrix Element
