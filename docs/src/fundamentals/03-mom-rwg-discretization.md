@@ -755,7 +755,7 @@ The following exercises reinforce the key concepts of this chapter, ranging from
 
 14. **Singular integration**: Investigate the accuracy of Gaussian quadrature for the double‑surface integral $V_{mn}$ when triangles $T_m$ and $T_n$ are close together. Write a script that computes $V_{mn}$ for a fixed pair of triangles as their separation distance $d$ decreases from $0.1\lambda$ to $10^{-6}\lambda$. Plot the relative error (compared to a reference high‑order quadrature) vs. $d$ and discuss the onset of the “singular integration” problem.
 
-15. **Differentiable assembly**: The package provides derivative-verification utilities (`complex_step_grad`, `fd_grad`) in `src/Verification.jl`. Write a small test that checks ``\partial Z_{mn}/\partial k`` for selected entries against a centered finite-difference estimate.
+15. **Differentiable assembly**: The package provides derivative-verification utilities (`complex_step_grad`, `fd_grad`) in `src/Verification.jl`. Write a small test that checks $\partial Z_{mn}/\partial k$ for selected entries against a centered finite-difference estimate.
 
 ---
 

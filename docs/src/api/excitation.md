@@ -156,8 +156,8 @@ Incident field synthesized from imported spherical far-field coefficients.
 **Fields:**
 - `theta::Vector{Float64}`: Polar-angle grid (rad), strictly increasing in `[0, π]`
 - `phi::Vector{Float64}`: Azimuth grid (rad), strictly increasing over one open `2π` period
-- `Ftheta::Matrix{ComplexF64}`: Far-field coefficient ``F_\theta(\theta,\phi)``
-- `Fphi::Matrix{ComplexF64}`: Far-field coefficient ``F_\phi(\theta,\phi)``
+- `Ftheta::Matrix{ComplexF64}`: Far-field coefficient $F_\theta(\theta,\phi)$
+- `Fphi::Matrix{ComplexF64}`: Far-field coefficient $F_\phi(\theta,\phi)$
 - `frequency::Float64`: Frequency (Hz)
 - `phase_center::Vec3`: Pattern phase-center location (m)
 - `convention::Symbol`: `:exp_plus_iwt` or `:exp_minus_iwt` for imported data
@@ -318,9 +318,9 @@ Implementation guards:
 Imported fields are sampled at quadrature points and integrated, allowing
 incorporation of measured or numerically computed incident fields.
 
-### Pattern Feed (Imported ``E_\theta/E_\phi`` data)
-Pattern feeds interpolate complex ``(F_\theta,F_\phi)`` data on a spherical
-grid, reconstruct ``\mathbf{E}^{inc}`` at quadrature points using the
+### Pattern Feed (Imported $E_\theta/E_\phi$ data)
+Pattern feeds interpolate complex $(F_\theta,F_\phi)$ data on a spherical
+grid, reconstruct $\mathbf{E}^{inc}$ at quadrature points using the
 phase-center geometry, and assemble the same MoM RHS integral.
 
 Use two complex patterns (`Eθ`, `Eϕ`), not a power-only pattern, if polarization
