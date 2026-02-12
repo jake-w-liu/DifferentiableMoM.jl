@@ -12,9 +12,7 @@ Options:
   reactive:  if true, impedance is Z_s = iθ (reactive/lossless)
   maximize:  if true, maximize J = I†QI instead of minimizing
   lb, ub:    box constraints on θ (projected L-BFGS-B)
-  solver:    `:direct` (default) for LU, `:gmres` for preconditioned GMRES
-  precond_rank: rank of randomized preconditioner (for solver=:gmres)
-  precond_seed: RNG seed for reproducible randomized preconditioning
+  solver:    `:direct` (default) for LU, `:gmres` for GMRES
   gmres_tol: GMRES relative tolerance (default 1e-8)
   gmres_maxiter: maximum GMRES iterations (default 200)
 
@@ -42,8 +40,6 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
                         iterative_solver::Bool=false,
                         auto_precondition_eps_rel::Float64=1e-6,
                         solver::Symbol=:direct,
-                        precond_rank::Int=20,
-                        precond_seed=nothing,
                         gmres_tol::Float64=1e-8,
                         gmres_maxiter::Int=200)
     theta = copy(theta0)
@@ -85,24 +81,8 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
     )
     rhs_eff_base = precond_fac === nothing ? Vector{ComplexF64}(v) : (precond_fac \ Vector{ComplexF64}(v))
 
-    # Randomized preconditioner setup (for solver=:gmres)
-    rand_precond = nothing
-    mp_omega_cache = nothing
-    if solver == :gmres && precond_rank > 0
-        # Build initial preconditioner from the initial Z(θ₀)
-        Z_init = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
-        Z_init_eff, _, _ = prepare_conditioned_system(
-            Z_init, v;
-            regularization_alpha=regularization_alpha,
-            regularization_R=R_mat,
-            preconditioner_M=precond_M_eff,
-            preconditioner_factor=precond_fac,
-        )
-        rand_precond = build_randomized_preconditioner(Z_init_eff, precond_rank; seed=precond_seed)
-        mp_omega_cache = cache_MpOmega(Mp_eff, rand_precond.Omega)
-        verbose && println("  GMRES solver: randomized preconditioner rank=$precond_rank")
-    elseif solver == :gmres
-        verbose && println("  GMRES solver: no preconditioner")
+    if solver == :gmres && verbose
+        println("  GMRES solver: unpreconditioned")
     end
 
     # L-BFGS history
@@ -126,16 +106,8 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
             preconditioner_factor=precond_fac,
         )
 
-        # Update randomized preconditioner for current Z (if using GMRES)
-        if solver == :gmres && iter > 1 && rand_precond !== nothing
-            rand_precond = update_randomized_preconditioner(
-                rand_precond, Z, theta .- theta_old, Mp_eff;
-                MpOmega=mp_omega_cache, reactive=reactive,
-            )
-        end
-
         I_coeffs = solve_forward(Z, rhs_eff_base;
-                                  solver=solver, preconditioner=rand_precond,
+                                  solver=solver,
                                   gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 
         # Objective (always report the true J)
@@ -143,7 +115,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
 
         # Adjoint solve
         lambda = solve_adjoint(Z, Q, I_coeffs;
-                                solver=solver, preconditioner=rand_precond,
+                                solver=solver,
                                 gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 
         # Gradient of J (true objective)
@@ -222,9 +194,8 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
                 preconditioner_M=precond_M_eff,
                 preconditioner_factor=precond_fac,
             )
-            # Reuse current preconditioner for line search (don't rebuild)
             I_trial = solve_forward(Z_trial, rhs_eff_base;
-                                     solver=solver, preconditioner=rand_precond,
+                                     solver=solver,
                                      gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
             J_trial_internal = sense * real(dot(I_trial, Q * I_trial))
 
@@ -254,9 +225,7 @@ Q_total). The ratio J_ratio is evaluated directly in the line search.  This
 naturally steers the beam rather than just broadening it.
 
 Options:
-  solver:    `:direct` (default) for LU, `:gmres` for preconditioned GMRES
-  precond_rank: rank of randomized preconditioner (for solver=:gmres)
-  precond_seed: RNG seed for reproducible randomized preconditioning
+  solver:    `:direct` (default) for LU, `:gmres` for GMRES
   gmres_tol: GMRES relative tolerance (default 1e-8)
   gmres_maxiter: maximum GMRES iterations (default 200)
 
@@ -284,8 +253,6 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
                               iterative_solver::Bool=false,
                               auto_precondition_eps_rel::Float64=1e-6,
                               solver::Symbol=:direct,
-                              precond_rank::Int=20,
-                              precond_seed=nothing,
                               gmres_tol::Float64=1e-8,
                               gmres_maxiter::Int=200)
     theta = copy(theta0)
@@ -321,23 +288,8 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
     )
     rhs_eff_base = precond_fac === nothing ? Vector{ComplexF64}(v) : (precond_fac \ Vector{ComplexF64}(v))
 
-    # Randomized preconditioner setup (for solver=:gmres)
-    rand_precond = nothing
-    mp_omega_cache = nothing
-    if solver == :gmres && precond_rank > 0
-        Z_init = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
-        Z_init_eff, _, _ = prepare_conditioned_system(
-            Z_init, v;
-            regularization_alpha=regularization_alpha,
-            regularization_R=R_mat,
-            preconditioner_M=precond_M_eff,
-            preconditioner_factor=precond_fac,
-        )
-        rand_precond = build_randomized_preconditioner(Z_init_eff, precond_rank; seed=precond_seed)
-        mp_omega_cache = cache_MpOmega(Mp_eff, rand_precond.Omega)
-        verbose && println("  GMRES solver: randomized preconditioner rank=$precond_rank")
-    elseif solver == :gmres
-        verbose && println("  GMRES solver: no preconditioner")
+    if solver == :gmres && verbose
+        println("  GMRES solver: unpreconditioned")
     end
 
     s_list = Vector{Vector{Float64}}()
@@ -358,16 +310,8 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
             preconditioner_factor=precond_fac,
         )
 
-        # Update randomized preconditioner for current Z (if using GMRES)
-        if solver == :gmres && iter > 1 && rand_precond !== nothing
-            rand_precond = update_randomized_preconditioner(
-                rand_precond, Z, theta .- theta_old, Mp_eff;
-                MpOmega=mp_omega_cache, reactive=reactive,
-            )
-        end
-
         I_c = solve_forward(Z, rhs_eff_base;
-                             solver=solver, preconditioner=rand_precond,
+                             solver=solver,
                              gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 
         # Directivity ratio
@@ -378,10 +322,10 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
         # Two separate adjoint solves for numerically stable ratio gradient
         # ∂(f/g)/∂θ = (g·∂f/∂θ - f·∂g/∂θ) / g²
         lam_t = solve_adjoint(Z, Q_target, I_c;
-                               solver=solver, preconditioner=rand_precond,
+                               solver=solver,
                                gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
         lam_a = solve_adjoint(Z, Q_total, I_c;
-                               solver=solver, preconditioner=rand_precond,
+                               solver=solver,
                                gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
         g_f = gradient_impedance(Mp_eff, I_c, lam_t; reactive=reactive)
         g_g = gradient_impedance(Mp_eff, I_c, lam_a; reactive=reactive)
@@ -451,9 +395,8 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
                 preconditioner_M=precond_M_eff,
                 preconditioner_factor=precond_fac,
             )
-            # Reuse current preconditioner for line search (don't rebuild)
             I_trial = solve_forward(Z_trial, rhs_eff_base;
-                                     solver=solver, preconditioner=rand_precond,
+                                     solver=solver,
                                      gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
             f_trial = real(dot(I_trial, Q_target * I_trial))
             g_trial = real(dot(I_trial, Q_total * I_trial))

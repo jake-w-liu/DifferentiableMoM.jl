@@ -8,10 +8,9 @@
 # systems: near-field interactions dominate the matrix structure, while
 # far-field entries decay as 1/r and contribute less to conditioning.
 #
-# Key advantage over randomized subspace preconditioning: the near-field
-# preconditioner explicitly captures the spatial coupling structure of the
-# Green's function, rather than trying to approximate the dominant spectral
-# subspace.
+# Key advantage: the near-field preconditioner explicitly captures the spatial
+# coupling structure of the Green's function, giving N-independent iteration
+# counts for GMRES.
 
 using SparseArrays
 

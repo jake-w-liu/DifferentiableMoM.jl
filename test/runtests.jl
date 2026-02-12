@@ -1583,201 +1583,57 @@ CSV.write(joinpath(DATADIR, "pattern_feed_gate_metrics.csv"), df_pattern_feed_ga
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
-# Test 17: Randomized preconditioner construction
+# Test 17: GMRES solver and dispatch
 # ─────────────────────────────────────────────────
-println("\n── Test 17: Randomized preconditioner construction ──")
+println("\n── Test 17: GMRES solver and dispatch ──")
 
-# Use the EFIE matrix Z_efie and impedance setup from earlier tests
-theta_rp = fill(200.0, Nt)
-Z_rp = assemble_full_Z(Z_efie, Mp, theta_rp)
-N_rp = size(Z_rp, 1)
-k_rp = min(N_rp, 10)  # preconditioner rank
+# Use impedance-loaded system from Test 7
+Z_gm = Matrix{ComplexF64}(Z_full)
+I_gm_direct = Z_gm \ v
 
-# Build preconditioner with seed for reproducibility (default :auto = two-level)
-P_rp = build_randomized_preconditioner(Matrix{ComplexF64}(Z_rp), k_rp; seed=42)
-
-# Struct fields should have correct dimensions
-@assert size(P_rp.Q) == (N_rp, k_rp)
-@assert size(P_rp.Omega) == (N_rp, k_rp)
-@assert size(P_rp.Y) == (N_rp, k_rp)
-@assert P_rp.MpOmega === nothing
-@assert P_rp.D_inv !== nothing "Default :auto mode should set D_inv"
-@assert length(P_rp.D_inv) == N_rp
-
-# Q should be orthonormal
-QtQ = P_rp.Q' * P_rp.Q
-@assert norm(QtQ - I(k_rp)) < 1e-12 "Q columns not orthonormal"
-
-# Preconditioner action should produce valid output
-v_test_rp = randn(ComplexF64, N_rp)
-Pv = apply_preconditioner(P_rp, v_test_rp)
-@assert length(Pv) == N_rp
-@assert all(isfinite, Pv)
-
-# Adjoint preconditioner action
-PadjV = apply_preconditioner_adjoint(P_rp, v_test_rp)
-@assert length(PadjV) == N_rp
-@assert all(isfinite, PadjV)
-
-# Adjoint consistency: ⟨P⁻¹x, y⟩ ≈ ⟨x, P⁻ᴴy⟩
-x_rp = randn(ComplexF64, N_rp)
-y_rp = randn(ComplexF64, N_rp)
-lhs_adj = dot(apply_preconditioner(P_rp, x_rp), y_rp)
-rhs_adj = dot(x_rp, apply_preconditioner_adjoint(P_rp, y_rp))
-rel_adj_err = abs(lhs_adj - rhs_adj) / max(abs(lhs_adj), 1e-30)
-println("  Adjoint consistency ⟨P⁻¹x, y⟩ vs ⟨x, P⁻ᴴy⟩: $rel_adj_err")
-@assert rel_adj_err < 1e-12 "Preconditioner adjoint inconsistency: $rel_adj_err"
-
-# Reproducibility: same seed → same preconditioner
-P_rp2 = build_randomized_preconditioner(Matrix{ComplexF64}(Z_rp), k_rp; seed=42)
-@assert norm(P_rp.Q - P_rp2.Q) < 1e-14
-@assert norm(P_rp.Omega - P_rp2.Omega) < 1e-14
-
-# Legacy scalar mu_mode options
-mu_diag = DifferentiableMoM._compute_mu(Matrix{ComplexF64}(Z_rp), :diag)
-mu_trace = DifferentiableMoM._compute_mu(Matrix{ComplexF64}(Z_rp), :trace)
-mu_num = DifferentiableMoM._compute_mu(Matrix{ComplexF64}(Z_rp), 0.5)
-@assert isfinite(mu_diag) && abs(mu_diag) > 0
-@assert isfinite(mu_trace) && abs(mu_trace) > 0
-@assert mu_num == ComplexF64(0.5)
-println("  mu_mode :diag=$mu_diag  :trace=$mu_trace  number=$mu_num")
-
-# Legacy mode should set D_inv = nothing
-P_rp_legacy = build_randomized_preconditioner(Matrix{ComplexF64}(Z_rp), k_rp; seed=42, mu_mode=:diag)
-@assert P_rp_legacy.D_inv === nothing "Legacy :diag mode should have D_inv === nothing"
-
-# P⁻¹ Z should have eigenvalues clustered near 1 in the captured subspace
-PinvZ = hcat([apply_preconditioner(P_rp, Vector{ComplexF64}(Z_rp[:, j])) for j in 1:N_rp]...)
-eigvals_PZ = eigvals(PinvZ)
-near_one_count = count(abs.(eigvals_PZ .- 1.0) .< 0.5)
-println("  Eigenvalues of P⁻¹Z near 1: $near_one_count / $N_rp")
-@assert near_one_count >= k_rp "Preconditioner should cluster at least k eigenvalues near 1"
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 18: PreconditionerOperator wrappers (mul!)
-# ─────────────────────────────────────────────────
-println("\n── Test 18: PreconditionerOperator wrappers ──")
-
-op_fwd = PreconditionerOperator(P_rp)
-op_adj = PreconditionerAdjointOperator(P_rp)
-
-@assert size(op_fwd) == (N_rp, N_rp)
-@assert size(op_adj) == (N_rp, N_rp)
-@assert eltype(op_fwd) == ComplexF64
-@assert eltype(op_adj) == ComplexF64
-
-# Test * operator
-v_op = randn(ComplexF64, N_rp)
-r1_op = op_fwd * v_op
-r2_op = apply_preconditioner(P_rp, v_op)
-@assert norm(r1_op - r2_op) < 1e-14
-
-r1_adj_op = op_adj * v_op
-r2_adj_op = apply_preconditioner_adjoint(P_rp, v_op)
-@assert norm(r1_adj_op - r2_adj_op) < 1e-14
-
-# Test mul!
-y_op = zeros(ComplexF64, N_rp)
-LinearAlgebra.mul!(y_op, op_fwd, v_op)
-@assert norm(y_op - r2_op) < 1e-14
-
-y_op_adj = zeros(ComplexF64, N_rp)
-LinearAlgebra.mul!(y_op_adj, op_adj, v_op)
-@assert norm(y_op_adj - r2_adj_op) < 1e-14
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 19: GMRES forward solve
-# ─────────────────────────────────────────────────
-println("\n── Test 19: GMRES forward solve ──")
-
-# Direct solve reference
-I_direct = Z_rp \ v
-
-# GMRES without preconditioner
-I_gmres_nop, stats_nop = solve_gmres(Matrix{ComplexF64}(Z_rp), Vector{ComplexF64}(v);
+# GMRES forward solve (no preconditioner)
+I_gmres_nop, stats_nop = solve_gmres(Z_gm, Vector{ComplexF64}(v);
                                        tol=1e-10, maxiter=500)
-rel_gmres_nop = norm(I_gmres_nop - I_direct) / max(norm(I_direct), 1e-30)
+rel_gmres_nop = norm(I_gmres_nop - I_gm_direct) / max(norm(I_gm_direct), 1e-30)
 println("  GMRES (no precond) rel error: $rel_gmres_nop  iters: $(stats_nop.niter)")
 @assert rel_gmres_nop < 1e-6 "GMRES without preconditioner inaccurate: $rel_gmres_nop"
 
-# GMRES with randomized preconditioner
-I_gmres_rp, stats_rp = solve_gmres(Matrix{ComplexF64}(Z_rp), Vector{ComplexF64}(v);
-                                     preconditioner=P_rp,
-                                     tol=1e-10, maxiter=500)
-rel_gmres_rp = norm(I_gmres_rp - I_direct) / max(norm(I_direct), 1e-30)
-println("  GMRES (precond k=$k_rp) rel error: $rel_gmres_rp  iters: $(stats_rp.niter)")
-@assert rel_gmres_rp < 1e-6 "GMRES with preconditioner inaccurate: $rel_gmres_rp"
-
-# Preconditioned GMRES should converge in fewer iterations
-println("  Iterations: unpreconditioned=$(stats_nop.niter), preconditioned=$(stats_rp.niter)")
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 20: GMRES adjoint solve
-# ─────────────────────────────────────────────────
-println("\n── Test 20: GMRES adjoint solve ──")
-
-rhs_adj_test = Q * I_direct
-lam_direct = Z_rp' \ rhs_adj_test
-
-# GMRES adjoint without preconditioner
-lam_gmres_nop, stats_adj_nop = solve_gmres_adjoint(Matrix{ComplexF64}(Z_rp),
-                                                     Vector{ComplexF64}(rhs_adj_test);
-                                                     tol=1e-10, maxiter=500)
-rel_adj_nop = norm(lam_gmres_nop - lam_direct) / max(norm(lam_direct), 1e-30)
+# GMRES adjoint solve (no preconditioner)
+rhs_adj_gm = Vector{ComplexF64}(Q * I_gm_direct)
+lam_gm_direct = Z_gm' \ rhs_adj_gm
+lam_gmres_nop, stats_adj_nop = solve_gmres_adjoint(Z_gm, rhs_adj_gm;
+                                                      tol=1e-10, maxiter=500)
+rel_adj_nop = norm(lam_gmres_nop - lam_gm_direct) / max(norm(lam_gm_direct), 1e-30)
 println("  GMRES adjoint (no precond) rel error: $rel_adj_nop  iters: $(stats_adj_nop.niter)")
 @assert rel_adj_nop < 1e-6
 
-# GMRES adjoint with preconditioner
-lam_gmres_rp, stats_adj_rp = solve_gmres_adjoint(Matrix{ComplexF64}(Z_rp),
-                                                    Vector{ComplexF64}(rhs_adj_test);
-                                                    preconditioner=P_rp,
-                                                    tol=1e-10, maxiter=500)
-rel_adj_rp = norm(lam_gmres_rp - lam_direct) / max(norm(lam_direct), 1e-30)
-println("  GMRES adjoint (precond) rel error: $rel_adj_rp  iters: $(stats_adj_rp.niter)")
-@assert rel_adj_rp < 1e-6
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 21: solve_forward / solve_adjoint dispatch
-# ─────────────────────────────────────────────────
-println("\n── Test 21: solve_forward / solve_adjoint dispatch ──")
-
-# solve_forward with :direct
-I_sf_direct = solve_forward(Matrix{ComplexF64}(Z_rp), Vector{ComplexF64}(v))
-rel_sf_direct = norm(I_sf_direct - I_direct) / max(norm(I_direct), 1e-30)
+# solve_forward dispatch: :direct
+I_sf_direct = solve_forward(Z_gm, Vector{ComplexF64}(v))
+rel_sf_direct = norm(I_sf_direct - I_gm_direct) / max(norm(I_gm_direct), 1e-30)
 @assert rel_sf_direct < 1e-12
 
-# solve_forward with :gmres + preconditioner
-I_sf_gmres = solve_forward(Matrix{ComplexF64}(Z_rp), Vector{ComplexF64}(v);
-                            solver=:gmres, preconditioner=P_rp,
-                            gmres_tol=1e-10, gmres_maxiter=500)
-rel_sf_gmres = norm(I_sf_gmres - I_direct) / max(norm(I_direct), 1e-30)
+# solve_forward dispatch: :gmres (unpreconditioned)
+I_sf_gmres = solve_forward(Z_gm, Vector{ComplexF64}(v);
+                            solver=:gmres, gmres_tol=1e-10, gmres_maxiter=500)
+rel_sf_gmres = norm(I_sf_gmres - I_gm_direct) / max(norm(I_gm_direct), 1e-30)
 println("  solve_forward :gmres rel error: $rel_sf_gmres")
 @assert rel_sf_gmres < 1e-6
 
-# solve_adjoint with :direct
-lam_sa_direct = solve_adjoint(Matrix{ComplexF64}(Z_rp), Q, I_direct)
-rel_sa_direct = norm(lam_sa_direct - lam_direct) / max(norm(lam_direct), 1e-30)
+# solve_adjoint dispatch: :direct
+lam_sa_direct = solve_adjoint(Z_gm, Q, I_gm_direct)
+rel_sa_direct = norm(lam_sa_direct - lam_gm_direct) / max(norm(lam_gm_direct), 1e-30)
 @assert rel_sa_direct < 1e-12
 
-# solve_adjoint with :gmres + preconditioner
-lam_sa_gmres = solve_adjoint(Matrix{ComplexF64}(Z_rp), Q, I_direct;
-                              solver=:gmres, preconditioner=P_rp,
-                              gmres_tol=1e-10, gmres_maxiter=500)
-rel_sa_gmres = norm(lam_sa_gmres - lam_direct) / max(norm(lam_direct), 1e-30)
+# solve_adjoint dispatch: :gmres (unpreconditioned)
+lam_sa_gmres = solve_adjoint(Z_gm, Q, I_gm_direct;
+                              solver=:gmres, gmres_tol=1e-10, gmres_maxiter=500)
+rel_sa_gmres = norm(lam_sa_gmres - lam_gm_direct) / max(norm(lam_gm_direct), 1e-30)
 println("  solve_adjoint :gmres rel error: $rel_sa_gmres")
 @assert rel_sa_gmres < 1e-6
 
 # Bad solver symbol should error
 thrown_bad_solver = try
-    solve_forward(Matrix{ComplexF64}(Z_rp), Vector{ComplexF64}(v); solver=:unknown)
+    solve_forward(Z_gm, Vector{ComplexF64}(v); solver=:unknown)
     false
 catch
     true
@@ -1785,7 +1641,7 @@ end
 @assert thrown_bad_solver "Expected error for unknown solver"
 
 thrown_bad_solver_adj = try
-    solve_adjoint(Matrix{ComplexF64}(Z_rp), Q, I_direct; solver=:unknown)
+    solve_adjoint(Z_gm, Q, I_gm_direct; solver=:unknown)
     false
 catch
     true
@@ -1795,31 +1651,23 @@ end
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
-# Test 22: Adjoint gradient with GMRES solver
+# Test 18: GMRES adjoint gradient verification
 # ─────────────────────────────────────────────────
-println("\n── Test 22: Adjoint gradient with GMRES solver ──")
+println("\n── Test 18: GMRES adjoint gradient verification ──")
 
-# Reference: adjoint gradient with direct solver (already computed in Test 7 as g_adj)
-# Recompute with GMRES
-theta_gm = copy(theta_real)
-Z_gm = assemble_full_Z(Z_efie, Mp, theta_gm)
-I_gm = solve_forward(Matrix{ComplexF64}(Z_gm), Vector{ComplexF64}(v);
-                       solver=:gmres, preconditioner=build_randomized_preconditioner(
-                           Matrix{ComplexF64}(Z_gm), k_rp; seed=42),
-                       gmres_tol=1e-10, gmres_maxiter=500)
-
-P_gm = build_randomized_preconditioner(Matrix{ComplexF64}(Z_gm), k_rp; seed=42)
-lam_gm = solve_adjoint(Matrix{ComplexF64}(Z_gm), Q, I_gm;
-                         solver=:gmres, preconditioner=P_gm,
-                         gmres_tol=1e-10, gmres_maxiter=500)
-g_adj_gmres = gradient_impedance(Mp, I_gm, lam_gm)
+# Resistive case: forward and adjoint with GMRES (unpreconditioned)
+I_gm_res = solve_forward(Z_gm, Vector{ComplexF64}(v);
+                           solver=:gmres, gmres_tol=1e-10, gmres_maxiter=500)
+lam_gm_res = solve_adjoint(Z_gm, Q, I_gm_res;
+                             solver=:gmres, gmres_tol=1e-10, gmres_maxiter=500)
+g_adj_gmres = gradient_impedance(Mp, I_gm_res, lam_gm_res)
 
 # Compare GMRES gradient against finite differences
 println("  Checking GMRES adjoint gradient vs central FD (h=1e-5)...")
 rel_errors_gm = Float64[]
 n_check_gm = min(Nt, 10)
 for p in 1:n_check_gm
-    g_fd = fd_grad(J_of_theta, theta_gm, p; h=1e-5)
+    g_fd = fd_grad(J_of_theta, theta_real, p; h=1e-5)
     rel_err = abs(g_adj_gmres[p] - g_fd) / max(abs(g_adj_gmres[p]), abs(g_fd), 1e-30)
     push!(rel_errors_gm, rel_err)
 end
@@ -1832,195 +1680,20 @@ rel_gm_vs_direct = norm(g_adj_gmres - g_adj) / max(norm(g_adj), 1e-30)
 println("  GMRES vs direct gradient rel diff: $rel_gm_vs_direct")
 @assert rel_gm_vs_direct < 1e-4 "GMRES gradient diverges from direct: $rel_gm_vs_direct"
 
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 23: cache_MpOmega and preconditioner recycling
-# ─────────────────────────────────────────────────
-println("\n── Test 23: Preconditioner recycling ──")
-
-# Build initial preconditioner
-theta_rc0 = fill(200.0, Nt)
-Z_rc0 = Matrix{ComplexF64}(assemble_full_Z(Z_efie, Mp, theta_rc0))
-P_rc0 = build_randomized_preconditioner(Z_rc0, k_rp; seed=42)
-
-# Cache MpOmega
-mp_omega = cache_MpOmega(Mp, P_rc0.Omega)
-@assert length(mp_omega) == Nt
-for p in 1:Nt
-    @assert size(mp_omega[p]) == (N_rp, k_rp)
-    # Verify: mp_omega[p] == Mp[p] * Omega
-    ref_MpOmega = Matrix{ComplexF64}(Mp[p]) * P_rc0.Omega
-    @assert norm(mp_omega[p] - ref_MpOmega) < 1e-12 * norm(ref_MpOmega)
-end
-println("  cache_MpOmega correctness verified")
-
-# Perturb theta
-theta_rc1 = theta_rc0 .+ randn(Nt) .* 10.0
-delta_theta = theta_rc1 .- theta_rc0
-Z_rc1 = Matrix{ComplexF64}(assemble_full_Z(Z_efie, Mp, theta_rc1))
-
-# Update preconditioner with cached MpOmega (incremental)
-P_rc1_inc = update_randomized_preconditioner(P_rc0, Z_rc1, delta_theta, Mp;
-                                               MpOmega=mp_omega)
-
-# Update preconditioner without cached MpOmega (full rebuild of sketch)
-P_rc1_full = update_randomized_preconditioner(P_rc0, Z_rc1, delta_theta, Mp)
-
-# Both updates should produce effective preconditioners
-I_rc1_direct = Z_rc1 \ v
-I_rc1_inc, stats_inc = solve_gmres(Z_rc1, Vector{ComplexF64}(v);
-                                     preconditioner=P_rc1_inc,
-                                     tol=1e-10, maxiter=500)
-I_rc1_full, stats_full = solve_gmres(Z_rc1, Vector{ComplexF64}(v);
-                                       preconditioner=P_rc1_full,
-                                       tol=1e-10, maxiter=500)
-
-rel_inc = norm(I_rc1_inc - I_rc1_direct) / max(norm(I_rc1_direct), 1e-30)
-rel_full = norm(I_rc1_full - I_rc1_direct) / max(norm(I_rc1_direct), 1e-30)
-println("  Recycled (incremental) rel error: $rel_inc  iters: $(stats_inc.niter)")
-println("  Recycled (full sketch) rel error: $rel_full  iters: $(stats_full.niter)")
-@assert rel_inc < 1e-6 "Incremental recycled preconditioner inaccurate: $rel_inc"
-@assert rel_full < 1e-6 "Full-sketch recycled preconditioner inaccurate: $rel_full"
-
-# Incremental and full-sketch updates should give same sketch Y
-# (since Y_new = Z_new * Omega regardless of the path)
-@assert norm(P_rc1_inc.Y - P_rc1_full.Y) < 1e-8 * norm(P_rc1_full.Y) "Incremental sketch mismatch"
-
-# Test with reactive=true
-theta_rc_reac = theta_rc0 .+ randn(Nt) .* 5.0
-delta_theta_reac = theta_rc_reac .- theta_rc0
-Z_rc_reac = Matrix{ComplexF64}(assemble_full_Z(Z_efie, Mp, theta_rc_reac; reactive=true))
-P_rc_reac = update_randomized_preconditioner(P_rc0, Z_rc_reac, delta_theta_reac, Mp;
-                                               MpOmega=mp_omega, reactive=true)
-@assert size(P_rc_reac.Q) == (N_rp, k_rp)
-println("  Reactive recycling: struct valid")
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 24: optimize_lbfgs with solver=:gmres
-# ─────────────────────────────────────────────────
-println("\n── Test 24: optimize_lbfgs with solver=:gmres ──")
-
-theta_init_gm = fill(300.0, Nt)
-theta_opt_gm, trace_gm = optimize_lbfgs(
-    Z_efie, Mp, v, Q, theta_init_gm;
-    maxiter=8, tol=1e-8, alpha0=0.01, verbose=false,
-    solver=:gmres, precond_rank=k_rp, precond_seed=42,
-    gmres_tol=1e-8, gmres_maxiter=300,
-)
-
-if length(trace_gm) >= 2
-    J_first_gm = trace_gm[1].J
-    J_last_gm = trace_gm[end].J
-    println("  J(iter=1)  = $J_first_gm")
-    println("  J(iter=$(length(trace_gm))) = $J_last_gm")
-end
-
-# Compare with direct solver optimization (from Test 10)
-# Both should produce a valid optimization trajectory
-@assert length(trace_gm) >= 2 "GMRES optimization should run at least 2 iterations"
-
-# Run direct solver optimization with same initial point for comparison
-theta_opt_dir, trace_dir = optimize_lbfgs(
-    Z_efie, Mp, v, Q, theta_init_gm;
-    maxiter=8, tol=1e-8, alpha0=0.01, verbose=false,
-    solver=:direct,
-)
-
-# Both should produce similar first-iteration objective (same starting point)
-rel_J0 = abs(trace_gm[1].J - trace_dir[1].J) / max(abs(trace_dir[1].J), 1e-30)
-println("  First-iteration J agreement: $rel_J0")
-@assert rel_J0 < 1e-4 "GMRES and direct first-iter J disagree: $rel_J0"
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 25: optimize_directivity with solver=:gmres
-# ─────────────────────────────────────────────────
-println("\n── Test 25: optimize_directivity with solver=:gmres ──")
-
-# Build a Q_total for total radiated power (use full-sphere Q)
-Q_total_test = build_Q(G_mat, grid, pol_mat)
-
-# Direct solver run
-theta_init_dir_d = fill(300.0, Nt)
-theta_opt_dir_d, trace_dir_d = optimize_directivity(
-    Z_efie, Mp, v, Q, Q_total_test, theta_init_dir_d;
-    maxiter=5, tol=1e-8, verbose=false,
-    solver=:direct,
-)
-
-# GMRES solver run
-theta_opt_gm_d, trace_gm_d = optimize_directivity(
-    Z_efie, Mp, v, Q, Q_total_test, theta_init_dir_d;
-    maxiter=5, tol=1e-8, verbose=false,
-    solver=:gmres, precond_rank=k_rp, precond_seed=42,
-    gmres_tol=1e-8, gmres_maxiter=300,
-)
-
-@assert length(trace_gm_d) >= 2 "GMRES directivity optimization should run at least 2 iterations"
-
-# First iteration objectives should agree
-rel_J0_d = abs(trace_gm_d[1].J - trace_dir_d[1].J) / max(abs(trace_dir_d[1].J), 1e-30)
-println("  First-iteration J_ratio agreement: $rel_J0_d")
-@assert rel_J0_d < 1e-3 "GMRES and direct first-iter J_ratio disagree: $rel_J0_d"
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 26: Preconditioner as effective approximate inverse
-# ─────────────────────────────────────────────────
-println("\n── Test 26: Preconditioner effectiveness ──")
-
-# For a well-conditioned system, P⁻¹Z should be close to identity
-# Test with increasing rank k to show convergence
-ks_test = [2, 5, min(N_rp, 10)]
-residuals_k = Float64[]
-for k_test in ks_test
-    P_k = build_randomized_preconditioner(Matrix{ComplexF64}(Z_rp), k_test; seed=42)
-    # Test on a random vector
-    b_test = randn(ComplexF64, N_rp)
-    x_exact = Z_rp \ b_test
-    x_gmres, _ = solve_gmres(Matrix{ComplexF64}(Z_rp), b_test;
-                               preconditioner=P_k, tol=1e-10, maxiter=500)
-    res = norm(x_gmres - x_exact) / max(norm(x_exact), 1e-30)
-    push!(residuals_k, res)
-    println("  rank=$k_test  solve rel error: $res")
-end
-
-# All should converge within tolerance
-for (k_test, res) in zip(ks_test, residuals_k)
-    @assert res < 1e-5 "Preconditioner rank=$k_test failed: rel error=$res"
-end
-
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 27: GMRES gradient with reactive impedance
-# ─────────────────────────────────────────────────
-println("\n── Test 27: GMRES gradient with reactive impedance ──")
-
+# Reactive case
 theta_reac = fill(150.0, Nt)
 Z_reac = Matrix{ComplexF64}(assemble_full_Z(Z_efie, Mp, theta_reac; reactive=true))
 I_reac_direct = Z_reac \ v
 
-# Adjoint gradient (direct) for reactive case
 lam_reac_dir = solve_adjoint(Z_reac, Q, I_reac_direct)
 g_reac_dir = gradient_impedance(Mp, I_reac_direct, lam_reac_dir; reactive=true)
 
-# Adjoint gradient (GMRES) for reactive case
-P_reac = build_randomized_preconditioner(Z_reac, k_rp; seed=42)
 I_reac_gm = solve_forward(Z_reac, Vector{ComplexF64}(v);
-                            solver=:gmres, preconditioner=P_reac,
-                            gmres_tol=1e-10, gmres_maxiter=500)
+                            solver=:gmres, gmres_tol=1e-10, gmres_maxiter=500)
 lam_reac_gm = solve_adjoint(Z_reac, Q, I_reac_gm;
-                              solver=:gmres, preconditioner=P_reac,
-                              gmres_tol=1e-10, gmres_maxiter=500)
+                              solver=:gmres, gmres_tol=1e-10, gmres_maxiter=500)
 g_reac_gm = gradient_impedance(Mp, I_reac_gm, lam_reac_gm; reactive=true)
 
-# FD reference for reactive
 function J_of_theta_reac(theta_vec)
     Z_t = copy(Z_efie)
     for p in eachindex(theta_vec)
@@ -2034,16 +1707,13 @@ rel_errors_reac = Float64[]
 n_check_reac = min(Nt, 5)
 for p in 1:n_check_reac
     g_fd = fd_grad(J_of_theta_reac, theta_reac, p; h=1e-5)
-    rel_err_dir = abs(g_reac_dir[p] - g_fd) / max(abs(g_fd), 1e-30)
     rel_err_gm = abs(g_reac_gm[p] - g_fd) / max(abs(g_fd), 1e-30)
     push!(rel_errors_reac, rel_err_gm)
-    println("    p=$p: dir=$rel_err_dir  gmres=$rel_err_gm")
 end
 max_rel_err_reac = maximum(rel_errors_reac)
 println("  Max rel error (GMRES reactive gradient vs FD): $max_rel_err_reac")
 @assert max_rel_err_reac < 1e-3 "Reactive GMRES gradient failed: $max_rel_err_reac"
 
-# Direct and GMRES gradients should agree closely
 rel_reac_gm_vs_dir = norm(g_reac_gm - g_reac_dir) / max(norm(g_reac_dir), 1e-30)
 println("  Reactive gradient GMRES vs direct: $rel_reac_gm_vs_dir")
 @assert rel_reac_gm_vs_dir < 1e-4
@@ -2051,37 +1721,9 @@ println("  Reactive gradient GMRES vs direct: $rel_reac_gm_vs_dir")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
-# Test 28: Regression — default solver=:direct unchanged
+# Test 19: Near-field sparse preconditioner
 # ─────────────────────────────────────────────────
-println("\n── Test 28: Regression — default solver=:direct ──")
-
-# solve_forward default should match Z \ v exactly
-I_reg_sf = solve_forward(Matrix{ComplexF64}(Z_rp), Vector{ComplexF64}(v))
-I_reg_direct = Z_rp \ v
-rel_reg = norm(I_reg_sf - I_reg_direct) / max(norm(I_reg_direct), 1e-30)
-@assert rel_reg < 1e-12 "Default solve_forward regression: $rel_reg"
-
-# solve_adjoint default should match Z' \ (Q*I)
-lam_reg_sa = solve_adjoint(Matrix{ComplexF64}(Z_rp), Q, I_reg_direct)
-lam_reg_dir = Z_rp' \ (Q * I_reg_direct)
-rel_reg_adj = norm(lam_reg_sa - lam_reg_dir) / max(norm(lam_reg_dir), 1e-30)
-@assert rel_reg_adj < 1e-12 "Default solve_adjoint regression: $rel_reg_adj"
-
-# optimize_lbfgs default (solver=:direct) should still work
-theta_reg_init = fill(300.0, Nt)
-theta_reg_opt, trace_reg = optimize_lbfgs(
-    Z_efie, Mp, v, Q, theta_reg_init;
-    maxiter=3, tol=1e-8, verbose=false,
-)
-@assert length(trace_reg) >= 2
-
-println("  All defaults unchanged")
-println("  PASS ✓")
-
-# ─────────────────────────────────────────────────
-# Test 29: Near-field sparse preconditioner
-# ─────────────────────────────────────────────────
-println("\n── Test 29: Near-field sparse preconditioner ──")
+println("\n── Test 19: Near-field sparse preconditioner ──")
 
 # Test rwg_centers
 centers = rwg_centers(mesh, rwg)
@@ -2100,8 +1742,8 @@ println("  NF precond (1.0λ) rel error: $rel_nf  iters: $(stats_nf.niter)")
 @assert rel_nf < 1e-6 "Near-field preconditioned solve inaccurate: $rel_nf"
 
 # Compare iteration count: near-field should help vs unpreconditioned
-I_nop, stats_nop = solve_gmres(Z_efie, v; tol=1e-8, maxiter=200)
-println("  Iterations: no_precond=$(stats_nop.niter), NF=$(stats_nf.niter)")
+I_nop_nf, stats_nop_nf = solve_gmres(Z_efie, v; tol=1e-8, maxiter=200)
+println("  Iterations: no_precond=$(stats_nop_nf.niter), NF=$(stats_nf.niter)")
 
 # NearFieldOperator / NearFieldAdjointOperator wrappers
 M_nf = NearFieldOperator(P_nf)
@@ -2117,48 +1759,29 @@ y_nf_adj = M_nf_adj * v
 # Adjoint consistency: ⟨P⁻¹x, y⟩ ≈ ⟨x, P⁻ᴴy⟩
 x_test = randn(ComplexF64, N)
 y_test = randn(ComplexF64, N)
-lhs = dot(M_nf * x_test, y_test)
-rhs = dot(x_test, M_nf_adj * y_test)
-adj_err = abs(lhs - rhs) / max(abs(lhs), 1e-30)
+lhs_nf = dot(M_nf * x_test, y_test)
+rhs_nf = dot(x_test, M_nf_adj * y_test)
+adj_err = abs(lhs_nf - rhs_nf) / max(abs(lhs_nf), 1e-30)
 println("  Adjoint consistency: $adj_err")
 @assert adj_err < 1e-12 "Near-field adjoint inconsistent: $adj_err"
 
 # GMRES adjoint solve with near-field
-rhs_adj = Q * I_pec
-lambda_nf, stats_adj_nf = solve_gmres_adjoint(Z_efie, rhs_adj;
+rhs_adj_nf = Q * I_pec
+lambda_nf, stats_adj_nf = solve_gmres_adjoint(Z_efie, rhs_adj_nf;
                                                 preconditioner=P_nf, tol=1e-8, maxiter=200)
-lambda_direct = Z_efie' \ rhs_adj
-rel_adj_nf = norm(lambda_nf - lambda_direct) / max(norm(lambda_direct), 1e-30)
+lambda_direct_nf = Z_efie' \ rhs_adj_nf
+rel_adj_nf = norm(lambda_nf - lambda_direct_nf) / max(norm(lambda_direct_nf), 1e-30)
 println("  NF adjoint solve rel error: $rel_adj_nf  iters: $(stats_adj_nf.niter)")
 @assert rel_adj_nf < 1e-6 "Near-field adjoint solve inaccurate: $rel_adj_nf"
 
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
-# Test 30: Right preconditioning
+# Test 20: Right preconditioning
 # ─────────────────────────────────────────────────
-println("\n── Test 30: Right preconditioning ──")
+println("\n── Test 20: Right preconditioning ──")
 
-# Build randomized preconditioner
-P_rp = build_randomized_preconditioner(Z_efie, 10; seed=42)
-
-# Right-preconditioned GMRES
-I_right, stats_right = solve_gmres(Z_efie, v;
-                                     preconditioner=P_rp, precond_side=:right,
-                                     tol=1e-8, maxiter=200)
-rel_right = norm(I_right - I_pec) / max(norm(I_pec), 1e-30)
-println("  Right precond rel error: $rel_right  iters: $(stats_right.niter)")
-@assert rel_right < 1e-6 "Right-preconditioned solve inaccurate: $rel_right"
-
-# Right-preconditioned adjoint
-lambda_right, stats_adj_right = solve_gmres_adjoint(Z_efie, rhs_adj;
-                                                      preconditioner=P_rp, precond_side=:right,
-                                                      tol=1e-8, maxiter=200)
-rel_adj_right = norm(lambda_right - lambda_direct) / max(norm(lambda_direct), 1e-30)
-println("  Right adjoint rel error: $rel_adj_right  iters: $(stats_adj_right.niter)")
-@assert rel_adj_right < 1e-6 "Right adjoint solve inaccurate: $rel_adj_right"
-
-# Near-field with right preconditioning
+# Right-preconditioned GMRES with near-field
 I_nf_right, stats_nf_right = solve_gmres(Z_efie, v;
                                            preconditioner=P_nf, precond_side=:right,
                                            tol=1e-8, maxiter=200)
@@ -2166,13 +1789,90 @@ rel_nf_right = norm(I_nf_right - I_pec) / max(norm(I_pec), 1e-30)
 println("  NF right precond rel error: $rel_nf_right  iters: $(stats_nf_right.niter)")
 @assert rel_nf_right < 1e-6 "NF right-preconditioned solve inaccurate: $rel_nf_right"
 
+# Right-preconditioned adjoint with near-field
+lambda_nf_right, stats_adj_nf_right = solve_gmres_adjoint(Z_efie, rhs_adj_nf;
+                                                             preconditioner=P_nf, precond_side=:right,
+                                                             tol=1e-8, maxiter=200)
+rel_adj_nf_right = norm(lambda_nf_right - lambda_direct_nf) / max(norm(lambda_direct_nf), 1e-30)
+println("  NF right adjoint rel error: $rel_adj_nf_right  iters: $(stats_adj_nf_right.niter)")
+@assert rel_adj_nf_right < 1e-6 "NF right adjoint solve inaccurate: $rel_adj_nf_right"
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 21: Optimization with GMRES solver
+# ─────────────────────────────────────────────────
+println("\n── Test 21: Optimization with GMRES solver ──")
+
+theta_init_gm = fill(300.0, Nt)
+theta_opt_gm, trace_gm = optimize_lbfgs(
+    Z_efie, Mp, v, Q, theta_init_gm;
+    maxiter=8, tol=1e-8, alpha0=0.01, verbose=false,
+    solver=:gmres, gmres_tol=1e-8, gmres_maxiter=300,
+)
+@assert length(trace_gm) >= 2 "GMRES optimization should run at least 2 iterations"
+
+# Direct solver comparison
+theta_opt_dir, trace_dir = optimize_lbfgs(
+    Z_efie, Mp, v, Q, theta_init_gm;
+    maxiter=8, tol=1e-8, alpha0=0.01, verbose=false,
+    solver=:direct,
+)
+rel_J0 = abs(trace_gm[1].J - trace_dir[1].J) / max(abs(trace_dir[1].J), 1e-30)
+println("  First-iteration J agreement (lbfgs): $rel_J0")
+@assert rel_J0 < 1e-4 "GMRES and direct first-iter J disagree: $rel_J0"
+
+# optimize_directivity with GMRES
+Q_total_test = build_Q(G_mat, grid, pol_mat)
+theta_opt_dir_d, trace_dir_d = optimize_directivity(
+    Z_efie, Mp, v, Q, Q_total_test, theta_init_gm;
+    maxiter=5, tol=1e-8, verbose=false, solver=:direct,
+)
+theta_opt_gm_d, trace_gm_d = optimize_directivity(
+    Z_efie, Mp, v, Q, Q_total_test, theta_init_gm;
+    maxiter=5, tol=1e-8, verbose=false,
+    solver=:gmres, gmres_tol=1e-8, gmres_maxiter=300,
+)
+@assert length(trace_gm_d) >= 2
+rel_J0_d = abs(trace_gm_d[1].J - trace_dir_d[1].J) / max(abs(trace_dir_d[1].J), 1e-30)
+println("  First-iteration J_ratio agreement (directivity): $rel_J0_d")
+@assert rel_J0_d < 1e-3
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 22: Regression — default solver=:direct unchanged
+# ─────────────────────────────────────────────────
+println("\n── Test 22: Regression — default solver=:direct ──")
+
+# solve_forward default should match Z \ v exactly
+I_reg_sf = solve_forward(Z_gm, Vector{ComplexF64}(v))
+I_reg_direct = Z_gm \ v
+rel_reg = norm(I_reg_sf - I_reg_direct) / max(norm(I_reg_direct), 1e-30)
+@assert rel_reg < 1e-12 "Default solve_forward regression: $rel_reg"
+
+# solve_adjoint default should match Z' \ (Q*I)
+lam_reg_sa = solve_adjoint(Z_gm, Q, I_reg_direct)
+lam_reg_dir = Z_gm' \ (Q * I_reg_direct)
+rel_reg_adj = norm(lam_reg_sa - lam_reg_dir) / max(norm(lam_reg_dir), 1e-30)
+@assert rel_reg_adj < 1e-12 "Default solve_adjoint regression: $rel_reg_adj"
+
+# optimize_lbfgs default (solver=:direct) should still work
+theta_reg_init = fill(300.0, Nt)
+theta_reg_opt, trace_reg = optimize_lbfgs(
+    Z_efie, Mp, v, Q, theta_reg_init;
+    maxiter=3, tol=1e-8, verbose=false,
+)
+@assert length(trace_reg) >= 2
+
+println("  All defaults unchanged")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL TESTS PASSED")
+println("ALL 22 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)

@@ -4,14 +4,12 @@
 #   - Direct LU solve time
 #   - GMRES (no preconditioner) iterations and time
 #   - GMRES + near-field sparse preconditioner (various cutoffs)
-#   - GMRES + randomized preconditioner (for comparison)
 #
 # Tests both impedance-loaded EFIE (metasurface) and PEC EFIE (general MoM).
 #
 # Key findings:
 #   1. Near-field preconditioner gives N-independent iteration counts
-#   2. Randomized subspace preconditioner increases iterations (counterproductive)
-#   3. GMRES crossover vs LU occurs at N ≈ 200-300
+#   2. GMRES crossover vs LU occurs at N ≈ 200-300
 #
 # Run: julia --project=. examples/ex_precond_scaling.jl
 
@@ -132,18 +130,6 @@ for (idx, Nx) in enumerate(mesh_sizes)
         println("    NF $(nf_lam)λ:    $(round(t_nf*1000, sigdigits=3))ms  iters=$(stats_nf.niter)  nnz=$(round(P_nf.nnz_ratio*100, digits=1))%")
     end
 
-    # Randomized (k=20, left) for comparison
-    k_eff = min(20, N)
-    t_rp = @elapsed begin
-        P_rp = build_randomized_preconditioner(Z_full, k_eff; seed=42)
-        I_rp, stats_rp = solve_gmres(Z_full, v; preconditioner=P_rp, tol=gmres_tol, maxiter=gmres_maxiter)
-    end
-    rel_rp = norm(I_rp - I_direct) / max(norm(I_direct), 1e-30)
-    push!(results, (Nx=Nx, N_rwg=N, problem="impedance",
-                     method="gmres_rand_k$(k_eff)", time_s=t_rp, iters=stats_rp.niter,
-                     rel_err=rel_rp, residual=norm(Z_full * I_rp - v) / norm(v)))
-    println("    Rand k=$k_eff:  $(round(t_rp*1000, sigdigits=3))ms  iters=$(stats_rp.niter)")
-
     println()
 end
 
@@ -199,18 +185,6 @@ for (idx, Nx) in enumerate(mesh_sizes)
         println("    NF $(nf_lam)λ:    $(round(t_nf*1000, sigdigits=3))ms  iters=$(stats_nf.niter)")
     end
 
-    # Randomized (k=20) for comparison
-    k_eff = min(20, N)
-    t_rp = @elapsed begin
-        P_rp = build_randomized_preconditioner(Z_pec, k_eff; seed=42)
-        I_rp, stats_rp = solve_gmres(Z_pec, v; preconditioner=P_rp, tol=gmres_tol, maxiter=gmres_maxiter)
-    end
-    push!(results, (Nx=Nx, N_rwg=N, problem="pec",
-                     method="gmres_rand_k$(k_eff)", time_s=t_rp, iters=stats_rp.niter,
-                     rel_err=norm(I_rp - I_direct) / max(norm(I_direct), 1e-30),
-                     residual=norm(Z_pec * I_rp - v) / norm(v)))
-    println("    Rand k=$k_eff:  $(round(t_rp*1000, sigdigits=3))ms  iters=$(stats_rp.niter)")
-
     println()
 end
 
@@ -226,7 +200,7 @@ println("\nResults saved to: $(joinpath(DATADIR, "precond_scaling_benchmark.csv"
 for prob in ["impedance", "pec"]
     prob_name = prob == "impedance" ? "Impedance-Loaded EFIE" : "PEC EFIE"
     println("\n── $prob_name: Iteration Count ──")
-    println(rpad("N", 6), rpad("no_P", 7), rpad("nf0.5λ", 7), rpad("nf1.0λ", 7), rpad("nf2.0λ", 7), rpad("rand", 7))
+    println(rpad("N", 6), rpad("no_P", 7), rpad("nf0.5λ", 7), rpad("nf1.0λ", 7), rpad("nf2.0λ", 7))
     for Nx in mesh_sizes
         r_nop = filter(r -> r.Nx == Nx && r.problem == prob && r.method == "gmres_noprecond", results)
         n_rwg = nrow(r_nop) > 0 ? r_nop[1, :N_rwg] : 0
@@ -237,8 +211,6 @@ for prob in ["impedance", "pec"]
             r = filter(r -> r.Nx == Nx && r.problem == prob && r.method == "gmres_nf_$(c)lam", results)
             push!(iters, nrow(r) > 0 ? r[1, :iters] : -1)
         end
-        r_rp = filter(r -> r.Nx == Nx && r.problem == prob && contains(r.method, "rand"), results)
-        push!(iters, nrow(r_rp) > 0 ? r_rp[1, :iters] : -1)
 
         println(rpad(n_rwg, 6), [rpad(i, 7) for i in iters]...)
     end

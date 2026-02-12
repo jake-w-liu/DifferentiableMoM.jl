@@ -7,7 +7,6 @@
 # Compares:
 #   - Direct LU
 #   - GMRES (no preconditioner)
-#   - GMRES + randomized subspace preconditioner (left & right)
 #   - GMRES + near-field sparse preconditioner (various cutoffs)
 #
 # Run: julia --project=. examples/ex_precond_pec_scaling.jl
@@ -42,9 +41,6 @@ mesh_sizes = [3, 4, 6, 8, 10, 12, 16]
 
 # Near-field cutoffs (in wavelengths)
 nf_cutoffs_lam = [0.5, 1.0, 2.0]
-
-# Randomized preconditioner rank
-rand_rank = 20
 
 # Plane wave excitation
 k_vec = Vec3(0.0, 0.0, -k)
@@ -114,34 +110,6 @@ for (idx, Nx) in enumerate(mesh_sizes)
                      rel_err=rel_nop, residual=res_nop, cond_est=cond_est))
     println("    GMRES (no P):  $(round(t_gmres_nop*1000, sigdigits=3))ms  iters=$(stats_nop.niter)  rel_err=$(round(rel_nop, sigdigits=3))")
 
-    # --- GMRES + randomized preconditioner (LEFT) ---
-    k_eff = min(rand_rank, N)
-    t_rp_left = @elapsed begin
-        P_rp = build_randomized_preconditioner(Z_pec, k_eff; seed=42)
-        I_rp_left, stats_rp_left = solve_gmres(Z_pec, v;
-                                                  preconditioner=P_rp, precond_side=:left,
-                                                  tol=gmres_tol, maxiter=gmres_maxiter)
-    end
-    rel_rp_left = norm(I_rp_left - I_direct) / max(norm(I_direct), 1e-30)
-    res_rp_left = norm(Z_pec * I_rp_left - v) / norm(v)
-    push!(results, (Nx=Nx, N_rwg=N, method="gmres_rand_k$(k_eff)_left",
-                     time_s=t_rp_left, iters=stats_rp_left.niter,
-                     rel_err=rel_rp_left, residual=res_rp_left, cond_est=cond_est))
-    println("    Rand k=$k_eff L: $(round(t_rp_left*1000, sigdigits=3))ms  iters=$(stats_rp_left.niter)  rel_err=$(round(rel_rp_left, sigdigits=3))")
-
-    # --- GMRES + randomized preconditioner (RIGHT) ---
-    t_rp_right = @elapsed begin
-        I_rp_right, stats_rp_right = solve_gmres(Z_pec, v;
-                                                    preconditioner=P_rp, precond_side=:right,
-                                                    tol=gmres_tol, maxiter=gmres_maxiter)
-    end
-    rel_rp_right = norm(I_rp_right - I_direct) / max(norm(I_direct), 1e-30)
-    res_rp_right = norm(Z_pec * I_rp_right - v) / norm(v)
-    push!(results, (Nx=Nx, N_rwg=N, method="gmres_rand_k$(k_eff)_right",
-                     time_s=t_rp_right, iters=stats_rp_right.niter,
-                     rel_err=rel_rp_right, residual=res_rp_right, cond_est=cond_est))
-    println("    Rand k=$k_eff R: $(round(t_rp_right*1000, sigdigits=3))ms  iters=$(stats_rp_right.niter)  rel_err=$(round(rel_rp_right, sigdigits=3))")
-
     # --- GMRES + near-field preconditioner at various cutoffs ---
     for nf_lam in nf_cutoffs_lam
         cutoff = nf_lam * lambda0
@@ -172,18 +140,12 @@ println("\nResults saved to: $(joinpath(DATADIR, "precond_pec_scaling.csv"))")
 
 # Summary comparison
 println("\n── Iteration Count Comparison ──")
-println(rpad("N", 6), rpad("no_P", 8), rpad("rand_L", 8), rpad("rand_R", 8),
+println(rpad("N", 6), rpad("no_P", 8),
         [rpad("nf_$(c)λ", 8) for c in nf_cutoffs_lam]...)
 for Nx in mesh_sizes
     nop = filter(r -> r.Nx == Nx && r.method == "gmres_noprecond", results)
     nop_n = nrow(nop) > 0 ? nop[1, :N_rwg] : 0
     nop_i = nrow(nop) > 0 ? nop[1, :iters] : -1
-
-    rl = filter(r -> r.Nx == Nx && contains(r.method, "rand") && contains(r.method, "left"), results)
-    rl_i = nrow(rl) > 0 ? rl[1, :iters] : -1
-
-    rr = filter(r -> r.Nx == Nx && contains(r.method, "rand") && contains(r.method, "right"), results)
-    rr_i = nrow(rr) > 0 ? rr[1, :iters] : -1
 
     nf_iters = Int[]
     for c in nf_cutoffs_lam
@@ -191,7 +153,7 @@ for Nx in mesh_sizes
         push!(nf_iters, nrow(nf) > 0 ? nf[1, :iters] : -1)
     end
 
-    println(rpad(nop_n, 6), rpad(nop_i, 8), rpad(rl_i, 8), rpad(rr_i, 8),
+    println(rpad(nop_n, 6), rpad(nop_i, 8),
             [rpad(i, 8) for i in nf_iters]...)
 end
 
