@@ -6,7 +6,7 @@
 # Outputs:
 #   - data/pattern_feed_dipole_phi0.csv
 #   - data/pattern_feed_dipole_summary.csv
-#   - data/pattern_feed_dipole_validation.png
+#   - figs/pattern_feed_dipole_validation.png
 #
 # Run:
 #   julia --project=. examples/ex_pattern_feed_dipole_validation.jl
@@ -18,13 +18,23 @@ using StaticArrays
 using Statistics
 using CSV
 using DataFrames
-using Plots
+using PlotlySupply
 
 include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
+const FIGDIR = joinpath(@__DIR__, "..", "figs")
 mkpath(DATADIR)
+mkpath(FIGDIR)
+
+function _save_pair(fig, basepath::AbstractString; width::Int, height::Int)
+    png = basepath * ".png"
+    pdf = basepath * ".pdf"
+    savefig(fig, png; width = width, height = height)
+    savefig(fig, pdf; width = width, height = height)
+    return (png_path = png, pdf_path = pdf)
+end
 
 const C0 = 299792458.0
 const EPS0 = 8.854187817e-12
@@ -184,35 +194,74 @@ df_summary = DataFrame(
 )
 CSV.write(joinpath(DATADIR, "pattern_feed_dipole_summary.csv"), df_summary)
 
-p_lin = plot(theta_eval_deg, P_num;
-    lw=2, color=:blue, label="Pattern-feed",
-    xlabel="θ (deg)", ylabel="Normalized power",
-    title="Dipole cut (φ=0): linear")
-plot!(p_lin, theta_eval_deg, P_ana; lw=2, ls=:dash, color=:black, label="Analytical")
+width = 900
+height = 1680
+titles = reshape(
+    [
+        "Dipole cut (φ=0): linear",
+        "Dipole cut (φ=0): dB",
+        "Pattern-feed minus analytical",
+        "Co-pol phase error",
+    ],
+    4,
+    1,
+)
+sf = subplots(4, 1; sync = false, width = width, height = height, subplot_titles = titles)
 
-p_db = plot(theta_eval_deg, db_num;
-    lw=2, color=:blue, label="Pattern-feed",
-    xlabel="θ (deg)", ylabel="Normalized power (dB)",
-    title="Dipole cut (φ=0): dB")
-plot!(p_db, theta_eval_deg, db_ana; lw=2, ls=:dash, color=:black, label="Analytical")
+plot_scatter!(
+    sf,
+    theta_eval_deg,
+    [P_num, P_ana];
+    color = ["blue", "black"],
+    dash = ["", "dash"],
+    legend = ["Pattern-feed", "Analytical"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power",
+)
 
-p_err = plot(theta_eval_deg, err_lin;
-    lw=2, color=:red, label="Linear error",
-    xlabel="θ (deg)", ylabel="Error",
-    title="Pattern-feed minus analytical")
-hline!(p_err, [0.0], color=:gray, ls=:dot, label=nothing)
+subplot!(sf, 2, 1)
+plot_scatter!(
+    sf,
+    theta_eval_deg,
+    [db_num, db_ana];
+    color = ["blue", "black"],
+    dash = ["", "dash"],
+    legend = ["Pattern-feed", "Analytical"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power (dB)",
+)
 
-p_phase = plot(theta_eval_deg, phase_err_deg;
-    lw=2, color=:purple, label="Phase error",
-    xlabel="θ (deg)", ylabel="deg",
-    title="Co-pol phase error")
-hline!(p_phase, [0.0], color=:gray, ls=:dot, label=nothing)
+subplot!(sf, 3, 1)
+plot_scatter!(
+    sf,
+    theta_eval_deg,
+    err_lin;
+    color = "red",
+    legend = "Linear error",
+    xlabel = "θ (deg)",
+    ylabel = "Error",
+)
+add_hline!(sf.plot, 0.0; row = 3, col = 1, line_color = "gray", line_dash = "dot", line_width = 1.2)
 
-fig = plot(p_lin, p_db, p_err, p_phase; layout=(4, 1), size=(900, 1200))
-fig_path = joinpath(DATADIR, "pattern_feed_dipole_validation.png")
-savefig(fig, fig_path)
+subplot!(sf, 4, 1)
+plot_scatter!(
+    sf,
+    theta_eval_deg,
+    phase_err_deg;
+    color = "purple",
+    legend = "Phase error",
+    xlabel = "θ (deg)",
+    ylabel = "deg",
+)
+add_hline!(sf.plot, 0.0; row = 4, col = 1, line_color = "gray", line_dash = "dot", line_width = 1.2)
+
+subplot_legends!(sf; position = :topright)
+plot_out = _save_pair(sf.plot, joinpath(FIGDIR, "pattern_feed_dipole_validation"); width = width, height = height)
+png_path = plot_out.png_path
+pdf_path = plot_out.pdf_path
 
 println("Saved:")
 println("  $(joinpath(DATADIR, "pattern_feed_dipole_phi0.csv"))")
 println("  $(joinpath(DATADIR, "pattern_feed_dipole_summary.csv"))")
-println("  $fig_path")
+println("  $png_path")
+println("  $pdf_path")

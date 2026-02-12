@@ -17,15 +17,30 @@ function compute_objective(I::Vector{<:Number}, Q::Matrix{<:Number})
 end
 
 """
-    solve_adjoint(Z, Q, I)
+    solve_adjoint(Z, Q, I; solver=:direct, preconditioner=nothing, gmres_tol=1e-8, gmres_maxiter=200)
 
 Solve the adjoint system: Z† λ = Q I
 Returns λ ∈ C^N.
+
+When `solver=:gmres`, uses GMRES with the adjoint preconditioner P⁻ᴴ.
 """
 function solve_adjoint(Z::Matrix{<:Number}, Q::Matrix{<:Number},
-                       I::Vector{<:Number})
+                       I::Vector{<:Number};
+                       solver::Symbol=:direct,
+                       preconditioner=nothing,
+                       gmres_tol::Float64=1e-8,
+                       gmres_maxiter::Int=200)
     rhs = Q * I
-    return Z' \ rhs
+    if solver == :direct
+        return Z' \ rhs
+    elseif solver == :gmres
+        x, stats = solve_gmres_adjoint(Matrix{ComplexF64}(Z), Vector{ComplexF64}(rhs);
+                                        preconditioner=preconditioner,
+                                        tol=gmres_tol, maxiter=gmres_maxiter)
+        return x
+    else
+        error("Unknown solver: $solver (expected :direct or :gmres)")
+    end
 end
 
 """
