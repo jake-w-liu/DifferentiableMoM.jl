@@ -18,7 +18,7 @@ using StaticArrays
 using Statistics
 using CSV
 using DataFrames
-using Plots
+using PlotlySupply
 
 include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
@@ -27,7 +27,17 @@ include(joinpath(@__DIR__, "pattern_import_utils.jl"))
 using .PatternImportUtils
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
+const FIGDIR = joinpath(@__DIR__, "..", "figs")
 mkpath(DATADIR)
+mkpath(FIGDIR)
+
+function _save_pair(fig, basepath::AbstractString; width::Int, height::Int)
+    png = basepath * ".png"
+    pdf = basepath * ".pdf"
+    savefig(fig, png; width = width, height = height)
+    savefig(fig, pdf; width = width, height = height)
+    return (png_path = png, pdf_path = pdf)
+end
 
 to_dB(x; floor=1e-30) = 10 * log10(max(x, floor))
 
@@ -144,46 +154,56 @@ df_summary = DataFrame(
 csv_summary = joinpath(DATADIR, "radiationpatterns_adapter_summary.csv")
 CSV.write(csv_summary, df_summary)
 
-p_db = plot(
-    θ_eval_deg,
-    df_cut.dB_pattern_obj;
-    lw=2,
-    color=:blue,
-    label="Pattern-object path",
-    xlabel="θ (deg)",
-    ylabel="Normalized power (dB)",
-    title="Adapter check: φ=0° cut",
+width = 900
+height = 1260
+titles = reshape(
+    ["Adapter check: φ=0° cut", "Normalized power error", "Co-pol phase (pattern-object path)"],
+    3,
+    1,
 )
-plot!(p_db, θ_eval_deg, df_cut.dB_pattern_raw; lw=2, ls=:dash, color=:black, label="Raw-array path")
+sf = subplots(3, 1; sync = false, width = width, height = height, subplot_titles = titles)
 
-p_err = plot(
+plot_scatter!(
+    sf,
+    θ_eval_deg,
+    [df_cut.dB_pattern_obj, df_cut.dB_pattern_raw];
+    color = ["blue", "black"],
+    dash = ["", "dash"],
+    legend = ["Pattern-object path", "Raw-array path"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power (dB)",
+)
+
+subplot!(sf, 2, 1)
+plot_scatter!(
+    sf,
     θ_eval_deg,
     df_cut.abs_err_power;
-    lw=2,
-    color=:red,
-    label="|Δ power|",
-    xlabel="θ (deg)",
-    ylabel="Absolute error",
-    title="Normalized power error",
+    color = "red",
+    legend = "|Δ power|",
+    xlabel = "θ (deg)",
+    ylabel = "Absolute error",
 )
-hline!(p_err, [0.0], color=:gray, ls=:dot, label=nothing)
+add_hline!(sf.plot, 0.0; row = 2, col = 1, line_color = "gray", line_dash = "dot", line_width = 1.2)
 
-p_phase = plot(
+subplot!(sf, 3, 1)
+plot_scatter!(
+    sf,
     θ_eval_deg,
     rad2deg.(angle.(Eθ_obj ./ max.(abs.(Eθ_obj), 1e-30)));
-    lw=2,
-    color=:purple,
-    label="∠Eθ (pattern-object)",
-    xlabel="θ (deg)",
-    ylabel="deg",
-    title="Co-pol phase (pattern-object path)",
+    color = "purple",
+    legend = "∠Eθ (pattern-object)",
+    xlabel = "θ (deg)",
+    ylabel = "deg",
 )
 
-fig = plot(p_db, p_err, p_phase; layout=(3, 1), size=(900, 1000))
-png_path = joinpath(DATADIR, "radiationpatterns_adapter_check.png")
-savefig(fig, png_path)
+subplot_legends!(sf; position = :topright)
+plot_out = _save_pair(sf.plot, joinpath(FIGDIR, "radiationpatterns_adapter_check"); width = width, height = height)
+png_path = plot_out.png_path
+pdf_path = plot_out.pdf_path
 
 println("Saved:")
 println("  $csv_cut")
 println("  $csv_summary")
 println("  $png_path")
+println("  $pdf_path")

@@ -18,7 +18,7 @@ using LinearAlgebra
 using StaticArrays
 using CSV
 using DataFrames
-using Plots
+using PlotlySupply
 
 include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
@@ -27,7 +27,17 @@ include(joinpath(@__DIR__, "pattern_import_utils.jl"))
 using .PatternImportUtils
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
+const FIGDIR = joinpath(@__DIR__, "..", "figs")
 mkpath(DATADIR)
+mkpath(FIGDIR)
+
+function _save_pair(fig, basepath::AbstractString; width::Int, height::Int)
+    png = basepath * ".png"
+    pdf = basepath * ".pdf"
+    savefig(fig, png; width = width, height = height)
+    savefig(fig, pdf; width = width, height = height)
+    return (png_path = png, pdf_path = pdf)
+end
 
 to_dB(x; floor=1e-30) = 10 * log10(max(x, floor))
 
@@ -179,51 +189,67 @@ df_summary = DataFrame(
 csv_summary = joinpath(DATADIR, "$(prefix)_summary.csv")
 CSV.write(csv_summary, df_summary)
 
-p_inc = plot(
+width = 960
+height = 1260
+titles = reshape(
+    [
+        "Incident horn pattern cut",
+        "Bistatic cut under imported horn pattern ($geometry)",
+        "Linear-scale RCS cut",
+    ],
+    3,
+    1,
+)
+sf = subplots(3, 1; sync = false, width = width, height = height, subplot_titles = titles)
+
+plot_scatter!(
+    sf,
     df_inc.theta_deg,
     df_inc.power_dB;
-    lw=2,
-    color=:blue,
-    label="Imported pattern (φ=$(round(df_inc.phi_deg[1], digits=2))°)",
-    xlabel="θ (deg)",
-    ylabel="Normalized |E|² (dB)",
-    title="Incident horn pattern cut",
+    color = "blue",
+    legend = "Imported pattern (φ=$(round(df_inc.phi_deg[1], digits=2))°)",
+    xlabel = "θ (deg)",
+    ylabel = "Normalized |E|² (dB)",
 )
 
-p_rcs = plot(
+subplot!(sf, 2, 1)
+plot_scatter!(
+    sf,
     df_rcs.theta_deg,
     df_rcs.sigma_dBsm;
-    lw=2,
-    color=:red,
-    label="PEC scatter (φ=$(round(df_rcs.phi_deg[1], digits=2))°)",
-    xlabel="θ (deg)",
-    ylabel="σ (dBsm)",
-    title="Bistatic cut under imported horn pattern ($geometry)",
+    color = "red",
+    legend = "PEC scatter (φ=$(round(df_rcs.phi_deg[1], digits=2))°)",
+    xlabel = "θ (deg)",
+    ylabel = "σ (dBsm)",
 )
-scatter!(
-    p_rcs,
-    [rad2deg(bs.theta)],
-    [10 * log10(max(bs.sigma, 1e-30))];
-    marker=:star5,
-    color=:black,
-    ms=8,
-    label="Monostatic sample",
+addtraces!(
+    sf,
+    scatter(
+        x = [rad2deg(bs.theta)],
+        y = [10 * log10(max(bs.sigma, 1e-30))],
+        mode = "markers",
+        name = "Monostatic sample",
+        marker = attr(symbol = "star", size = 8, color = "black"),
+    );
+    row = 2,
+    col = 1,
 )
 
-p_err = plot(
+subplot!(sf, 3, 1)
+plot_scatter!(
+    sf,
     df_rcs.theta_deg,
     df_rcs.sigma_m2;
-    lw=2,
-    color=:darkgreen,
-    label="σ (linear)",
-    xlabel="θ (deg)",
-    ylabel="σ (m²)",
-    title="Linear-scale RCS cut",
+    color = "green",
+    legend = "σ (linear)",
+    xlabel = "θ (deg)",
+    ylabel = "σ (m²)",
 )
 
-fig = plot(p_inc, p_rcs, p_err; layout=(3, 1), size=(960, 1100))
-png_path = joinpath(DATADIR, "$(prefix)_demo.png")
-savefig(fig, png_path)
+subplot_legends!(sf; position = :topright)
+plot_out = _save_pair(sf.plot, joinpath(FIGDIR, "$(prefix)_demo"); width = width, height = height)
+png_path = plot_out.png_path
+pdf_path = plot_out.pdf_path
 
 println("Results:")
 println("  relative residual = $residual")
@@ -234,3 +260,4 @@ println("  $csv_inc")
 println("  $csv_rcs")
 println("  $csv_summary")
 println("  $png_path")
+println("  $pdf_path")

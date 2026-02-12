@@ -17,13 +17,21 @@ using LinearAlgebra
 using StaticArrays
 using CSV
 using DataFrames
-using Plots
+using PlotlySupply
 
 include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
 const FIGDIR = joinpath(@__DIR__, "..", "figs")
+
+function _save_pair(fig, basepath::AbstractString; width::Int, height::Int)
+    png = basepath * ".png"
+    pdf = basepath * ".pdf"
+    savefig(fig, png; width = width, height = height)
+    savefig(fig, pdf; width = width, height = height)
+    return (png_path = png, pdf_path = pdf)
+end
 
 function _sanitize_tag(path::AbstractString)
     stem = splitext(basename(path))[1]
@@ -75,61 +83,72 @@ function _plot_rcs_from_csv(cut_csv::AbstractString, mono_csv::AbstractString, o
     mono = CSV.read(mono_csv, DataFrame)
     sort!(cut, :theta_deg)
 
-    default(
-        linewidth = 2,
-        framestyle = :box,
-        grid = true,
-        legendfontsize = 9,
-        guidefontsize = 11,
-        tickfontsize = 9,
-    )
+    width = 900
+    height = 860
+    titles = reshape(["OBJ PEC RCS - dB scale", "OBJ PEC RCS - linear scale"], 2, 1)
+    sf = subplots(2, 1; sync = false, width = width, height = height, subplot_titles = titles)
 
-    p1 = plot(
+    plot_scatter!(
+        sf,
         cut.theta_deg,
-        cut.sigma_dBsm,
-        color = :royalblue,
+        cut.sigma_dBsm;
+        color = "blue",
+        legend = "Bistatic cut (φ ≈ $(round(cut.phi_cut_deg[1], digits=1))°)",
         xlabel = "θ (deg)",
         ylabel = "RCS (dBsm)",
-        label = "Bistatic cut (φ ≈ $(round(cut.phi_cut_deg[1], digits=1))°)",
-        title = "OBJ PEC RCS — dB scale",
     )
-    scatter!(
-        p1,
-        [mono.theta_obs_deg[1]],
-        [mono.sigma_dBsm[1]],
-        marker = (:star5, 8, :crimson),
-        label = "Monostatic sample",
+    addtraces!(
+        sf,
+        scatter(
+            x = [mono.theta_obs_deg[1]],
+            y = [mono.sigma_dBsm[1]],
+            mode = "markers",
+            name = "Monostatic sample",
+            marker = attr(color = "red", symbol = "star", size = 8),
+        );
+        row = 1,
+        col = 1,
     )
-    annotate!(
-        p1,
-        mono.theta_obs_deg[1] + 5,
-        mono.sigma_dBsm[1] + 1.2,
-        text("σ = $(round(mono.sigma_dBsm[1], digits=2)) dBsm", 8, :crimson),
+    relayout!(
+        sf.plot,
+        annotations = [
+            attr(
+                x = mono.theta_obs_deg[1] + 5,
+                y = mono.sigma_dBsm[1] + 1.2,
+                text = "σ = $(round(mono.sigma_dBsm[1], digits=2)) dBsm",
+                showarrow = false,
+                font = attr(size = 10, color = "red"),
+                xref = "x1",
+                yref = "y1",
+            ),
+        ],
     )
 
-    p2 = plot(
+    subplot!(sf, 2, 1)
+    plot_scatter!(
+        sf,
         cut.theta_deg,
-        cut.sigma_m2,
-        color = :darkorange,
+        cut.sigma_m2;
+        color = "orange",
+        legend = "Bistatic cut (linear)",
         xlabel = "θ (deg)",
         ylabel = "RCS (m²)",
-        label = "Bistatic cut (linear)",
-        title = "OBJ PEC RCS — linear scale",
     )
-    scatter!(
-        p2,
-        [mono.theta_obs_deg[1]],
-        [mono.sigma_m2[1]],
-        marker = (:star5, 8, :crimson),
-        label = "Monostatic sample",
+    addtraces!(
+        sf,
+        scatter(
+            x = [mono.theta_obs_deg[1]],
+            y = [mono.sigma_m2[1]],
+            mode = "markers",
+            name = "Monostatic sample",
+            marker = attr(color = "red", symbol = "star", size = 8),
+        );
+        row = 2,
+        col = 1,
     )
 
-    p = plot(p1, p2, layout = (2, 1), size = (800, 700))
-    png_path = out_prefix * ".png"
-    pdf_path = out_prefix * ".pdf"
-    savefig(p, png_path)
-    savefig(p, pdf_path)
-    return (png_path=png_path, pdf_path=pdf_path)
+    subplot_legends!(sf; position = :topright)
+    return _save_pair(sf.plot, out_prefix; width = width, height = height)
 end
 
 function run_repair(input_path::AbstractString, output_path::AbstractString; scale_to_m::Float64=1.0)

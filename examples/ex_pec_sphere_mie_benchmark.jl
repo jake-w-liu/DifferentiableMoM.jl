@@ -16,13 +16,23 @@ using StaticArrays
 using Statistics
 using CSV
 using DataFrames
-using Plots
+using PlotlySupply
 
 include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
+const FIGDIR = joinpath(@__DIR__, "..", "figs")
 mkpath(DATADIR)
+mkpath(FIGDIR)
+
+function _save_pair(fig, basepath::AbstractString; width::Int, height::Int)
+    png = basepath * ".png"
+    pdf = basepath * ".pdf"
+    savefig(fig, png; width = width, height = height)
+    savefig(fig, pdf; width = width, height = height)
+    return (png_path = png, pdf_path = pdf)
+end
 
 function write_icosphere_obj(path::AbstractString; radius::Float64=0.05, subdivisions::Int=2)
     ϕ = (1 + sqrt(5.0)) / 2
@@ -189,28 +199,42 @@ df_summary = DataFrame(
 csv_sum = joinpath(DATADIR, "sphere_mie_benchmark_summary.csv")
 CSV.write(csv_sum, df_summary)
 
-plot_path = joinpath(DATADIR, "sphere_mie_benchmark_phi_cut.png")
-p1 = plot(rad2deg.(γ), dB_mom;
-    lw=2,
-    label="MoM",
-    xlabel="Scattering angle γ (deg)",
-    ylabel="Bistatic RCS (dBsm)",
-    title="PEC sphere: MoM vs Mie (φ=$(round(rad2deg(phi_target), digits=2))° cut)")
-plot!(p1, rad2deg.(γ), dB_mie; lw=2, ls=:dash, label="Mie (PEC sphere)")
+width = 900
+height = 840
+titles = reshape(["PEC sphere: MoM vs Mie (φ=$(round(rad2deg(phi_target), digits=2))° cut)", "Deviation"], 2, 1)
+sf = subplots(2, 1; sync = false, width = width, height = height, subplot_titles = titles)
 
-p2 = plot(rad2deg.(γ), ΔdB;
-    lw=2,
-    color=:black,
-    label="Δ(dB) = MoM - Mie",
-    xlabel="Scattering angle γ (deg)",
-    ylabel="Δ(dB)",
-    title="Deviation")
-hline!(p2, [0.0], ls=:dot, color=:gray, label=nothing)
+plot_scatter!(
+    sf,
+    rad2deg.(γ),
+    [dB_mom, dB_mie];
+    color = ["blue", "red"],
+    dash = ["", "dash"],
+    legend = ["MoM", "Mie (PEC sphere)"],
+    xlabel = "Scattering angle γ (deg)",
+    ylabel = "Bistatic RCS (dBsm)",
+)
 
-savefig(plot(p1, p2; layout=(2, 1), size=(900, 700)), plot_path)
+subplot!(sf, 2, 1)
+plot_scatter!(
+    sf,
+    rad2deg.(γ),
+    ΔdB;
+    color = "black",
+    legend = "Δ(dB) = MoM - Mie",
+    xlabel = "Scattering angle γ (deg)",
+    ylabel = "Δ(dB)",
+)
+add_hline!(sf.plot, 0.0; row = 2, col = 1, line_color = "gray", line_dash = "dot", line_width = 1.2)
+
+subplot_legends!(sf; position = :topright)
+plot_out = _save_pair(sf.plot, joinpath(FIGDIR, "sphere_mie_benchmark_phi_cut"); width = width, height = height)
+png_path = plot_out.png_path
+pdf_path = plot_out.pdf_path
 
 println("\n── Outputs ──")
 println("  Comparison CSV: $csv_cmp")
 println("  Summary CSV:    $csv_sum")
-println("  Heuristic plot: $plot_path")
+println("  Heuristic plot PNG: $png_path")
+println("  Heuristic plot PDF: $pdf_path")
 println("\nBenchmark complete.")

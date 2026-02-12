@@ -5,22 +5,47 @@ export solve_forward, solve_system, assemble_full_Z,
        select_preconditioner, transform_patch_matrices, prepare_conditioned_system
 
 """
-    solve_forward(Z, v)
+    solve_forward(Z, v; solver=:direct, preconditioner=nothing, gmres_tol=1e-8, gmres_maxiter=200, verbose_gmres=false)
 
-Solve Z I = v using direct factorization (for small/medium N).
-Returns I ∈ C^N.
+Solve Z I = v. Uses direct factorization by default, or GMRES when `solver=:gmres`.
+
+# Arguments
+- `solver`: `:direct` for LU factorization, `:gmres` for preconditioned GMRES
+- `preconditioner`: a `RandomizedPreconditionerData` (for GMRES), or `nothing`
+- `gmres_tol`: relative tolerance for GMRES convergence
+- `gmres_maxiter`: maximum GMRES iterations
 """
-function solve_forward(Z::Matrix{<:Number}, v::Vector{<:Number})
-    return Z \ v
+function solve_forward(Z::Matrix{<:Number}, v::Vector{<:Number};
+                       solver::Symbol=:direct,
+                       preconditioner=nothing,
+                       gmres_tol::Float64=1e-8,
+                       gmres_maxiter::Int=200,
+                       verbose_gmres::Bool=false)
+    if solver == :direct
+        return Z \ v
+    elseif solver == :gmres
+        x, stats = solve_gmres(Matrix{ComplexF64}(Z), Vector{ComplexF64}(v);
+                                preconditioner=preconditioner,
+                                tol=gmres_tol, maxiter=gmres_maxiter,
+                                verbose=verbose_gmres)
+        return x
+    else
+        error("Unknown solver: $solver (expected :direct or :gmres)")
+    end
 end
 
 """
-    solve_system(Z, rhs)
+    solve_system(Z, rhs; solver=:direct, preconditioner=nothing, gmres_tol=1e-8, gmres_maxiter=200)
 
-General linear solve Z x = rhs.
+General linear solve Z x = rhs with solver dispatch.
 """
-function solve_system(Z::Matrix{<:Number}, rhs::Vector{<:Number})
-    return Z \ rhs
+function solve_system(Z::Matrix{<:Number}, rhs::Vector{<:Number};
+                      solver::Symbol=:direct,
+                      preconditioner=nothing,
+                      gmres_tol::Float64=1e-8,
+                      gmres_maxiter::Int=200)
+    return solve_forward(Z, rhs; solver=solver, preconditioner=preconditioner,
+                          gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 end
 
 """

@@ -15,13 +15,15 @@ using StaticArrays
 using Statistics
 using CSV
 using DataFrames
-using Plots
+using PlotlySupply
 
 include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 
 const DATADIR = joinpath(@__DIR__, "..", "data")
+const FIGDIR = joinpath(@__DIR__, "..", "figs")
 mkpath(DATADIR)
+mkpath(FIGDIR)
 
 const c0 = 299792458.0
 const ϵ0 = 8.854187817e-12
@@ -244,73 +246,263 @@ df_summary = DataFrame(
 summary_path = joinpath(DATADIR, "dipole_loop_pattern_summary.csv")
 CSV.write(summary_path, df_summary)
 
-# Plot: linear
-p_lin = plot(theta_deg, P_dip_num;
-    lw=2, color=:blue, label="Dipole numerical",
-    xlabel="θ (deg)", ylabel="Normalized power", title="Dipole/Loop pattern (linear)")
-plot!(p_lin, theta_deg, P_dip_ana; lw=2, ls=:dash, color=:blue, label="Dipole analytical (sin²θ)")
-plot!(p_lin, theta_deg, P_loop_num; lw=2, color=:red, label="Loop numerical")
-plot!(p_lin, theta_deg, P_loop_ana; lw=2, ls=:dash, color=:red, label="Loop analytical (sin²θ)")
+const PANEL_WIDTH = 900
+const PANEL_HEIGHT = 500
+const COMBINED_WIDTH = 1020
+const COMBINED_HEIGHT = 4200
 
-# Plot: dB
-p_db = plot(theta_deg, dB_dip_num;
-    lw=2, color=:blue, label="Dipole numerical",
-    xlabel="θ (deg)", ylabel="Normalized power (dB)", title="Dipole/Loop pattern (dB)")
-plot!(p_db, theta_deg, dB_dip_ana; lw=2, ls=:dash, color=:blue, label="Dipole analytical")
-plot!(p_db, theta_deg, dB_loop_num; lw=2, color=:red, label="Loop numerical")
-plot!(p_db, theta_deg, dB_loop_ana; lw=2, ls=:dash, color=:red, label="Loop analytical")
+function _save_pair(fig, basepath::AbstractString; width::Int, height::Int)
+    png = basepath * ".png"
+    pdf = basepath * ".pdf"
+    savefig(fig, png; width = width, height = height)
+    savefig(fig, pdf; width = width, height = height)
+    return (png_path = png, pdf_path = pdf)
+end
 
-# Plot: error curves
-p_err = plot(theta_deg, err_dip;
-    lw=2, color=:blue, label="Dipole error",
-    xlabel="θ (deg)", ylabel="Numerical - analytical", title="Pattern error curves")
-plot!(p_err, theta_deg, err_loop; lw=2, color=:red, label="Loop error")
-hline!(p_err, [0.0]; ls=:dot, color=:black, label=nothing)
+function _single_panel(
+    title::AbstractString,
+    x,
+    ys::Vector{<:AbstractVector},
+    legends::Vector{<:AbstractString},
+    colors::Vector{<:AbstractString};
+    dashes::Vector{<:AbstractString}=fill("", length(ys)),
+    xlabel::AbstractString="",
+    ylabel::AbstractString="",
+    width::Int=PANEL_WIDTH,
+    height::Int=PANEL_HEIGHT,
+)
+    sf = subplots(1, 1; sync = false, width = width, height = height, subplot_titles = reshape([title], 1, 1))
+    plot_scatter!(
+        sf,
+        x,
+        ys;
+        color = colors,
+        dash = dashes,
+        legend = legends,
+        xlabel = xlabel,
+        ylabel = ylabel,
+    )
+    subplot_legends!(sf; position = :topright)
+    return sf.plot
+end
 
-# Plot: polarization components and cross-pol ratio
-p_pol = plot(theta_deg, [to_dB(x) for x in P_dip_theta];
-    lw=2, color=:blue, label="Dipole |Eθ|²",
-    xlabel="θ (deg)", ylabel="Component power (dB, normalized)",
-    title="Polarization components (φ=0 cut)")
-plot!(p_pol, theta_deg, [to_dB(x) for x in P_dip_phi]; lw=2, ls=:dash, color=:blue, label="Dipole |Eϕ|²")
-plot!(p_pol, theta_deg, [to_dB(x) for x in P_loop_phi]; lw=2, color=:red, label="Loop |Eϕ|²")
-plot!(p_pol, theta_deg, [to_dB(x) for x in P_loop_theta]; lw=2, ls=:dash, color=:red, label="Loop |Eθ|²")
+# Individual panels
+p_lin = _single_panel(
+    "Dipole/Loop pattern (linear)",
+    theta_deg,
+    [P_dip_num, P_dip_ana, P_loop_num, P_loop_ana],
+    ["Dipole numerical", "Dipole analytical (sin²θ)", "Loop numerical", "Loop analytical (sin²θ)"],
+    ["blue", "blue", "red", "red"];
+    dashes = ["", "dash", "", "dash"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power",
+)
 
-p_xpd = plot(theta_deg, xpd_dip_db;
-    lw=2, color=:blue, label="Dipole cross/co (Eϕ/Eθ)",
-    xlabel="θ (deg)", ylabel="Cross-pol ratio (dB)", title="Cross-polarization ratio (φ=0 cut)")
-plot!(p_xpd, theta_deg, xpd_loop_db; lw=2, color=:red, label="Loop cross/co (Eθ/Eϕ)")
+p_db = _single_panel(
+    "Dipole/Loop pattern (dB)",
+    theta_deg,
+    [dB_dip_num, dB_dip_ana, dB_loop_num, dB_loop_ana],
+    ["Dipole numerical", "Dipole analytical", "Loop numerical", "Loop analytical"],
+    ["blue", "blue", "red", "red"];
+    dashes = ["", "dash", "", "dash"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power (dB)",
+)
 
-p_phase = plot(theta_deg[phase_valid], phase_ratio_valid;
-    lw=2, color=:purple, label="arg(Eϕ(loop)/Eθ(dipole))",
-    xlabel="θ (deg)", ylabel="Phase difference (deg)",
-    title="Phase consistency on co-pol components (φ=0 cut)")
-hline!(p_phase, [90.0, -90.0]; lw=1.5, ls=:dash, color=:black, label=["+90°" "-90°"])
+p_err = _single_panel(
+    "Pattern error curves",
+    theta_deg,
+    [err_dip, err_loop],
+    ["Dipole error", "Loop error"],
+    ["blue", "red"];
+    xlabel = "θ (deg)",
+    ylabel = "Numerical - analytical",
+)
+add_hline!(p_err, 0.0; line_color = "black", line_dash = "dot", line_width = 1.2)
 
-plot_lin_path = joinpath(DATADIR, "dipole_loop_pattern_linear.png")
-plot_db_path = joinpath(DATADIR, "dipole_loop_pattern_db.png")
-plot_err_path = joinpath(DATADIR, "dipole_loop_pattern_error.png")
-plot_pol_path = joinpath(DATADIR, "dipole_loop_pattern_polarization.png")
-plot_xpd_path = joinpath(DATADIR, "dipole_loop_pattern_crosspol.png")
-plot_phase_path = joinpath(DATADIR, "dipole_loop_pattern_phase.png")
-plot_combined_path = joinpath(DATADIR, "dipole_loop_pattern_validation.png")
+p_pol = _single_panel(
+    "Polarization components (φ=0 cut)",
+    theta_deg,
+    [
+        [to_dB(x) for x in P_dip_theta],
+        [to_dB(x) for x in P_dip_phi],
+        [to_dB(x) for x in P_loop_phi],
+        [to_dB(x) for x in P_loop_theta],
+    ],
+    ["Dipole |Eθ|²", "Dipole |Eϕ|²", "Loop |Eϕ|²", "Loop |Eθ|²"],
+    ["blue", "blue", "red", "red"];
+    dashes = ["", "dash", "", "dash"],
+    xlabel = "θ (deg)",
+    ylabel = "Component power (dB, normalized)",
+)
 
-savefig(p_lin, plot_lin_path)
-savefig(p_db, plot_db_path)
-savefig(p_err, plot_err_path)
-savefig(p_pol, plot_pol_path)
-savefig(p_xpd, plot_xpd_path)
-savefig(p_phase, plot_phase_path)
-savefig(plot(p_lin, p_db, p_err, p_pol, p_xpd, p_phase; layout=(6, 1), size=(900, 2100)), plot_combined_path)
+p_xpd = _single_panel(
+    "Cross-polarization ratio (φ=0 cut)",
+    theta_deg,
+    [xpd_dip_db, xpd_loop_db],
+    ["Dipole cross/co (Eϕ/Eθ)", "Loop cross/co (Eθ/Eϕ)"],
+    ["blue", "red"];
+    xlabel = "θ (deg)",
+    ylabel = "Cross-pol ratio (dB)",
+)
+
+p_phase = _single_panel(
+    "Phase consistency on co-pol components (φ=0 cut)",
+    theta_deg[phase_valid],
+    [phase_ratio_valid],
+    ["arg(Eϕ(loop)/Eθ(dipole))"],
+    ["purple"];
+    xlabel = "θ (deg)",
+    ylabel = "Phase difference (deg)",
+)
+addtraces!(
+    p_phase,
+    scatter(
+        x = theta_deg[phase_valid],
+        y = fill(90.0, length(theta_deg[phase_valid])),
+        mode = "lines",
+        name = "+90°",
+        line = attr(color = "black", width = 2, dash = "dash"),
+    ),
+)
+addtraces!(
+    p_phase,
+    scatter(
+        x = theta_deg[phase_valid],
+        y = fill(-90.0, length(theta_deg[phase_valid])),
+        mode = "lines",
+        name = "-90°",
+        line = attr(color = "black", width = 2, dash = "dash"),
+    ),
+)
+set_legend!(p_phase; position = :topright)
+
+lin_out = _save_pair(p_lin, joinpath(FIGDIR, "dipole_loop_pattern_linear"); width = PANEL_WIDTH, height = PANEL_HEIGHT)
+db_out = _save_pair(p_db, joinpath(FIGDIR, "dipole_loop_pattern_db"); width = PANEL_WIDTH, height = PANEL_HEIGHT)
+err_out = _save_pair(p_err, joinpath(FIGDIR, "dipole_loop_pattern_error"); width = PANEL_WIDTH, height = PANEL_HEIGHT)
+pol_out = _save_pair(p_pol, joinpath(FIGDIR, "dipole_loop_pattern_polarization"); width = PANEL_WIDTH, height = PANEL_HEIGHT)
+xpd_out = _save_pair(p_xpd, joinpath(FIGDIR, "dipole_loop_pattern_crosspol"); width = PANEL_WIDTH, height = PANEL_HEIGHT)
+phase_out = _save_pair(p_phase, joinpath(FIGDIR, "dipole_loop_pattern_phase"); width = PANEL_WIDTH, height = PANEL_HEIGHT)
+
+# Combined validation panel
+combined_titles = reshape(
+    [
+        "Dipole/Loop pattern (linear)",
+        "Dipole/Loop pattern (dB)",
+        "Pattern error curves",
+        "Polarization components (φ=0 cut)",
+        "Cross-polarization ratio (φ=0 cut)",
+        "Phase consistency on co-pol components (φ=0 cut)",
+    ],
+    6,
+    1,
+)
+sf_all = subplots(6, 1; sync = false, width = COMBINED_WIDTH, height = COMBINED_HEIGHT, subplot_titles = combined_titles)
+
+plot_scatter!(
+    sf_all,
+    theta_deg,
+    [P_dip_num, P_dip_ana, P_loop_num, P_loop_ana];
+    color = ["blue", "blue", "red", "red"],
+    dash = ["", "dash", "", "dash"],
+    legend = ["Dipole numerical", "Dipole analytical (sin²θ)", "Loop numerical", "Loop analytical (sin²θ)"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power",
+)
+
+subplot!(sf_all, 2, 1)
+plot_scatter!(
+    sf_all,
+    theta_deg,
+    [dB_dip_num, dB_dip_ana, dB_loop_num, dB_loop_ana];
+    color = ["blue", "blue", "red", "red"],
+    dash = ["", "dash", "", "dash"],
+    legend = ["Dipole numerical", "Dipole analytical", "Loop numerical", "Loop analytical"],
+    xlabel = "θ (deg)",
+    ylabel = "Normalized power (dB)",
+)
+
+subplot!(sf_all, 3, 1)
+plot_scatter!(
+    sf_all,
+    theta_deg,
+    [err_dip, err_loop];
+    color = ["blue", "red"],
+    legend = ["Dipole error", "Loop error"],
+    xlabel = "θ (deg)",
+    ylabel = "Numerical - analytical",
+)
+add_hline!(sf_all.plot, 0.0; row = 3, col = 1, line_color = "black", line_dash = "dot", line_width = 1.2)
+
+subplot!(sf_all, 4, 1)
+plot_scatter!(
+    sf_all,
+    theta_deg,
+    [
+        [to_dB(x) for x in P_dip_theta],
+        [to_dB(x) for x in P_dip_phi],
+        [to_dB(x) for x in P_loop_phi],
+        [to_dB(x) for x in P_loop_theta],
+    ];
+    color = ["blue", "blue", "red", "red"],
+    dash = ["", "dash", "", "dash"],
+    legend = ["Dipole |Eθ|²", "Dipole |Eϕ|²", "Loop |Eϕ|²", "Loop |Eθ|²"],
+    xlabel = "θ (deg)",
+    ylabel = "Component power (dB, normalized)",
+)
+
+subplot!(sf_all, 5, 1)
+plot_scatter!(
+    sf_all,
+    theta_deg,
+    [xpd_dip_db, xpd_loop_db];
+    color = ["blue", "red"],
+    legend = ["Dipole cross/co (Eϕ/Eθ)", "Loop cross/co (Eθ/Eϕ)"],
+    xlabel = "θ (deg)",
+    ylabel = "Cross-pol ratio (dB)",
+)
+
+subplot!(sf_all, 6, 1)
+plot_scatter!(
+    sf_all,
+    theta_deg[phase_valid],
+    phase_ratio_valid;
+    color = "purple",
+    legend = "arg(Eϕ(loop)/Eθ(dipole))",
+    xlabel = "θ (deg)",
+    ylabel = "Phase difference (deg)",
+)
+addtraces!(
+    sf_all,
+    scatter(
+        x = theta_deg[phase_valid],
+        y = fill(90.0, length(theta_deg[phase_valid])),
+        mode = "lines",
+        name = "+90°",
+        line = attr(color = "black", width = 2, dash = "dash"),
+    ),
+    scatter(
+        x = theta_deg[phase_valid],
+        y = fill(-90.0, length(theta_deg[phase_valid])),
+        mode = "lines",
+        name = "-90°",
+        line = attr(color = "black", width = 2, dash = "dash"),
+    );
+    row = 6,
+    col = 1,
+)
+
+subplot_legends!(sf_all; position = :topright)
+combined_out = _save_pair(sf_all.plot, joinpath(FIGDIR, "dipole_loop_pattern_validation"); width = COMBINED_WIDTH, height = COMBINED_HEIGHT)
 
 println("\nOutputs:")
 println("  Pattern CSV:  $csv_path")
 println("  Summary CSV:  $summary_path")
-println("  Linear plot:  $plot_lin_path")
-println("  dB plot:      $plot_db_path")
-println("  Error plot:   $plot_err_path")
-println("  Pol plot:     $plot_pol_path")
-println("  X-pol plot:   $plot_xpd_path")
-println("  Phase plot:   $plot_phase_path")
-println("  Combined:     $plot_combined_path")
+println("  Linear plot:  $(lin_out.png_path)")
+println("  dB plot:      $(db_out.png_path)")
+println("  Error plot:   $(err_out.png_path)")
+println("  Pol plot:     $(pol_out.png_path)")
+println("  X-pol plot:   $(xpd_out.png_path)")
+println("  Phase plot:   $(phase_out.png_path)")
+println("  Combined:     $(combined_out.png_path)")
 println("\nDone.")
