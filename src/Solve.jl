@@ -11,7 +11,7 @@ Solve Z I = v. Uses direct factorization by default, or GMRES when `solver=:gmre
 
 # Arguments
 - `solver`: `:direct` for LU factorization, `:gmres` for preconditioned GMRES
-- `preconditioner`: a `RandomizedPreconditionerData` (for GMRES), or `nothing`
+- `preconditioner`: a preconditioner object (e.g., `NearFieldPreconditionerData`), or `nothing`
 - `gmres_tol`: relative tolerance for GMRES convergence
 - `gmres_maxiter`: maximum GMRES iterations
 """
