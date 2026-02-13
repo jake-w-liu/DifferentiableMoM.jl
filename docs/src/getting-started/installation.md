@@ -90,9 +90,9 @@ Documenter output is generated under `docs/build/`.
 From the repository root:
 
 ```bash
-julia --project=. examples/ex_beam_steer.jl
-julia --project=. examples/ex_auto_preconditioning.jl
-julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
+julia --project=. examples/04_beam_steering.jl
+julia --project=. examples/05_solver_methods.jl
+julia --project=. examples/02_pec_sphere_mie.jl
 ```
 
 Generated numeric artifacts are written into `data/` and figures into `figs/`.
@@ -119,6 +119,6 @@ Generated numeric artifacts are written into `data/` and figures into `figs/`.
 
 ## Exercises
 
-- Basic: instantiate the project and run only `examples/ex_convergence.jl`.
+- Basic: instantiate the project and run only `examples/01_pec_plate_basics.jl`.
 - Challenge: run `test/runtests.jl`, then identify which generated CSV files
   correspond to each major validation gate.

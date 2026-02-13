@@ -158,13 +158,11 @@ The gradient of the ratio is then assembled from the individual gradients $\part
 Discrete angular sampling on the unit sphere:
 
 ```julia
-grid = make_sph_grid(Nθ, Nφ; 
-    θ_min=0.0, θ_max=π, 
-    φ_min=0.0, φ_max=2π)
+grid = make_sph_grid(Nθ, Nφ)
 ```
 
 **Grid properties:**
-- **Equiangular sampling**: $\theta$ and $\phi$ uniformly spaced
+- **Midpoint sampling**: $\theta$ and $\phi$ at cell midpoints (half-step offset from boundaries)
 - **Quadrature weights**: $w_q = \sin\theta_q \Delta\theta \Delta\phi$ for accurate integration
 - **Total solid angle**: $\sum_{q=1}^{N_\Omega} w_q \approx 4\pi$
 - **Vectorization**: Column-major storage for efficient computation
@@ -180,9 +178,8 @@ Precompute radiation vectors for all basis functions and directions:
 
 ```julia
 G_mat = radiation_vectors(mesh, rwg, grid, k;
-    quad_order=3, 
-    eta0=η0,
-    use_fft=false)
+    quad_order=3,
+    eta0=η0)
 ```
 
 **Algorithm (see `src/FarField.jl`):** For each RWG basis function $\mathbf{f}_n$ with support triangles $T_n^+$ and $T_n^-$, compute
@@ -262,7 +259,7 @@ where:
 J = compute_objective(I, Q)  # = real(dot(I, Q * I))
 ```
 
-**Ratio objective:** For beam‑steering applications, the directivity fraction $J = (\mathbf{I}^\dagger \mathbf{Q}_{\text{target}} \mathbf{I}) / (\mathbf{I}^\dagger \mathbf{Q}_{\text{total}} \mathbf{I})$ is evaluated by computing both quadratic forms separately. The gradient is assembled via the quotient rule using two adjoint solves (see Section 1.5). The beam‑steering example `examples/ex_beam_steer.jl` demonstrates this workflow.
+**Ratio objective:** For beam‑steering applications, the directivity fraction $J = (\mathbf{I}^\dagger \mathbf{Q}_{\text{target}} \mathbf{I}) / (\mathbf{I}^\dagger \mathbf{Q}_{\text{total}} \mathbf{I})$ is evaluated by computing both quadratic forms separately. The gradient is assembled via the quotient rule using two adjoint solves (see Section 1.5). The beam‑steering example `examples/04_beam_steering.jl` demonstrates this workflow.
 
 ### 2.5 RCS Computation
 
@@ -449,8 +446,8 @@ println("Sidelobe level: $(stats.sll) dB")
 **Reference:** The full sphere‑vs‑Mie benchmark is presented in Part IV, Chapter 4 (Sphere‑vs‑Mie Benchmark). That chapter provides detailed error metrics, convergence studies, and validation against the analytical Mie series.
 
 ```julia
-# Compare with Mie theory for PEC sphere
-include("src/Mie.jl")
+# Compare with Mie theory for PEC sphere (functions available via the package)
+using DifferentiableMoM
 
 # Sphere parameters
 a = 0.05  # 5 cm radius
@@ -480,7 +477,7 @@ println("Mean absolute error: $mae dB")
 
 ### 3.5 Beam-Steering Optimization Workflow
 
-The complete beam‑steering inverse‑design pipeline is implemented in `examples/ex_beam_steer.jl`. This example optimizes a reactive impedance sheet on a $4\lambda\times4\lambda$ plate to steer a normally‑incident plane wave to $\theta_s = 30^\circ$ off broadside.
+The complete beam‑steering inverse‑design pipeline is implemented in `examples/04_beam_steering.jl`. This example optimizes a reactive impedance sheet on a $4\lambda\times4\lambda$ plate to steer a normally‑incident plane wave to $\theta_s = 30^\circ$ off broadside.
 
 **Key steps from the script:**
 
@@ -498,13 +495,13 @@ The complete beam‑steering inverse‑design pipeline is implemented in `exampl
 
 **Running the example:**
 ```bash
-julia --project=. examples/ex_beam_steer.jl
+julia --project=. examples/04_beam_steering.jl
 ```
 Output CSV files are saved to `data/` for further analysis.
 
 ### 3.6 Airplane RCS Demonstration
 
-The script `examples/ex_obj_rcs_pipeline.jl` demonstrates RCS computation for a complex CAD geometry (an airplane model). It includes automatic mesh repair, coarsening to a target RWG count, and far‑field analysis.
+The script `examples/06_aircraft_rcs.jl` demonstrates RCS computation for a complex CAD geometry (an airplane model). It includes automatic mesh repair, coarsening to a target RWG count, and far‑field analysis.
 
 **Key features:**
 - **Mesh repair:** Automatically fixes orientation, removes degenerate triangles, and ensures manifold edges.
@@ -514,7 +511,7 @@ The script `examples/ex_obj_rcs_pipeline.jl` demonstrates RCS computation for a 
 
 **Typical usage:**
 ```bash
-julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
 ```
 Arguments: OBJ path, frequency (GHz), scale factor (to meters), target RWG count.
 
@@ -716,10 +713,9 @@ end
 
 ### 7.2 Example Scripts
 
-- **Sphere benchmark**: `examples/ex_pec_sphere_mie_benchmark.jl`
-- **RCS pattern analysis**: `examples/ex_pec_sphere_rcs.jl`
-- **Beam steering optimization**: `examples/ex_beam_steer.jl`
-- **Platform RCS**: `examples/ex_obj_rcs_pipeline.jl`
+- **Sphere benchmark**: `examples/02_pec_sphere_mie.jl`
+- **Beam steering optimization**: `examples/04_beam_steering.jl`
+- **Platform RCS**: `examples/06_aircraft_rcs.jl`
 
 ### 7.3 Supporting Utilities
 

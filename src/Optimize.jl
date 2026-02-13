@@ -13,6 +13,7 @@ Options:
   maximize:  if true, maximize J = I†QI instead of minimizing
   lb, ub:    box constraints on θ (projected L-BFGS-B)
   solver:    `:direct` (default) for LU, `:gmres` for GMRES
+  nf_preconditioner: an `AbstractPreconditionerData` for GMRES preconditioning, or `nothing`
   gmres_tol: GMRES relative tolerance (default 1e-8)
   gmres_maxiter: maximum GMRES iterations (default 200)
 
@@ -40,6 +41,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
                         iterative_solver::Bool=false,
                         auto_precondition_eps_rel::Float64=1e-6,
                         solver::Symbol=:direct,
+                        nf_preconditioner::Union{Nothing, AbstractPreconditionerData}=nothing,
                         gmres_tol::Float64=1e-8,
                         gmres_maxiter::Int=200)
     theta = copy(theta0)
@@ -82,7 +84,11 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
     rhs_eff_base = precond_fac === nothing ? Vector{ComplexF64}(v) : (precond_fac \ Vector{ComplexF64}(v))
 
     if solver == :gmres && verbose
-        println("  GMRES solver: unpreconditioned")
+        if nf_preconditioner !== nothing
+            println("  GMRES solver: NF preconditioned (cutoff=$(round(nf_preconditioner.cutoff, sigdigits=3)), nnz=$(round(nf_preconditioner.nnz_ratio*100, digits=1))%)")
+        else
+            println("  GMRES solver: unpreconditioned")
+        end
     end
 
     # L-BFGS history
@@ -107,7 +113,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
         )
 
         I_coeffs = solve_forward(Z, rhs_eff_base;
-                                  solver=solver,
+                                  solver=solver, preconditioner=nf_preconditioner,
                                   gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 
         # Objective (always report the true J)
@@ -115,7 +121,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
 
         # Adjoint solve
         lambda = solve_adjoint(Z, Q, I_coeffs;
-                                solver=solver,
+                                solver=solver, preconditioner=nf_preconditioner,
                                 gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 
         # Gradient of J (true objective)
@@ -195,7 +201,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
                 preconditioner_factor=precond_fac,
             )
             I_trial = solve_forward(Z_trial, rhs_eff_base;
-                                     solver=solver,
+                                     solver=solver, preconditioner=nf_preconditioner,
                                      gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
             J_trial_internal = sense * real(dot(I_trial, Q * I_trial))
 
@@ -226,6 +232,7 @@ naturally steers the beam rather than just broadening it.
 
 Options:
   solver:    `:direct` (default) for LU, `:gmres` for GMRES
+  nf_preconditioner: an `AbstractPreconditionerData` for GMRES preconditioning, or `nothing`
   gmres_tol: GMRES relative tolerance (default 1e-8)
   gmres_maxiter: maximum GMRES iterations (default 200)
 
@@ -253,6 +260,7 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
                               iterative_solver::Bool=false,
                               auto_precondition_eps_rel::Float64=1e-6,
                               solver::Symbol=:direct,
+                              nf_preconditioner::Union{Nothing, AbstractPreconditionerData}=nothing,
                               gmres_tol::Float64=1e-8,
                               gmres_maxiter::Int=200)
     theta = copy(theta0)
@@ -289,7 +297,11 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
     rhs_eff_base = precond_fac === nothing ? Vector{ComplexF64}(v) : (precond_fac \ Vector{ComplexF64}(v))
 
     if solver == :gmres && verbose
-        println("  GMRES solver: unpreconditioned")
+        if nf_preconditioner !== nothing
+            println("  GMRES solver: NF preconditioned (cutoff=$(round(nf_preconditioner.cutoff, sigdigits=3)), nnz=$(round(nf_preconditioner.nnz_ratio*100, digits=1))%)")
+        else
+            println("  GMRES solver: unpreconditioned")
+        end
     end
 
     s_list = Vector{Vector{Float64}}()
@@ -311,7 +323,7 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
         )
 
         I_c = solve_forward(Z, rhs_eff_base;
-                             solver=solver,
+                             solver=solver, preconditioner=nf_preconditioner,
                              gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
 
         # Directivity ratio
@@ -322,10 +334,10 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
         # Two separate adjoint solves for numerically stable ratio gradient
         # ∂(f/g)/∂θ = (g·∂f/∂θ - f·∂g/∂θ) / g²
         lam_t = solve_adjoint(Z, Q_target, I_c;
-                               solver=solver,
+                               solver=solver, preconditioner=nf_preconditioner,
                                gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
         lam_a = solve_adjoint(Z, Q_total, I_c;
-                               solver=solver,
+                               solver=solver, preconditioner=nf_preconditioner,
                                gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
         g_f = gradient_impedance(Mp_eff, I_c, lam_t; reactive=reactive)
         g_g = gradient_impedance(Mp_eff, I_c, lam_a; reactive=reactive)
@@ -396,7 +408,7 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
                 preconditioner_factor=precond_fac,
             )
             I_trial = solve_forward(Z_trial, rhs_eff_base;
-                                     solver=solver,
+                                     solver=solver, preconditioner=nf_preconditioner,
                                      gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
             f_trial = real(dot(I_trial, Q_target * I_trial))
             g_trial = real(dot(I_trial, Q_total * I_trial))

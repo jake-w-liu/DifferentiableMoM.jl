@@ -265,7 +265,6 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 **Solutions:**
 
 - Enable preconditioning: modify script to call `make_left_preconditioner`.
-- Add regularization: `regularization_alpha=1e‑8` in `assemble_Z_efie`.
 - Increase `target_rwg` to improve mesh quality.
 
 ### Monostatic RCS varies wildly with small incidence‑angle changes
@@ -298,7 +297,7 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 
 ### Basic (60 minutes)
 
-1. **Run the pipeline** with a simple sphere OBJ (generate with `write_icosphere_obj`). Compare monostatic RCS with the Mie solution (Tutorial 4). How does coarsening affect accuracy?
+1. **Run the pipeline** with a simple sphere OBJ (generate with `write_obj_mesh`). Compare monostatic RCS with the Mie solution (Tutorial 4). How does coarsening affect accuracy?
 2. **Vary target RWG** (200, 400, 600) and plot monostatic RCS vs unknown count. Is there convergence?
 3. **Inspect coarsening artifacts**: Load the generated `<tag>_coarse.obj` (for the default run: `data/demo_aircraft_coarse.obj`) in a mesh viewer and identify regions where triangle density is disproportionately reduced.
 

@@ -44,7 +44,7 @@ The visualization module (`src/Visualization.jl`) provides three main user‑fac
 
 ### 2.2 Underlying Algorithms
 
-**Wireframe segment extraction (`mesh_wireframe_segments` in `src/Mesh.jl`):** For each interior edge (shared by two triangles) and each boundary edge (belonging to one triangle), the function creates a line segment between the two edge vertices. Segments are concatenated with `NaN` separators to produce a single continuous path for efficient plotting with `Plots.jl`. This avoids duplicate lines and ensures manifold edges are drawn once.
+**Wireframe segment extraction (`mesh_wireframe_segments` in `src/Mesh.jl`):** For each interior edge (shared by two triangles) and each boundary edge (belonging to one triangle), the function creates a line segment between the two edge vertices. Segments are concatenated with `NaN` separators to produce a single continuous path for efficient plotting with `PlotlySupply`. The wireframe draws ALL unique edges regardless of manifold status.
 
 **Shared axis limits (`_realistic_axis_limits`):** To prevent visual distortion when comparing two meshes, the function computes a common cubic bounding box:
 
@@ -55,18 +55,18 @@ The visualization module (`src/Visualization.jl`) provides three main user‑fac
 
 This guarantees that geometric differences reflect true shape changes, not arbitrary axis scaling.
 
-**Aspect ratio enforcement:** Both subplots in `plot_mesh_comparison` use `aspect_ratio = :equal`, ensuring that a unit length in the $x$, $y$, and $z$ directions occupies the same screen distance. Combined with shared limits, this makes visual comparison trustworthy.
+**Aspect ratio enforcement:** Both subplots in `plot_mesh_comparison` use `aspectmode = "cube"` internally, ensuring that a unit length in the $x$, $y$, and $z$ directions occupies the same screen distance. Combined with shared limits, this makes visual comparison trustworthy.
 
 ### 2.3 Keyword Arguments and Customization
 
-Each function accepts standard `Plots.jl` keywords (e.g., `color`, `linewidth`, `camera`, `title`) plus package‑specific options:
+Each function accepts standard `PlotlySupply` keywords (e.g., `color`, `linewidth`, `camera`, `title`) plus package‑specific options:
 
 - **`camera = (30, 30)`** – azimuth and elevation angles in degrees.
 - **`pad_frac = 0.04`** – fractional padding added to the cubic bounding box.
 - **`size = (1200, 520)`** – total figure size in pixels (width × height).
 - **`color_a`, `color_b`** – distinct colors for the two meshes in comparison plots.
 
-All functions return a `Plots.jl` plot object that can be further modified with `plot!` or saved with `savefig`.
+All functions return a `PlotlySupply` plot object. PNG/PDF/SVG export is supported via PlotlyKaleido.
 
 ### 2.4 Integration with the MoM Pipeline
 
@@ -175,7 +175,7 @@ mesh_sim = coarse.mesh
 plot_mesh_comparison(mesh_rep, mesh_sim;
     title_a = "Repaired (high detail)",
     title_b = "Simulation (coarsened)",
-    aspect_ratio = :equal
+    # internally uses aspectmode = "cube"
 )
 
 # (D) Then build RWG and solve
@@ -206,7 +206,7 @@ This ordering avoids expensive solves on obviously bad meshes.
 **Possible causes and remedies:**
 
 1. **Mesh scale mismatch:** If the mesh coordinates are in millimeters but the axis limits are set for meters, the geometry may be outside the viewport. Use `plot_mesh_wireframe` with default limits (automatically computed) or check `_realistic_axis_limits` output.
-2. **Non‑manifold edges:** The wireframe extraction routine `mesh_wireframe_segments` only draws manifold edges (each interior edge appears once). If the mesh contains non‑manifold edges (shared by three or more triangles), those edges may be omitted. Run `mesh_quality_report` to identify non‑manifold topology.
+2. **Disconnected components:** If the mesh contains disconnected surface fragments, some may appear outside the viewport. Run `mesh_quality_report` to identify topological issues.
 3. **Camera orientation:** The default camera `(30, 30)` may be looking from a direction that hides features. Adjust the `camera` keyword (azimuth, elevation) to rotate the view.
 
 ### 4.2 Misleading Visual Comparison
@@ -216,17 +216,18 @@ This ordering avoids expensive solves on obviously bad meshes.
 **Checklist:**
 
 - **Shared axis limits:** Verify that `plot_mesh_comparison` is used (not two separate calls to `plot_mesh_wireframe`). Independent plots autoscale axes differently.
-- **Equal aspect ratio:** Ensure `aspect_ratio = :equal` is set (the default in `plot_mesh_comparison`).
+- **Equal aspect ratio:** The implementation uses `aspectmode = "cube"` internally (the default in `plot_mesh_comparison`).
 - **Padding factor:** If `pad_frac` is too large (e.g., `> 0.5`), the cubic bounding box may dwarf small geometric details. Reduce `pad_frac` to `0.02`–`0.05`.
 
 ### 4.3 Missing Plotting Backend
 
-**Symptoms:** Julia throws an error about `Plots.jl` backend not being installed.
+**Symptoms:** Julia throws an error about the plotting backend not being installed.
 
-**Solution:** Install a plotting backend (e.g., `GR`, `PyPlot`, `PlotlyJS`) and set it before using visualization functions:
+**Solution:** The package uses PlotlySupply for plotting and PlotlyKaleido for file export. Ensure both are installed:
 ```julia
-using Plots
-gr()  # or pyplot(), plotlyjs()
+import Pkg
+Pkg.add("PlotlySupply")
+Pkg.add("PlotlyKaleido")
 ```
 
 ### 4.4 File‑Save Failures
@@ -237,7 +238,7 @@ gr()  # or pyplot(), plotlyjs()
 
 - Check that the output directory exists (the function creates parent directories via `mkpath`).
 - Ensure write permissions for the destination.
-- Verify that the `Plots.jl` backend supports the requested file format (GR supports PNG/PDF; PyPlot supports PNG/PDF/PS; PlotlyJS supports HTML only).
+- PNG, PDF, and SVG export are supported via PlotlyKaleido. Ensure PlotlyKaleido is installed and working.
 
 ---
 
@@ -247,7 +248,7 @@ gr()  # or pyplot(), plotlyjs()
 - Wireframe segment generation: `src/Mesh.jl`
 - End-to-end examples:
   - `examples/ex_visualize_simulation_mesh.jl`
-  - `examples/ex_obj_rcs_pipeline.jl`
+  - `examples/06_aircraft_rcs.jl`
 
 ---
 
@@ -276,7 +277,7 @@ Before relying on visualization for mesh validation, ensure you can:
 
 ## 8) Further Reading
 
-- **Plots.jl documentation:** [http://docs.juliaplots.org/stable/](http://docs.juliaplots.org/stable/) – comprehensive guide to the plotting library used by the package.
+- **PlotlySupply / PlotlyKaleido:** The plotting backend used by the package for 3D visualization and file export (PNG/PDF/SVG).
 - **Mesh processing for EM:** Shepard, *Mesh Generation and Quality Criteria for Computational Electromagnetics* (2002).
 - **Visual debugging in scientific computing:** Johansson & Forssén, *Visualization as a Tool for Debugging Numerical Software* (2016).
-- **Package examples:** `examples/ex_visualize_simulation_mesh.jl` and `examples/ex_obj_rcs_pipeline.jl` demonstrate end‑to‑end workflows.
+- **Package examples:** `examples/ex_visualize_simulation_mesh.jl` and `examples/06_aircraft_rcs.jl` demonstrate end‑to‑end workflows.

@@ -6,6 +6,8 @@ export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles
 export coarsen_mesh_to_target_rwg
 export mesh_unique_edges, mesh_wireframe_segments
+export mesh_resolution_report, mesh_resolution_ok
+export refine_mesh_to_target_edge, refine_mesh_for_mom
 
 """
     make_rect_plate(Lx, Ly, Nx, Ny)
@@ -815,15 +817,17 @@ function repair_obj_mesh(input_path::AbstractString, output_path::AbstractString
     return (; result..., output_path=output_path)
 end
 
+@inline _mesh_vertex(mesh::TriMesh, i::Int) = Vec3(mesh.xyz[1, i], mesh.xyz[2, i], mesh.xyz[3, i])
+
 """
     triangle_area(mesh, t)
 
 Compute the area of triangle `t` in the mesh.
 """
 function triangle_area(mesh::TriMesh, t::Int)
-    v1 = Vec3(mesh.xyz[:, mesh.tri[1, t]])
-    v2 = Vec3(mesh.xyz[:, mesh.tri[2, t]])
-    v3 = Vec3(mesh.xyz[:, mesh.tri[3, t]])
+    v1 = _mesh_vertex(mesh, mesh.tri[1, t])
+    v2 = _mesh_vertex(mesh, mesh.tri[2, t])
+    v3 = _mesh_vertex(mesh, mesh.tri[3, t])
     return 0.5 * norm(cross(v2 - v1, v3 - v1))
 end
 
@@ -833,9 +837,9 @@ end
 Compute the centroid of triangle `t`.
 """
 function triangle_center(mesh::TriMesh, t::Int)
-    v1 = Vec3(mesh.xyz[:, mesh.tri[1, t]])
-    v2 = Vec3(mesh.xyz[:, mesh.tri[2, t]])
-    v3 = Vec3(mesh.xyz[:, mesh.tri[3, t]])
+    v1 = _mesh_vertex(mesh, mesh.tri[1, t])
+    v2 = _mesh_vertex(mesh, mesh.tri[2, t])
+    v3 = _mesh_vertex(mesh, mesh.tri[3, t])
     return (v1 + v2 + v3) / 3
 end
 
@@ -845,9 +849,9 @@ end
 Compute the outward unit normal of triangle `t`.
 """
 function triangle_normal(mesh::TriMesh, t::Int)
-    v1 = Vec3(mesh.xyz[:, mesh.tri[1, t]])
-    v2 = Vec3(mesh.xyz[:, mesh.tri[2, t]])
-    v3 = Vec3(mesh.xyz[:, mesh.tri[3, t]])
+    v1 = _mesh_vertex(mesh, mesh.tri[1, t])
+    v2 = _mesh_vertex(mesh, mesh.tri[2, t])
+    v3 = _mesh_vertex(mesh, mesh.tri[3, t])
     n = cross(v2 - v1, v3 - v1)
     return n / norm(n)
 end
@@ -903,4 +907,217 @@ function mesh_wireframe_segments(mesh::TriMesh)
     end
 
     return (x=x, y=y, z=z, n_edges=n_edges)
+end
+
+function _mesh_edge_lengths(mesh::TriMesh)
+    edges = mesh_unique_edges(mesh)
+    lens = Vector{Float64}(undef, length(edges))
+    for (k, (i, j)) in enumerate(edges)
+        lens[k] = norm(_mesh_vertex(mesh, i) - _mesh_vertex(mesh, j))
+    end
+    return lens
+end
+
+function _percentile_from_sorted(sorted_vals::Vector{Float64}, p::Float64)
+    n = length(sorted_vals)
+    n == 0 && return 0.0
+    idx = clamp(ceil(Int, p * n), 1, n)
+    return sorted_vals[idx]
+end
+
+"""
+    mesh_resolution_report(mesh, freq_hz; points_per_wavelength=10.0, c0=299792458.0)
+
+Compute electrical mesh-resolution diagnostics for MoM at frequency `freq_hz`.
+
+The core criterion is `h_max <= λ / points_per_wavelength`, where `h_max` is
+the maximum unique edge length.
+"""
+function mesh_resolution_report(mesh::TriMesh, freq_hz::Real;
+                                points_per_wavelength::Real=10.0,
+                                c0::Real=299792458.0)
+    freq_hz > 0 || error("mesh_resolution_report: freq_hz must be > 0")
+    points_per_wavelength > 0 || error("mesh_resolution_report: points_per_wavelength must be > 0")
+    c0 > 0 || error("mesh_resolution_report: c0 must be > 0")
+
+    λ = Float64(c0) / Float64(freq_hz)
+    target_h = λ / Float64(points_per_wavelength)
+
+    lens = _mesh_edge_lengths(mesh)
+    isempty(lens) && error("mesh_resolution_report: mesh has no edges")
+    lens_sorted = sort(lens)
+
+    h_min = lens_sorted[1]
+    h_med = _percentile_from_sorted(lens_sorted, 0.50)
+    h_p95 = _percentile_from_sorted(lens_sorted, 0.95)
+    h_mean = sum(lens_sorted) / length(lens_sorted)
+    h_max = lens_sorted[end]
+
+    meets = h_max <= target_h
+
+    return (
+        freq_hz = Float64(freq_hz),
+        wavelength_m = λ,
+        points_per_wavelength = Float64(points_per_wavelength),
+        target_max_edge_m = target_h,
+        n_vertices = nvertices(mesh),
+        n_triangles = ntriangles(mesh),
+        n_edges = length(lens_sorted),
+        edge_min_m = h_min,
+        edge_median_m = h_med,
+        edge_p95_m = h_p95,
+        edge_mean_m = h_mean,
+        edge_max_m = h_max,
+        edge_median_over_lambda = h_med / λ,
+        edge_p95_over_lambda = h_p95 / λ,
+        edge_max_over_lambda = h_max / λ,
+        meets_target = meets,
+    )
+end
+
+"""
+    mesh_resolution_ok(report; criterion=:max)
+
+Evaluate a `mesh_resolution_report` against a selected criterion:
+- `:max` (default): uses `edge_max_m`
+- `:p95`: uses `edge_p95_m`
+- `:median`: uses `edge_median_m`
+"""
+function mesh_resolution_ok(report; criterion::Symbol=:max)
+    if criterion == :max
+        return report.edge_max_m <= report.target_max_edge_m
+    elseif criterion == :p95
+        return report.edge_p95_m <= report.target_max_edge_m
+    elseif criterion == :median
+        return report.edge_median_m <= report.target_max_edge_m
+    end
+    error("mesh_resolution_ok: unknown criterion=$(criterion). Use :max, :p95, or :median.")
+end
+
+function _midpoint_refine_once(mesh::TriMesh)
+    Nv = nvertices(mesh)
+    Nt = ntriangles(mesh)
+
+    xyz_list = [_mesh_vertex(mesh, i) for i in 1:Nv]
+    edge_mid = Dict{Tuple{Int,Int}, Int}()
+
+    function midpoint_index(i::Int, j::Int)
+        key = i < j ? (i, j) : (j, i)
+        if haskey(edge_mid, key)
+            return edge_mid[key]
+        end
+        vm = 0.5 * (xyz_list[i] + xyz_list[j])
+        push!(xyz_list, vm)
+        idx = length(xyz_list)
+        edge_mid[key] = idx
+        return idx
+    end
+
+    tri_new = Matrix{Int}(undef, 3, 4 * Nt)
+    tid = 0
+    for t in 1:Nt
+        a = mesh.tri[1, t]
+        b = mesh.tri[2, t]
+        c = mesh.tri[3, t]
+
+        mab = midpoint_index(a, b)
+        mbc = midpoint_index(b, c)
+        mca = midpoint_index(c, a)
+
+        tid += 1
+        tri_new[1, tid] = a
+        tri_new[2, tid] = mab
+        tri_new[3, tid] = mca
+        tid += 1
+        tri_new[1, tid] = mab
+        tri_new[2, tid] = b
+        tri_new[3, tid] = mbc
+        tid += 1
+        tri_new[1, tid] = mca
+        tri_new[2, tid] = mbc
+        tri_new[3, tid] = c
+        tid += 1
+        tri_new[1, tid] = mab
+        tri_new[2, tid] = mbc
+        tri_new[3, tid] = mca
+    end
+
+    xyz_new = zeros(3, length(xyz_list))
+    for i in 1:length(xyz_list)
+        xyz_new[:, i] = xyz_list[i]
+    end
+    return TriMesh(xyz_new, tri_new)
+end
+
+"""
+    refine_mesh_to_target_edge(mesh, target_max_edge_m; max_iters=8, max_triangles=2_000_000)
+
+Uniformly refine a triangle mesh via midpoint subdivision until
+`edge_max_m <= target_max_edge_m` or limits are reached.
+"""
+function refine_mesh_to_target_edge(mesh::TriMesh, target_max_edge_m::Real;
+                                    max_iters::Int=8,
+                                    max_triangles::Int=2_000_000)
+    target_max_edge_m > 0 || error("refine_mesh_to_target_edge: target_max_edge_m must be > 0")
+    max_iters >= 0 || error("refine_mesh_to_target_edge: max_iters must be >= 0")
+    max_triangles > 0 || error("refine_mesh_to_target_edge: max_triangles must be > 0")
+
+    mesh_cur = mesh
+    before_lens = _mesh_edge_lengths(mesh_cur)
+    isempty(before_lens) && error("refine_mesh_to_target_edge: mesh has no edges")
+    edge_max_before = maximum(before_lens)
+
+    hist_edge_max = Float64[edge_max_before]
+    hist_triangles = Int[ntriangles(mesh_cur)]
+
+    converged = edge_max_before <= target_max_edge_m
+    iters = 0
+
+    while !converged && iters < max_iters
+        ntriangles(mesh_cur) * 4 <= max_triangles || break
+        mesh_cur = _midpoint_refine_once(mesh_cur)
+        iters += 1
+
+        lens = _mesh_edge_lengths(mesh_cur)
+        edge_max = maximum(lens)
+        push!(hist_edge_max, edge_max)
+        push!(hist_triangles, ntriangles(mesh_cur))
+        converged = edge_max <= target_max_edge_m
+    end
+
+    return (
+        mesh = mesh_cur,
+        iterations = iters,
+        converged = converged,
+        target_max_edge_m = Float64(target_max_edge_m),
+        edge_max_before_m = edge_max_before,
+        edge_max_after_m = hist_edge_max[end],
+        triangles_before = hist_triangles[1],
+        triangles_after = hist_triangles[end],
+        history_edge_max_m = hist_edge_max,
+        history_triangles = hist_triangles,
+    )
+end
+
+"""
+    refine_mesh_for_mom(mesh, freq_hz; points_per_wavelength=10.0, max_iters=8, max_triangles=2_000_000)
+
+Refine a mesh to satisfy a frequency-based MoM edge-length target:
+`target_max_edge_m = λ / points_per_wavelength`.
+"""
+function refine_mesh_for_mom(mesh::TriMesh, freq_hz::Real;
+                             points_per_wavelength::Real=10.0,
+                             max_iters::Int=8,
+                             max_triangles::Int=2_000_000,
+                             c0::Real=299792458.0)
+    report_before = mesh_resolution_report(mesh, freq_hz;
+                                           points_per_wavelength=points_per_wavelength,
+                                           c0=c0)
+    result = refine_mesh_to_target_edge(mesh, report_before.target_max_edge_m;
+                                        max_iters=max_iters,
+                                        max_triangles=max_triangles)
+    report_after = mesh_resolution_report(result.mesh, freq_hz;
+                                          points_per_wavelength=points_per_wavelength,
+                                          c0=c0)
+    return (; result..., report_before=report_before, report_after=report_after)
 end

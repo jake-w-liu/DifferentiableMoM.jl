@@ -93,9 +93,9 @@ function self_cell_contribution(
     Nq = length(wq)
     CT = complex(typeof(real(k)))
 
-    V1 = Vec3(mesh.xyz[:, mesh.tri[1, tm]])
-    V2 = Vec3(mesh.xyz[:, mesh.tri[2, tm]])
-    V3 = Vec3(mesh.xyz[:, mesh.tri[3, tm]])
+    V1 = _mesh_vertex(mesh, mesh.tri[1, tm])
+    V2 = _mesh_vertex(mesh, mesh.tri[2, tm])
+    V3 = _mesh_vertex(mesh, mesh.tri[3, tm])
 
     # ── Smooth part: standard product quadrature with G_smooth ──
     val_smooth = zero(CT)
@@ -106,7 +106,7 @@ function self_cell_contribution(
             rn = quad_pts_tm[qn]
             fn = rwg_vals_n[qn]
 
-            Gs = greens_smooth(SVector{3}(rm), SVector{3}(rn), k)
+            Gs = greens_smooth(rm, rn, k)
             vec_part = dot(fm, fn) * Gs
             scl_part = div_m * div_n * Gs / (k^2)
             weight = wq[qm] * wq[qn] * (2 * Am) * (2 * Am)

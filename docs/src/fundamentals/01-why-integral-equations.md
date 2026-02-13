@@ -429,7 +429,7 @@ function verify_scaling_laws()
     sizes = [0.1, 0.2, 0.4, 0.8]  # Electrical sizes in meters
     results = []
     for a in sizes
-        mesh = make_sphere(a, Int(round(10 * π * (a/0.1)^2)))  # Approximate triangle count
+        mesh = read_obj_mesh("sphere_$(a).obj")  # Sphere meshes should be created externally or loaded via read_obj_mesh
         rwg = build_rwg(mesh)
         N = rwg.nedges
         push!(results, (a=a, N=N, memory=16*N^2/1024^3))

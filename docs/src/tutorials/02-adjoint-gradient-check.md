@@ -89,6 +89,7 @@ Use a modest plate mesh so repeated solves are fast (≈1 s for the whole veri
 
 ```julia
 using DifferentiableMoM
+using Printf
 
 # 10 cm × 10 cm plate, 3×3 triangles (N=12 edges)
 mesh = make_rect_plate(0.1, 0.1, 3, 3)
@@ -327,7 +328,7 @@ end
 ### Practical (60 minutes)
 
 1. **Add left preconditioning** with `make_left_preconditioner(Mp; eps_rel=1e-6)`. Use `prepare_conditioned_system` for forward/adjoint solves and `transform_patch_matrices` for gradient computation. Verify that gradients still match.
-2. **Test a far‑field objective** using `build_Q` from `src/FarField.jl`. Compute the gradient for maximising power in a $10^\circ$ cone and verify against finite differences.
+2. **Test a far‑field objective** using `build_Q` from `src/QMatrix.jl`. Compute the gradient for maximising power in a $10^\circ$ cone and verify against finite differences.
 3. **Compare complex‑step and finite‑difference** errors for ill‑conditioned systems. Increase the frequency to 30 GHz (smaller mesh relative to wavelength) and observe how conditioning affects verification accuracy.
 
 ### Advanced (90 minutes)

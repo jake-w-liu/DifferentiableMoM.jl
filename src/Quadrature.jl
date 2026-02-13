@@ -46,7 +46,7 @@ function tri_quad_rule(order::Int)
         w0 = 0.1125
         w1 = 0.0661970763942530
         w2 = 0.0629695902724135
-        w  = [w0, w1, w1, w1, w2, w2, w2] ./ 2.0
+        w  = [w0, w1, w1, w1, w2, w2, w2]
     else
         error("Unsupported quadrature order $order. Use 1, 3, 4, or 7.")
     end
@@ -60,9 +60,9 @@ Map reference triangle quadrature points `xi` to physical coordinates on
 triangle `t` of the mesh. Returns a vector of Vec3.
 """
 function tri_quad_points(mesh::TriMesh, t::Int, xi::Vector{<:SVector{2}})
-    v1 = Vec3(mesh.xyz[:, mesh.tri[1, t]])
-    v2 = Vec3(mesh.xyz[:, mesh.tri[2, t]])
-    v3 = Vec3(mesh.xyz[:, mesh.tri[3, t]])
+    v1 = _mesh_vertex(mesh, mesh.tri[1, t])
+    v2 = _mesh_vertex(mesh, mesh.tri[2, t])
+    v3 = _mesh_vertex(mesh, mesh.tri[3, t])
 
     return [v1 * (1 - ξ[1] - ξ[2]) + v2 * ξ[1] + v3 * ξ[2] for ξ in xi]
 end

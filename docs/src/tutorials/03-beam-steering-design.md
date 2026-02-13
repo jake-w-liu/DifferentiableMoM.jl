@@ -202,7 +202,7 @@ theta_opt, trace = optimize_directivity(
     tol=1e-12,
     lb=fill(-theta_bound, Nt),
     ub=fill( theta_bound, Nt),
-    alpha0=1e8,          # initial regularisation (suppresses initial gradient)
+    alpha0=0.01,         # initial inverse Hessian scaling for L-BFGS
     verbose=true         # print iteration progress
 )
 
@@ -245,6 +245,9 @@ plot!(twinx(), iters, gnorms, color=:red, label="‖∇J‖", yscale=:log10)
 #### 9.3 Extract Phi=0 Cut and Compare with PEC
 
 ```julia
+# Compute PEC far field (needed for comparison)
+E_ff_pec = compute_farfield(G_mat, I_pec, NΩ)
+
 # Far‑field power pattern
 ff_power_pec = [real(dot(E_ff_pec[:, q], E_ff_pec[:, q])) for q in 1:NΩ]
 ff_power_opt = [real(dot(E_ff_opt[:, q], E_ff_opt[:, q])) for q in 1:NΩ]
@@ -309,7 +312,7 @@ end
 | Pattern | Likely Cause | Action |
 |---------|--------------|--------|
 | **Objective plateaus early** | Initial phase ramp insufficient; optimizer stuck near broadside | Increase ramp magnitude, add random perturbation |
-| **Gradient norm oscillates** | Step size too large, ill‑conditioned Hessian | Reduce `alpha0` (regularisation), enable preconditioning |
+| **Gradient norm oscillates** | Step size too large, ill‑conditioned Hessian | Reduce `alpha0` (inverse Hessian scaling), enable preconditioning |
 | **Objective decreases then increases** | Line‑search fails due to gradient scaling | Scale objective (multiply by constant), check gradient sign |
 | **Gradient norm stalls ~1e‑6** | Convergence reached; further improvement limited by discretisation | Accept solution, refine mesh if needed |
 
@@ -335,7 +338,7 @@ Plot `theta_opt` vs $x$ position; it should approximate a linear phase ramp with
 
 1. **Weak initial phase ramp** – Increase the coefficient in the linear ramp (e.g., from 300 to 600 Ω).
 2. **Symmetrical initialization** – Ensure ramp is asymmetric (odd function) about the center; add a small random component.
-3. **Gradient scaling** – Check that `alpha0` is not too large (it regularises the initial step). Try `alpha0=1e6` or `alpha0=1e7`.
+3. **Gradient scaling** – Check that `alpha0` is not too large (it scales the initial inverse Hessian). Try `alpha0=0.001` or `alpha0=0.1`.
 4. **Box constraints too tight** – If `theta_bound` is too small, the optimizer cannot create sufficient phase shift. Increase to 800–1000 Ω (if physically plausible).
 
 ### Line‑Search Failures (Step Size Repeatedly Reduced)
@@ -346,7 +349,7 @@ Plot `theta_opt` vs $x$ position; it should approximate a linear phase ramp with
 
 - **Scale the objective** – Multiply $J$ by a constant (e.g., 100) to increase gradient magnitude.
 - **Check gradient sign** – Verify gradient verification passes (Tutorial 2). A sign error causes line search to move uphill.
-- **Increase `alpha0`** – Larger regularisation stabilises early steps.
+- **Increase `alpha0`** – Larger inverse Hessian scaling stabilises early steps.
 
 ### Poor Far‑Field Pattern (High Sidelobes, Split Beams)
 
@@ -376,7 +379,7 @@ If verification passes at random `theta0` but fails at `theta_opt`:
 | **Radiation vectors** | `radiation_vectors` | `src/FarField.jl` | 120–150 |
 | **Polarization matrix** | `pol_linear_x` | `src/QMatrix.jl` | 130–150 |
 | **Far‑field computation** | `compute_farfield` | `src/FarField.jl` | 200–220 |
-| **Convergence tracing** | `ConvergenceTrace` struct | `src/Optimize.jl` | 20–30 |
+| **Convergence tracing** | `Vector{NamedTuple{(:iter, :J, :gnorm)}}` | `src/Optimize.jl` | 20–30 |
 | **Gradient verification** | `verify_gradient` | `src/Verification.jl` | 42–86 |
 
 **Complete example:** `examples/ex_beam_steer.jl` (297 lines) – includes all steps above plus CSV output and plotting.

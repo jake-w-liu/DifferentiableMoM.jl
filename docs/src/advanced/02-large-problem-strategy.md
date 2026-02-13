@@ -124,9 +124,9 @@ println("Realistic budget: $(round(3 * mem_gib, digits=2)) GiB (3× factor)")
 # 4. Mesh quality report
 report = mesh_quality_report(mesh_ok)
 println("Mesh quality summary:")
-println("  boundary edges: $(report.boundary_edge_count)")
-println("  non‑manifold edges: $(report.nonmanifold_edge_count)")
-println("  orientation conflicts: $(report.orientation_conflict_count)")
+println("  boundary edges: $(report.n_boundary_edges)")
+println("  non‑manifold edges: $(report.n_nonmanifold_edges)")
+println("  orientation conflicts: $(report.n_orientation_conflicts)")
 
 # 5. Decide: proceed, coarsen, or abort
 if mem_gib > 4.0   # e.g., more than 4 GiB raw matrix
@@ -147,7 +147,7 @@ When coarsening is applied, adopt a tiered validation strategy:
 1. **Mesh‑quality tier**: `mesh_quality_ok` passes with your chosen tolerances.
 2. **Solver‑residual tier**: Relative residual `norm(Z*I - v)/norm(v)` < 1e‑8.
 3. **Internal‑consistency tier**: Far‑field power conservation holds within
-   a few percent (check `power_conservation` function).
+   a few percent (check `energy_ratio` function in `src/Diagnostics.jl`).
 4. **Engineering‑observable tier**: Key metrics (main lobe, monostatic RCS,
    trend vs. parameter) are stable across coarsening levels.
 5. **External‑validation tier** (optional): Compare with a high‑fidelity
@@ -216,10 +216,10 @@ Coarsening reduces geometric detail, which affects:
 
 ### Example: Airplane RCS with Coarsening
 
-The script `examples/ex_obj_rcs_pipeline.jl` demonstrates the complete workflow:
+The script `examples/06_aircraft_rcs.jl` demonstrates the complete workflow:
 
 ```bash
-julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 This loads an OBJ, scales it to meters, repairs, coarsens to ≈300 RWG unknowns,
@@ -291,7 +291,7 @@ For gradient‑based optimization (`src/Optimize.jl`):
 - Limit the number of L‑BFGS iterations (`maxiter=20–50`) and check for
   stagnation.
 
-The example `examples/ex_auto_preconditioning.jl` shows recommended settings
+The example `examples/05_solver_methods.jl` shows recommended settings
 for large iterative runs.
 
 ---
@@ -316,7 +316,7 @@ The package constructs $\mathbf{M}$ from the patch‑mass matrices
 $\mathbf{M}_p$ (see `src/Solve.jl:67`):
 
 ```math
-\mathbf{M} = \text{diag}(\mathbf{M}_p) + \epsilon \mathbf{I},
+\mathbf{M} = \sum_p \mathbf{M}_p + \epsilon \mathbf{I},
 ```
 
 with a small regularization $\epsilon$ (default $10^{-8}$ relative to the
@@ -327,15 +327,16 @@ improves the condition number.
 
 - **Improves numerical conditioning**: Reduces the risk of large residual errors
   from finite‑precision arithmetic.
-- **Accelerates iterative solvers**: If an iterative Krylov method were used
-  (future extension), preconditioning would cut the iteration count.
+- **Accelerates iterative solvers**: The package includes GMRES via Krylov.jl
+  (`solve_gmres`), and preconditioning cuts the iteration count. A near-field
+  sparse preconditioner is available via `build_nearfield_preconditioner`.
 - **Stabilizes adjoint gradients**: Better‑conditioned forward solves lead to
   more accurate gradient computations in optimization.
 
 ### What Preconditioning **Does Not** Do
 
-- **Does not reduce memory**: $\mathbf{M}$ is diagonal, but $\mathbf{Z}$ remains
-  dense $O(N^2)$.
+- **Does not reduce memory**: $\mathbf{M}$ is a dense matrix (sum of patch mass
+  matrices plus regularization), and $\mathbf{Z}$ remains dense $O(N^2)$.
 - **Does not change scaling**: Factorizing $\mathbf{Z}$ still costs $O(N^3)$.
 - **Does not enable “large‑scale” dense solves**: The fundamental scaling wall
   remains.
@@ -352,7 +353,7 @@ based on:
    - If $N \ge$ `n_threshold` (default 256), enable.
    - Otherwise, disable.
 
-The example `examples/ex_auto_preconditioning.jl` demonstrates the decision
+The example `examples/05_solver_methods.jl` demonstrates the decision
 logic and provides recommended settings for large/iterative workflows.
 
 ### Connection to the Paper
@@ -368,12 +369,15 @@ against poor conditioning.
 
 ### Current Envelope
 
-The present package is designed for **reference‑correct dense EFIE solves**.
+The package supports both **dense direct solves** and **accelerated methods**.
 The reliable workflow for large geometry is:
 
 1. **Mesh repair** (`repair_mesh_for_simulation`).
 2. **Controlled coarsening** (`coarsen_mesh_to_target_rwg`).
-3. **Dense direct solve** (`assemble_Z_efie` + `solve_forward`).
+3. **Solve**: dense direct (`assemble_Z_efie` + `solve_forward`), dense GMRES
+   (`solve_gmres` with `build_nearfield_preconditioner`), or ACA-compressed
+   GMRES (`build_aca_operator`). The high-level `solve_scattering` function
+   selects the method automatically based on problem size.
 4. **Strong validation diagnostics** (residual, power conservation, etc.).
 
 **Practical limits** with typical desktop hardware (32 GiB RAM, 8 cores):
@@ -394,21 +398,19 @@ If your project requires:
 - **Many right‑hand sides** (hundreds of incidence angles),
 - **Inverse design with >10,000 design variables**,
 
-then the next algorithmic step is **matrix‑free fast methods** (FMM, MLFMM)
-coupled with iterative Krylov solvers.
+then use the package's built-in accelerated methods:
 
-### Compatibility Path
+- **ACA H-matrix compression**: `build_aca_operator` constructs an ACA-compressed
+  operator with $O(N \log^2 N)$ matvec cost, avoiding full dense assembly.
+- **GMRES iterative solver**: `solve_gmres` (via Krylov.jl) with left or right
+  preconditioning.
+- **Near-field preconditioner**: `build_nearfield_preconditioner(Z, mesh, rwg, cutoff)`
+  provides N-independent iteration counts.
+- **Automatic method selection**: `solve_scattering` picks dense direct ($N \le 2000$),
+  dense GMRES ($N \le 10000$), or ACA GMRES ($N > 10000$) automatically.
 
-The EFIE and adjoint formulations in this package are **algorithmically
-compatible** with fast methods. The transition would involve:
-
-1. Replace `assemble_Z_efie` with a matrix‑free operator that computes
-   $\mathbf{Z} \mathbf{x}$ via FMM.
-2. Replace the direct solver with GMRES or other Krylov method.
-3. Retain the same RWG basis, far‑field operators, and gradient computations.
-
-Such an extension is not part of the current release but is a natural evolution
-for larger‑scale electromagnetics.
+For problems exceeding the ACA envelope, full FMM/MLFMM methods would be the
+next algorithmic step.
 
 ### Planning Your Project
 
@@ -417,7 +419,7 @@ for larger‑scale electromagnetics.
 | Validation / research reproducibility | Use dense direct solves with $N \le 5,000$. |
 | Parameter sweeps on moderate platforms | Coarsen to $N \le 1,500$, stage scenarios. |
 | Inverse design on small‑medium domains | Use dense + adjoint, $N \le 2,500$, preconditioning `:auto`. |
-| Large platforms / high frequency | Fast‑method extension (future). |
+| Large platforms / high frequency | ACA GMRES via `build_aca_operator` + `solve_scattering`, or coarsen further. |
 
 ---
 
@@ -427,10 +429,10 @@ for larger‑scale electromagnetics.
 
 ```bash
 # Step 1: Repair the input mesh (optional, but recommended)
-julia --project=. examples/ex_obj_rcs_pipeline.jl repair ../Airplane.obj ../Airplane_repaired.obj
+julia --project=. examples/06_aircraft_rcs.jl repair ../Airplane.obj ../Airplane_repaired.obj
 
 # Step 2: Run RCS with automatic coarsening
-julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 The second command scales the OBJ by 0.001 (mm to m), repairs, coarsens to ≈300
@@ -440,7 +442,7 @@ mesh previews.
 ### For Preconditioning Tuning
 
 ```bash
-julia --project=. examples/ex_auto_preconditioning.jl
+julia --project=. examples/05_solver_methods.jl
 ```
 
 This script demonstrates the `:auto` decision logic and shows recommended
@@ -582,8 +584,8 @@ println(report)
 | Preconditioner construction | `src/Solve.jl` | `make_left_preconditioner` (line 67), `select_preconditioner` (line 106) |
 | Conditioned system solve | `src/Solve.jl` | `prepare_conditioned_system` (line 179) |
 | Optimization with preconditioning | `src/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
-| Large OBJ demo | `examples/ex_obj_rcs_pipeline.jl` | Full workflow with repair, coarsen, solve, RCS |
-| Auto‑preconditioning example | `examples/ex_auto_preconditioning.jl` | Decision logic and recommended settings |
+| Large OBJ demo | `examples/06_aircraft_rcs.jl` | Full workflow with repair, coarsen, solve, RCS |
+| Auto‑preconditioning example | `examples/05_solver_methods.jl` | Decision logic and recommended settings |
 
 ---
 
@@ -597,12 +599,12 @@ println(report)
 2. **Coarsening effect**: Load a simple plate mesh (`make_rect_plate`), coarsen
    it with `target_rwg=50`, and compare the number of vertices, triangles, and
    RWG edges before/after.
-3. **Preconditioning logic**: Run `examples/ex_auto_preconditioning.jl` and
+3. **Preconditioning logic**: Run `examples/05_solver_methods.jl` and
    explain why each of the three test cases enables or disables preconditioning.
 
 ### Practical
 
-4. **Two‑level RCS comparison**: Run `ex_obj_rcs_pipeline.jl` with `target_rwg=200`
+4. **Two‑level RCS comparison**: Run `06_aircraft_rcs.jl` with `target_rwg=200`
    and `target_rwg=500`. Compare the monostatic RCS (dBsm), solver residual,
    and total runtime. Are the results qualitatively similar?
 5. **Mesh‑quality audit**: Take a complex OBJ (e.g., from the `data/` directory),
@@ -622,7 +624,7 @@ println(report)
 8. **Coarsening‑convergence study**: For a fixed OBJ, run coarsening with
    `target_rwg = 100, 200, 400, 800`. Plot monostatic RCS vs. $N$ and determine
    the point where the result stabilizes within 1 dB.
-9. **Preconditioning impact**: Modify `ex_auto_preconditioning.jl` to solve a
+9. **Preconditioning impact**: Modify `05_solver_methods.jl` to solve a
     larger problem ($N \approx 2000$) with and without preconditioning. Compare
     the condition number (estimate via `cond(Z)`) and the solver residual.
 

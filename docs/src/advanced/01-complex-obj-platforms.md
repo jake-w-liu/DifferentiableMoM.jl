@@ -134,8 +134,8 @@ For each platform run, archive the following:
 | Artifact | Purpose | How to generate |
 |----------|---------|-----------------|
 | **Raw OBJ** | Original geometry | `read_obj_mesh` input |
-| **Repaired OBJ** | Topologically correct mesh | `write_obj_mesh(mesh_repaired, "platform_repaired.obj")` |
-| **Coarsened OBJ** | Mesh used for simulation | `write_obj_mesh(mesh_sim, "platform_coarse.obj")` |
+| **Repaired OBJ** | Topologically correct mesh | `write_obj_mesh("platform_repaired.obj", mesh_repaired)` |
+| **Coarsened OBJ** | Mesh used for simulation | `write_obj_mesh("platform_coarse.obj", mesh_sim)` |
 | **Mesh preview** | Visual comparison | `save_mesh_preview(mesh_repaired, mesh_sim, "figs/platform_preview")` |
 | **Quality reports** | Quantitative mesh statistics | `mesh_quality_report` output (save as text file) |
 | **Metadata CSV** | Run parameters and counts | Custom table with `Nv`, `Nt`, `N_{\mathrm{RWG}}`, frequency, scale factor, repair flags |
@@ -195,7 +195,7 @@ Complex CAD platforms typically contain $10^4$–$10^6$ triangles, far beyond th
 
 ### 4.3 Example: Aircraft RCS Convergence
 
-The script `examples/ex_obj_rcs_pipeline.jl` includes an optional coarsening step. Extend it to loop over target RWG counts and produce a convergence table:
+The script `examples/06_aircraft_rcs.jl` includes an optional coarsening step. Extend it to loop over target RWG counts and produce a convergence table:
 
 ```julia
 targets = [200, 400, 800, 1600, 3200]
@@ -222,8 +222,8 @@ Plot `backscatter_db` vs. `targets` to identify the “knee” where further ref
 
 ### 5.2 Example Scripts
 
-- **`examples/ex_obj_rcs_pipeline.jl`** – complete workflow for a complex platform: import, repair, coarsening, solve, far‑field and RCS extraction. This script is the reference implementation for this chapter.
-- **`examples/ex_visualize_simulation_mesh.jl`** – focuses on visualization and comparison of repaired vs. simulation meshes.
+- **`examples/06_aircraft_rcs.jl`** – complete workflow for a complex platform: import, repair, coarsening, solve, far‑field and RCS extraction. This script is the reference implementation for this chapter.
+<!-- ex_visualize_simulation_mesh.jl -- no equivalent script exists; use plot_mesh_wireframe / plot_mesh_comparison from src/Visualization.jl directly -->
 
 ### 5.3 Supporting Utilities
 
@@ -269,4 +269,4 @@ Before applying the platform workflow to a new CAD model, ensure you can:
 - **CAD for EM:** Davidson, *CAD for Microwave and Electromagnetic Systems* (2012) – discusses geometry cleanup and meshing for computational electromagnetics.
 - **Mesh repair algorithms:** Attene et al., *Mesh Repair* (2013) – survey of techniques for fixing non‑manifold edges, degenerate triangles, and orientation inconsistencies.
 - **Platform RCS prediction:** Knott et al., *Radar Cross Section* (1993) – classic text on scattering from complex targets.
-- **Package examples:** `examples/ex_obj_rcs_pipeline.jl` – a ready‑to‑run implementation of the workflow described in this chapter.
+- **Package examples:** `examples/06_aircraft_rcs.jl` – a ready‑to‑run implementation of the workflow described in this chapter.

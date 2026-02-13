@@ -88,9 +88,9 @@ This is the same `Q`-matrix objective form used by adjoint optimization.
 ## 5) High-Value Example Commands
 
 ```bash
-julia --project=. examples/ex_beam_steer.jl
-julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
-julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/04_beam_steering.jl
+julia --project=. examples/02_pec_sphere_mie.jl
+julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
 ```
 
 ---
@@ -99,7 +99,7 @@ julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
 
 - Forward assembly: `src/EFIE.jl`, `src/Excitation.jl`, `src/Solve.jl`
 - Far-field and objectives: `src/FarField.jl`, `src/QMatrix.jl`, `src/Diagnostics.jl`
-- Example implementations: `examples/ex_beam_steer.jl`, `examples/ex_convergence.jl`
+- Example implementations: `examples/04_beam_steering.jl`, `examples/01_pec_plate_basics.jl`
 
 ---
 

@@ -126,16 +126,14 @@ report = mesh_quality_report(mesh;
 #### Interpretation and Acceptance:
 
 ```julia
-ok = mesh_quality_ok(report; 
-    allow_boundary=true, 
-    require_closed=false,
-    max_nonmanifold=0)
+ok = mesh_quality_ok(report;
+    allow_boundary=true,
+    require_closed=false)
 ```
 
 Typical acceptance criteria for RWG generation:
-- **Closed surfaces**: `require_closed=true`, `max_nonmanifold=0`
-- **Open surfaces**: `allow_boundary=true`, `max_nonmanifold=0`
-- **Tolerant mode**: `max_nonmanifold>0` for problematic CAD data (with repair)
+- **Closed surfaces**: `require_closed=true`
+- **Open surfaces**: `allow_boundary=true`
 
 ### 2.4 Mesh Repair Pipeline
 
@@ -146,7 +144,7 @@ rep = repair_mesh_for_simulation(mesh;
     allow_boundary=true,
     strict_nonmanifold=true,
     fix_orientation=true,
-    min_area_ratio=1e-8)
+    area_tol_rel=1e-12)
 ```
 
 #### Repair Algorithms:
@@ -161,9 +159,7 @@ rep = repair_mesh_for_simulation(mesh;
 #### OBJ-Level Wrapper:
 
 ```julia
-repair_obj_mesh("input.obj", "output.obj"; 
-    write_report=true,
-    report_file="repair_log.txt")
+repair_obj_mesh("input.obj", "output.obj")
 ```
 
 Produces a cleaned OBJ file with metadata about removed elements.
@@ -174,9 +170,7 @@ To control problem size while preserving shape:
 
 ```julia
 coarse = coarsen_mesh_to_target_rwg(mesh, target_rwg;
-    max_iterations=20,
-    min_edge_length_ratio=0.1,
-    preserve_boundary=true)
+    max_iters=10)
 ```
 
 #### Coarsening Strategy:
@@ -230,8 +224,8 @@ println("Raw mesh: $(nvertices(mesh_raw)) vertices, $(ntriangles(mesh_raw)) tria
 
 # 2. Quality assessment
 report_raw = mesh_quality_report(mesh_raw)
-println("Non-manifold edges: $(report_raw.non_manifold_edges)")
-println("Orientation conflicts: $(report_raw.orientation_conflicts)")
+println("Non-manifold edges: $(report_raw.n_nonmanifold_edges)")
+println("Orientation conflicts: $(report_raw.n_orientation_conflicts)")
 
 # 3. Repair topological defects
 rep = repair_mesh_for_simulation(mesh_raw;
@@ -245,7 +239,7 @@ println("Repaired: removed $(length(rep.removed_invalid) + length(rep.removed_de
 target_rwg = 5000
 coarse = coarsen_mesh_to_target_rwg(mesh_repaired, target_rwg)
 mesh_final = coarse.mesh
-println("Coarsened: $(ntriangles(mesh_final)) triangles → ~$(coarse.estimated_rwg) RWG")
+println("Coarsened: $(ntriangles(mesh_final)) triangles → ~$(coarse.rwg_count) RWG")
 
 # 5. Final validation
 assert_mesh_quality(mesh_final; 
@@ -360,7 +354,9 @@ Combine coarsening with refinement based on solution features:
 coarse = coarsen_mesh_to_target_rwg(mesh, 2000)
 mesh_coarse = coarse.mesh
 rwg_coarse = build_rwg(mesh_coarse)
-solution_coarse = solve_efie(mesh_coarse, rwg_coarse)
+Z = assemble_Z_efie(mesh_coarse, rwg_coarse, k; quad_order=3, eta0=η0)
+v = assemble_v_plane_wave(mesh_coarse, rwg_coarse, k_vec, E0, pol_inc; quad_order=3)
+I_coarse = solve_forward(Z, v)
 
 # Region-selective refinement is not implemented in the current package.
 # Typical practice: repeat solve with higher target_rwg and compare observables.
@@ -399,9 +395,9 @@ solution_coarse = solve_efie(mesh_coarse, rwg_coarse)
 
 ### 6.2 Example Scripts
 
-- **Mesh repair demonstration**: `examples/ex_obj_rcs_pipeline.jl`
-- **Aircraft RCS workflow**: `examples/ex_obj_rcs_pipeline.jl`
-- **Coarsening in pipeline**: `examples/ex_obj_rcs_pipeline.jl`
+- **Mesh repair demonstration**: `examples/06_aircraft_rcs.jl`
+- **Aircraft RCS workflow**: `examples/06_aircraft_rcs.jl`
+- **Coarsening in pipeline**: `examples/06_aircraft_rcs.jl`
 
 ### 6.3 Supporting Functions
 
