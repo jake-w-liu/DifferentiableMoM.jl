@@ -13,8 +13,10 @@
 # counts for GMRES.
 
 using SparseArrays
+using IncompleteLU
 
 export NearFieldPreconditionerData,
+       ILUPreconditionerData,
        DiagonalPreconditionerData,
        AbstractPreconditionerData,
        build_nearfield_preconditioner,
@@ -44,6 +46,24 @@ struct DiagonalPreconditionerData <: AbstractPreconditionerData
     dinv::Vector{ComplexF64}
     cutoff::Float64
     nnz_ratio::Float64
+end
+
+"""
+    ILUPreconditionerData <: AbstractPreconditionerData
+
+Stores an incomplete LU (ILU) factorization of the near-field sparse matrix.
+Uses IncompleteLU.jl's Crout ILU with drop tolerance τ.
+
+Compared to full sparse LU (`NearFieldPreconditionerData`):
+- Much less fill-in → feasible for large N with moderate nnz%
+- Slightly weaker preconditioner → more GMRES iterations
+- Memory: controlled by τ (smaller τ = more fill = better preconditioner)
+"""
+struct ILUPreconditionerData <: AbstractPreconditionerData
+    ilu_fac::IncompleteLU.ILUFactorization{ComplexF64, Int64}
+    cutoff::Float64
+    nnz_ratio::Float64
+    tau::Float64
 end
 
 """
@@ -214,13 +234,14 @@ end
 function _build_nearfield_preconditioner_from_entries(mesh::TriMesh, rwg::RWGData, cutoff::Float64,
                                                        getvalue;
                                                        neighbor_search::Symbol=:spatial,
-                                                       factorization::Symbol=:lu)
+                                                       factorization::Symbol=:lu,
+                                                       ilu_tau::Float64=1e-3)
     N = rwg.nedges
 
     if factorization == :diag
         return _build_diagonal_preconditioner_data(getvalue, N, cutoff)
-    elseif factorization != :lu
-        error("Invalid factorization: $factorization (expected :lu or :diag)")
+    elseif factorization ∉ (:lu, :ilu)
+        error("Invalid factorization: $factorization (expected :lu, :ilu, or :diag)")
     end
 
     centers = rwg_centers(mesh, rwg)
@@ -235,8 +256,14 @@ function _build_nearfield_preconditioner_from_entries(mesh::TriMesh, rwg::RWGDat
 
     Z_nf = sparse(I_idx, J_idx, V_val, N, N)
     nnz_ratio = nnz(Z_nf) / max(N * N, 1)
-    Z_nf_fac = lu(Z_nf)
-    return NearFieldPreconditionerData(Z_nf_fac, cutoff, nnz_ratio)
+
+    if factorization == :ilu
+        ilu_fac = IncompleteLU.ilu(Z_nf, τ = ilu_tau)
+        return ILUPreconditionerData(ilu_fac, cutoff, nnz_ratio, ilu_tau)
+    else
+        Z_nf_fac = lu(Z_nf)
+        return NearFieldPreconditionerData(Z_nf_fac, cutoff, nnz_ratio)
+    end
 end
 
 """
@@ -260,7 +287,8 @@ A `NearFieldPreconditionerData` containing the factorized near-field matrix.
 function build_nearfield_preconditioner(Z::Matrix{<:Number}, mesh::TriMesh,
                                          rwg::RWGData, cutoff::Float64;
                                          neighbor_search::Symbol=:spatial,
-                                         factorization::Symbol=:lu)
+                                         factorization::Symbol=:lu,
+                                         ilu_tau::Float64=1e-3)
     N = rwg.nedges
     size(Z, 1) == N && size(Z, 2) == N ||
         throw(DimensionMismatch("Z has size $(size(Z)), expected ($N, $N) for RWG basis"))
@@ -268,6 +296,7 @@ function build_nearfield_preconditioner(Z::Matrix{<:Number}, mesh::TriMesh,
         (m, n) -> Z[m, n];
         neighbor_search=neighbor_search,
         factorization=factorization,
+        ilu_tau=ilu_tau,
     )
 end
 
@@ -280,7 +309,8 @@ without allocating a full dense matrix.
 function build_nearfield_preconditioner(A::AbstractMatrix{<:Number}, mesh::TriMesh,
                                          rwg::RWGData, cutoff::Float64;
                                          neighbor_search::Symbol=:spatial,
-                                         factorization::Symbol=:lu)
+                                         factorization::Symbol=:lu,
+                                         ilu_tau::Float64=1e-3)
     N = rwg.nedges
     size(A, 1) == N && size(A, 2) == N ||
         throw(DimensionMismatch("A has size $(size(A)), expected ($N, $N) for RWG basis"))
@@ -288,6 +318,7 @@ function build_nearfield_preconditioner(A::AbstractMatrix{<:Number}, mesh::TriMe
         (m, n) -> A[m, n];
         neighbor_search=neighbor_search,
         factorization=factorization,
+        ilu_tau=ilu_tau,
     )
 end
 
@@ -299,10 +330,12 @@ the matrix-free EFIE operator cache.
 """
 function build_nearfield_preconditioner(A::MatrixFreeEFIEOperator, cutoff::Float64;
                                          neighbor_search::Symbol=:spatial,
-                                         factorization::Symbol=:lu)
+                                         factorization::Symbol=:lu,
+                                         ilu_tau::Float64=1e-3)
     return build_nearfield_preconditioner(A, A.cache.mesh, A.cache.rwg, cutoff;
         neighbor_search=neighbor_search,
         factorization=factorization,
+        ilu_tau=ilu_tau,
     )
 end
 
@@ -320,7 +353,8 @@ function build_nearfield_preconditioner(mesh::TriMesh, rwg::RWGData, k, cutoff::
                                          require_closed::Bool=false,
                                          area_tol_rel::Float64=1e-12,
                                          neighbor_search::Symbol=:spatial,
-                                         factorization::Symbol=:lu)
+                                         factorization::Symbol=:lu,
+                                         ilu_tau::Float64=1e-3)
     A = matrixfree_efie_operator(mesh, rwg, k;
         quad_order=quad_order,
         eta0=eta0,
@@ -332,6 +366,7 @@ function build_nearfield_preconditioner(mesh::TriMesh, rwg::RWGData, k, cutoff::
     return build_nearfield_preconditioner(A, cutoff;
         neighbor_search=neighbor_search,
         factorization=factorization,
+        ilu_tau=ilu_tau,
     )
 end
 
@@ -347,6 +382,7 @@ end
 
 @inline _preconditioner_size(P::NearFieldPreconditionerData) = size(P.Z_nf_fac, 1)
 @inline _preconditioner_size(P::DiagonalPreconditionerData) = length(P.dinv)
+@inline _preconditioner_size(P::ILUPreconditionerData) = size(P.ilu_fac.L, 1)
 
 @inline function _apply_preconditioner!(y::StridedVector{ComplexF64}, P::NearFieldPreconditionerData)
     ldiv!(P.Z_nf_fac, y)
@@ -360,6 +396,11 @@ end
     return y
 end
 
+@inline function _apply_preconditioner!(y::StridedVector{ComplexF64}, P::ILUPreconditionerData)
+    ldiv!(P.ilu_fac, y)
+    return y
+end
+
 @inline function _apply_preconditioner_adjoint!(y::StridedVector{ComplexF64}, P::NearFieldPreconditionerData)
     ldiv!(adjoint(P.Z_nf_fac), y)
     return y
@@ -369,6 +410,15 @@ end
     @inbounds @simd for i in eachindex(y)
         y[i] *= conj(P.dinv[i])
     end
+    return y
+end
+
+@inline function _apply_preconditioner_adjoint!(y::StridedVector{ComplexF64}, P::ILUPreconditionerData)
+    # (LU)⁻ᴴ y = U⁻ᴴ L⁻ᴴ y
+    # Step 1: solve Uᴴ z = y  (Uᴴ is lower triangular)
+    ldiv!(adjoint(UpperTriangular(P.ilu_fac.U)), y)
+    # Step 2: solve Lᴴ x = z  (Lᴴ is unit upper triangular)
+    ldiv!(adjoint(UnitLowerTriangular(P.ilu_fac.L)), y)
     return y
 end
 

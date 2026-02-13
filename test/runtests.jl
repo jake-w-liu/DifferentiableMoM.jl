@@ -2363,10 +2363,65 @@ println("  MoM vs PO specular diff: $(round(mom_po_diff_dB, digits=2)) dB")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 30: ILU preconditioner
+# ─────────────────────────────────────────────────
+println("\n── Test 30: ILU preconditioner ──")
+
+# Build a small plate problem for testing
+ilu_mesh = make_rect_plate(0.4, 0.4, 6, 6)
+ilu_rwg  = build_rwg(ilu_mesh)
+ilu_N    = ilu_rwg.nedges
+ilu_k    = 2π / 0.4   # λ = 0.4m
+ilu_Z    = assemble_Z_efie(ilu_mesh, ilu_rwg, ilu_k)
+ilu_pw   = make_plane_wave(Vec3(0.0, 0.0, -ilu_k), 1.0, Vec3(1.0, 0.0, 0.0))
+ilu_rhs  = assemble_excitation(ilu_mesh, ilu_rwg, ilu_pw)
+
+# Reference: direct solve
+ilu_ref = ilu_Z \ ilu_rhs
+
+# 30a: ILU preconditioner builds without error
+cutoff_ilu = 0.3   # ~0.75λ
+P_ilu = build_nearfield_preconditioner(ilu_Z, ilu_mesh, ilu_rwg, cutoff_ilu;
+    factorization=:ilu, ilu_tau=1e-3)
+@assert P_ilu isa ILUPreconditionerData
+@assert P_ilu.nnz_ratio > 0 && P_ilu.nnz_ratio <= 1.0
+println("  30a: ILU preconditioner built — nnz=$(round(P_ilu.nnz_ratio * 100, digits=1))%, τ=$(P_ilu.tau)")
+
+# 30b: ILU-preconditioned GMRES converges
+I_ilu, stats_ilu = solve_gmres(ilu_Z, ilu_rhs; preconditioner=P_ilu, tol=1e-8, maxiter=500)
+err_ilu = norm(I_ilu - ilu_ref) / norm(ilu_ref)
+println("  30b: ILU GMRES — $(stats_ilu.niter) iters, rel error $(round(err_ilu, sigdigits=3))")
+@assert stats_ilu.niter < 200 "ILU GMRES took $(stats_ilu.niter) iters (expected < 200)"
+@assert err_ilu < 1e-4 "ILU GMRES relative error $(err_ilu) > 1e-4"
+
+# 30c: Compare ILU vs full LU iteration counts
+P_lu = build_nearfield_preconditioner(ilu_Z, ilu_mesh, ilu_rwg, cutoff_ilu;
+    factorization=:lu)
+I_lu, stats_lu = solve_gmres(ilu_Z, ilu_rhs; preconditioner=P_lu, tol=1e-8, maxiter=500)
+println("  30c: LU GMRES — $(stats_lu.niter) iters (ILU: $(stats_ilu.niter) iters)")
+# ILU should take more iterations than full LU but still converge
+@assert stats_ilu.niter >= stats_lu.niter "ILU should take ≥ LU iterations"
+
+# 30d: ILU works with matrix-free operator (mesh, rwg, k overload)
+P_ilu_mf = build_nearfield_preconditioner(ilu_mesh, ilu_rwg, ilu_k, cutoff_ilu;
+    factorization=:ilu, ilu_tau=1e-3)
+@assert P_ilu_mf isa ILUPreconditionerData
+println("  30d: Matrix-free ILU build — nnz=$(round(P_ilu_mf.nnz_ratio * 100, digits=1))%")
+
+# 30e: ILU adjoint preconditioner works
+I_adj_ilu, stats_adj = solve_gmres_adjoint(ilu_Z, ilu_rhs; preconditioner=P_ilu, tol=1e-8, maxiter=500)
+I_adj_ref = adjoint(ilu_Z) \ ilu_rhs
+err_adj = norm(I_adj_ilu - I_adj_ref) / norm(I_adj_ref)
+println("  30e: ILU adjoint GMRES — $(stats_adj.niter) iters, rel error $(round(err_adj, sigdigits=3))")
+@assert err_adj < 1e-4 "ILU adjoint GMRES relative error $(err_adj) > 1e-4"
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 29 TESTS PASSED")
+println("ALL 30 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)
