@@ -53,7 +53,7 @@ The package provides two main optimizer functions, both built on the same L‑BF
 - **`optimize_lbfgs`** – for a single quadratic objective $J = \mathbf{I}^\dagger \mathbf{Q} \mathbf{I}$.
 - **`optimize_directivity`** – for a ratio objective $J = (\mathbf{I}^\dagger \mathbf{Q}_t \mathbf{I}) / (\mathbf{I}^\dagger \mathbf{Q}_{\mathrm{tot}} \mathbf{I})$.
 
-Both support box constraints (`lb`, `ub`), reactive/resistive parameterization, and the full conditioning/preconditioning options described in Chapter 5.
+Both support box constraints (`lb`, `ub`), reactive/resistive parameterization, and the full conditioning/preconditioning options described in Chapter 5.
 
 ---
 
@@ -100,7 +100,8 @@ The initial guess $\boldsymbol{\theta}^{(0)}$ can significantly influence conver
 | `maxiter` | 100–500 | Maximum number of iterations. Too low may prevent convergence; too high wastes time after convergence. |
 | `tol` | 1e‑6 – 1e‑8 | Gradient‑norm tolerance. Stop when $\|\mathbf{g}\| < \mathtt{tol} \cdot \max(1, \|\boldsymbol{\theta}\|)$. |
 | `m_lbfgs` | 5–20 | Memory size (number of past updates stored). Larger memory may improve convergence but increases per‑iteration cost. |
-| `linesearch` | `:backtrack` (default) | Line‑search algorithm. `:backtrack` uses Armijo–Wolfe conditions; `:strongwolfe` is more robust but costlier. |
+
+The line search is hardcoded as **backtracking Armijo** (always starting from step length 1.0). The `alpha0` keyword argument (default 0.01) controls the **initial inverse‑Hessian scaling** used in the L‑BFGS two‑loop recursion before any curvature pairs have been accumulated (i.e., on the very first iteration, the search direction is `d = -alpha0 * g`).
 
 ### 3.2 Box Constraints (`lb`, `ub`)
 
@@ -110,18 +111,22 @@ Physical realizability often imposes bounds on impedance values:
 - **Reactive sheets**: $\theta_p \in [-X_{\max}, X_{\max}]$ where $X_{\max}$ is a practical reactance limit (e.g., 500 $\Omega$).
 - **Active sheets**: May allow negative resistance ($\theta_p < 0$) for gain, but stability must be considered.
 
-Box constraints are enforced via **projection**: after each L‑BFGS step, parameters are clipped to `[lb, ub]`.
+Box constraints are enforced via **projection**: after each L‑BFGS step, parameters are clipped to `[lb, ub]`. Pass `lb=nothing` and `ub=nothing` (the defaults) for unconstrained optimization.
 
 ### 3.3 Conditioning and Solver Options
 
-- `preconditioning`: `:off`, `:on`, or `:auto` (see Chapter 5). For large or ill‑conditioned problems, `:auto` is recommended.
-- `iterative_solver`: `true` to use GMRES/Bi‑CGSTAB instead of direct LU. Usually slower for moderate $N$ ($<2000$) but essential for very large problems.
+- `solver`: `:direct` (LU factorization, default) or `:gmres` (iterative via Krylov.jl). This is the primary solver dispatch keyword, used for both forward and adjoint solves.
+- `nf_preconditioner`: Near‑field sparse preconditioner for GMRES (default `nothing`). Build with `build_nearfield_preconditioner(Z, mesh, rwg, cutoff)`.
+- `gmres_tol`: GMRES convergence tolerance (default 1e-8).
+- `gmres_maxiter`: Maximum GMRES iterations (default 200).
+- `preconditioning`: `:off` (default), `:on`, or `:auto` (see Chapter 5). For large or ill‑conditioned problems, `:auto` is recommended.
+- `iterative_solver`: A Boolean flag passed to `select_preconditioner` that influences auto‑preconditioning decisions. When `true`, the auto‑preconditioner logic accounts for the use of an iterative solver. Note: this does **not** switch the solver itself; use the `solver` keyword (`:direct` or `:gmres`) for that.
 - `regularization_alpha`: Small regularization parameter (default 0). Useful for low‑frequency stabilization.
 
 ### 3.4 Verbosity and Tracing
 
-- `verbose=true`: Print iteration progress (objective, gradient norm, step length).
-- `trace=true`: Record full history of $J$, $\|\mathbf{g}\|$, $\boldsymbol{\theta}$ (returned in the `trace` dictionary).
+- `verbose=true`: Print iteration progress (objective value, gradient norm).
+- The trace is always recorded and returned as the second element of the return tuple `(theta_opt, trace)`. It is a `Vector{NamedTuple{(:iter, :J, :gnorm)}}` containing iteration number, objective value, and gradient norm at each iteration.
 
 ---
 
@@ -129,29 +134,27 @@ Box constraints are enforced via **projection**: after each L‑BFGS step, param
 
 ### 4.1 What to Monitor
 
-A typical optimization trace contains:
+The optimization trace is a `Vector{NamedTuple{(:iter, :J, :gnorm)}}` containing three fields per iteration:
 
-- **Iteration number** `k`.
-- **Objective value** $J^{(k)}$.
-- **Gradient norm** $\|\mathbf{g}^{(k)}\|$.
-- **Step length** $\alpha^{(k)}$ from line search.
-- **Number of function evaluations** (forward + adjoint solves).
+- **Iteration number** `iter`.
+- **Objective value** `J`.
+- **Gradient norm** `gnorm`.
 
-Plotting $J$ vs. iteration shows whether the objective is improving monotonically or oscillating.
+Plotting `J` vs. iteration shows whether the objective is improving monotonically or oscillating.
 
 ### 4.2 Healthy Convergence Patterns
 
 - **Steady decrease**: $J$ drops rapidly in early iterations, then more slowly as it approaches a minimum.
 - **Gradient norm decay**: $\|\mathbf{g}\|$ decreases roughly exponentially.
-- **Step length near 1**: Successful line searches accept step lengths $\alpha \approx 1$ (typical for L‑BFGS with quadratic models).
+- **Objective improvement each iteration**: Each iteration should reduce $J$ (for minimization) or increase $J$ (for directivity maximization). Consistent improvement indicates that the backtracking Armijo line search is finding good step lengths.
 
 ### 4.3 Common Convergence Problems and Remedies
 
 | Symptom | Possible cause | Remedy |
 |---------|----------------|--------|
-| **Objective oscillates** | Step size too large; ill‑conditioned Hessian approximation | Reduce `m_lbfgs` (smaller memory), tighten line‑search parameters, add regularization. |
+| **Objective oscillates** | Step size too large; ill‑conditioned Hessian approximation | Reduce `m_lbfgs` (smaller memory), add regularization. |
 | **Gradient norm stagnates** | Poor local minimum; symmetry trapping; conditioning issues | Try asymmetric initialization, increase `m_lbfgs`, enable preconditioning. |
-| **Step length very small** (< 1e‑4) | Gradient inaccurate (e.g., inconsistent conditioning) | Verify adjoint‑gradient consistency with finite differences; ensure same conditioned operator in forward/adjoint solves. |
+| **Tiny objective changes** ($|\Delta J| \ll 1$) | Gradient inaccurate (e.g., inconsistent conditioning); line search taking many backtracks | Verify adjoint‑gradient consistency with finite differences; ensure same conditioned operator in forward/adjoint solves. |
 | **Objective increases suddenly** | Numerical instability (ill‑conditioned Z) | Add regularization (`regularization_alpha=1e‑10`), enable preconditioning, check mesh quality. |
 | **Optimization stalls early** | Box constraints too tight; initial guess at bound | Loosen bounds, move initial guess away from bounds. |
 
@@ -161,8 +164,6 @@ The optimizer stops when **any** of the following conditions is met:
 
 1. **Gradient norm criterion**: $\|\mathbf{g}\| < \mathtt{tol} \cdot \max(1, \|\boldsymbol{\theta}\|)$.
 2. **Iteration limit**: $k \ge \mathtt{maxiter}$.
-3. **Function‑evaluation limit** (if set).
-4. **User‑supplied callback** returns `true`.
 
 In practice, the gradient‑norm criterion is the most reliable indicator of convergence.
 
@@ -225,10 +226,9 @@ Q_target = build_Q(G, grid, pol; mask=mask_target)
 Q_total = build_Q(G, grid, pol)   # full-sphere reference
 
 # ------------------------------
-# 7. Initial parameters (phase‑ramp for steering)
+# 7. Initial parameters (zero reactance → PEC reference)
 # ------------------------------
-beta = 10.0   # scaling factor
-theta0 = phase_ramp_initialization(mesh, partition, β, θ_steer)  # user-defined helper
+theta0 = zeros(P)
 
 # ------------------------------
 # 8. Bounds (realistic reactance limits)
@@ -242,15 +242,12 @@ ub = fill( 500.0, P)
 theta_opt, trace = optimize_directivity(
     Z_efie, Mp, v, Q_target, Q_total, theta0;
     reactive=true,
-    maxiter=300,
+    maxiter=100,
     tol=1e-6,
     m_lbfgs=10,
     lb=lb,
     ub=ub,
-    preconditioning=:auto,
-    iterative_solver=false,
-    verbose=true,
-    trace=true
+    verbose=true
 )
 
 # ------------------------------
@@ -276,9 +273,9 @@ function log_optimization_run(config, trace)
             println(io, "  $key = $val")
         end
         println(io, "\nTrace summary:")
-        println(io, "  Final J = ", trace["J"][end])
-        println(io, "  Final ‖g‖ = ", trace["gradnorm"][end])
-        println(io, "  Iterations = ", length(trace["J"]))
+        println(io, "  Final J = ", trace[end].J)
+        println(io, "  Final ‖g‖ = ", trace[end].gnorm)
+        println(io, "  Iterations = ", length(trace))
     end
 end
 ```
@@ -294,13 +291,16 @@ Never trust the objective value from the optimization trace alone. Re‑assemble
 ```julia
 Z_opt = assemble_full_Z(Z_efie, Mp, theta_opt; reactive=true)
 I_opt = solve_forward(Z_opt, v)
-E_ff = compute_farfield(mesh, rwg, k, I_opt)
+
+# Compute far-field using radiation vectors
+G_mat = radiation_vectors(mesh, rwg, grid, k)
+E_ff = compute_farfield(G_mat, I_opt, length(grid.w))
 
 # Compute directivity ratio directly
 f_opt = real(dot(I_opt, Q_target * I_opt))
 g_opt = real(dot(I_opt, Q_total * I_opt))
 J_opt = f_opt / g_opt
-println("Recomputed J = ", J_opt, " (trace reported ", trace["J"][end], ")")
+println("Recomputed J = ", J_opt, " (trace reported ", trace[end].J, ")")
 ```
 
 Discrepancies $> 1\%$ may indicate numerical issues during optimization.
@@ -315,7 +315,7 @@ Test robustness by perturbing the optimized design:
 
 ### 6.3 Visualization
 
-- **Impedance distribution**: Plot `theta_opt` on the mesh surface (see `plot_impedance` in `src/Visualization.jl`).
+- **Impedance distribution**: Plot `theta_opt` on the mesh surface using `plot_mesh_wireframe` or `plot_mesh_comparison` from `src/Visualization.jl`.
 - **Far‑field pattern**: 2D cuts or 3D radiation plots.
 - **Optimization trace**: $J$ vs. iteration, $\|\mathbf{g}\|$ vs. iteration.
 
@@ -346,7 +346,7 @@ best_trace = nothing
 for r in 1:n_restarts
     theta0_r = randn(P) .* 100.0   # random initial reactance
     theta_opt_r, trace_r = optimize_directivity(..., theta0_r, ...)
-    J_r = trace_r["J"][end]
+    J_r = trace_r[end].J
     if J_r > best_J
         best_J = J_r
         best_theta = theta_opt_r
@@ -402,9 +402,8 @@ Use this checklist when an optimization fails or behaves unexpectedly:
 - **`src/Solve.jl`** – Forward solve (`solve_forward`) and conditioned system preparation.
 - **`src/Impedance.jl`** – Patch mass matrices and impedance assembly.
 - **`src/QMatrix.jl`** – Objective matrix construction.
-- **`src/Visualization.jl`** – Plotting impedance distributions and far‑field patterns.
-- **`examples/ex_beam_steer.jl`** – Complete beam‑steering example.
-- **`examples/ex_beam_steer.jl`** – Demonstration of the full workflow.
+- **`src/Visualization.jl`** – Plotting utilities (`plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview`).
+- **`examples/04_beam_steering.jl`** – Complete beam‑steering example and demonstration of the full workflow.
 
 ---
 
@@ -419,13 +418,13 @@ Use this checklist when an optimization fails or behaves unexpectedly:
 ### 10.2 Derivation Tasks
 
 1. **Projected L‑BFGS**: Describe how the projection step after an L‑BFGS update affects the Hessian approximation. Why is projected L‑BFGS suitable for box constraints but not for general nonlinear constraints?
-2. **Line‑search conditions**: The backtracking line search uses Armijo and Wolfe conditions. Write these conditions mathematically and explain their role in ensuring sufficient decrease and curvature.
+2. **Line‑search conditions**: The backtracking line search uses Armijo conditions. Write these conditions mathematically and explain their role in ensuring sufficient decrease.
 
 ### 10.3 Coding Exercises
 
-1. **Basic optimization**: Run the template from Section 5.1 for a $2\lambda \times 2\lambda$ plate with steering angles $0^\circ$, $30^\circ$, and $60^\circ$. Compare convergence speed and final directivity.
+1. **Basic optimization**: Run the template from Section 5.1 for a $2\lambda \times 2\lambda$ plate with steering angles $0^\circ$, $30^\circ$, and $60^\circ$. Compare convergence speed and final directivity.
 2. **Bound sensitivity**: Repeat the same optimization with three different bound sets: $[-100, 100]$, $[-500, 500]$, and $[-1000, 1000]$. How do the bounds affect the final solution and convergence?
-3. **Trace analysis**: Write a script that loads a saved trace and plots $J$ vs. iteration, $\|\mathbf{g}\|$ vs. iteration, and step length vs. iteration. Annotate the plots with key events (e.g., “gradient norm plateau”, “step length drop”).
+3. **Trace analysis**: Write a script that loads a saved trace and plots `[t.J for t in trace]` vs. iteration and `[t.gnorm for t in trace]` vs. iteration. Annotate the plots with key events (e.g., "gradient norm plateau").
 
 ### 10.4 Advanced Challenges
 
@@ -440,13 +439,11 @@ Use this checklist when an optimization fails or behaves unexpectedly:
 After studying this chapter, you should be able to:
 
 - [ ] **Configure** a complete optimization run with appropriate geometry, patch partition, incident field, objective matrices, and initial parameters.
-- [ ] **Select** optimizer parameters (`maxiter`, `tol`, `m_lbfgs`, `lb`, `ub`, `preconditioning`) based on problem size and conditioning.
+- [ ] **Select** optimizer parameters (`maxiter`, `tol`, `m_lbfgs`, `lb`, `ub`, `solver`, `preconditioning`) based on problem size and conditioning.
 - [ ] **Monitor** convergence through iteration traces and diagnose common issues (oscillations, stagnation, small step lengths).
 - [ ] **Validate** optimization results by independent far‑field recomputation, perturbation sensitivity analysis, and comparison with baselines.
 - [ ] **Ensure** reproducibility by logging all inputs, random seeds, and software versions.
 - [ ] **Apply** advanced techniques (multi‑start, continuation, warm‑starting) for challenging design problems.
-
-If you can confidently check all items, you have mastered the optimization workflow in `DifferentiableMoM.jl` and are ready to tackle real‑world inverse‑design problems.
 
 ---
 
@@ -457,7 +454,7 @@ If you can confidently check all items, you have mastered the optimization workf
    - Byrd, R. H., et al. (1995). *A limited memory algorithm for bound constrained optimization*. SIAM Journal on Scientific Computing, 16(5), 1190–1208.
 
 2. **Convergence diagnosis and debugging**:
-   - Dennis, J. E., & Schnabel, R. B. (1996). *Numerical methods for unconstrained optimization and nonlinear equations*. SIAM. (Chapter 6 discusses convergence tests and failure modes.)
+   - Dennis, J. E., & Schnabel, R. B. (1996). *Numerical methods for unconstrained optimization and nonlinear equations*. SIAM. (Chapter 6 discusses convergence tests and failure modes.)
    - Conn, A. R., Gould, N. I. M., & Toint, P. L. (2000). *Trust‑region methods*. SIAM. (Although focused on trust‑region methods, the discussion of convergence diagnostics is widely applicable.)
 
 3. **Reproducibility in computational science**:
@@ -475,4 +472,4 @@ If you can confidently check all items, you have mastered the optimization workf
 
 ---
 
-*Congratulations! You have completed Part III — Differentiable Design. You now understand the adjoint method, impedance sensitivities, ratio objectives, and the complete optimization workflow. The next part, Part IV — Validation, shows how to verify the correctness and accuracy of the solver through internal consistency checks, gradient verification, and cross‑validation with external codes.*
+*Congratulations! You have completed Part III — Differentiable Design. You now understand the adjoint method, impedance sensitivities, ratio objectives, and the complete optimization workflow. The next part, Part IV — Validation, shows how to verify the correctness and accuracy of the solver through internal consistency checks, gradient verification, and cross‑validation with external codes.*

@@ -11,20 +11,21 @@ Solve Z I = v. Uses direct factorization by default, or GMRES when `solver=:gmre
 
 # Arguments
 - `solver`: `:direct` for LU factorization, `:gmres` for preconditioned GMRES
-- `preconditioner`: a preconditioner object (e.g., `NearFieldPreconditionerData`), or `nothing`
+- `preconditioner`: a preconditioner object (e.g., `AbstractPreconditionerData`), or `nothing`
 - `gmres_tol`: relative tolerance for GMRES convergence
 - `gmres_maxiter`: maximum GMRES iterations
 """
-function solve_forward(Z::Matrix{<:Number}, v::Vector{<:Number};
+function solve_forward(Z::AbstractMatrix{<:Number}, v::AbstractVector{<:Number};
                        solver::Symbol=:direct,
                        preconditioner=nothing,
                        gmres_tol::Float64=1e-8,
                        gmres_maxiter::Int=200,
                        verbose_gmres::Bool=false)
     if solver == :direct
+        Z isa Matrix || error("Direct solver requires a dense Matrix; use solver=:gmres for operator-based systems.")
         return Z \ v
     elseif solver == :gmres
-        x, stats = solve_gmres(Matrix{ComplexF64}(Z), Vector{ComplexF64}(v);
+        x, stats = solve_gmres(Z, v;
                                 preconditioner=preconditioner,
                                 tol=gmres_tol, maxiter=gmres_maxiter,
                                 verbose=verbose_gmres)
@@ -39,7 +40,7 @@ end
 
 General linear solve Z x = rhs with solver dispatch.
 """
-function solve_system(Z::Matrix{<:Number}, rhs::Vector{<:Number};
+function solve_system(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:Number};
                       solver::Symbol=:direct,
                       preconditioner=nothing,
                       gmres_tol::Float64=1e-8,

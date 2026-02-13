@@ -179,7 +179,7 @@ This expression follows directly from the vector potential formulation $\mathbf{
 
 The operator $\left[\mathbf{I} + \frac{1}{k^2}\nabla\nabla\right]$ couples the vector and scalar potentials; its action on the Green's function produces both the "identity" term (vector potential) and the "double-gradient" term (scalar potential).
 
-### 3.2 Galerkin Testing and Integration by Parts
+### 3.3 Galerkin Testing and Integration by Parts
 
 To discretize the EFIE using the Method of Moments with RWG basis functions $\{\mathbf{f}_n\}$, we employ Galerkin testing: multiply both sides by a test function $\mathbf{f}_m(\mathbf{r})$ and integrate over the surface $\Gamma$. The resulting matrix element is
 
@@ -250,7 +250,7 @@ Thus we obtain the final result:
 where the overall minus sign comes from the fact that we started with $\nabla\nabla G$ and ended with a positive expression, but the original EFIE operator has a minus sign in front of the scalar potential term (see Equation $\eqref{eq:Esca}$).
 
 
-### 3.3 Mixed-Potential Matrix Element
+### 3.4 Mixed-Potential Matrix Element
 
 After integration by parts, we obtain the **mixed-potential form** of the EFIE matrix element:
 
@@ -263,7 +263,7 @@ This is the exact expression computed by `assemble_Z_efie` in `src/EFIE.jl`. The
 - **Vector part** (first integral): Coupling through the magnetic vector potential $\mathbf{A}$; represents direct current‑current interaction.
 - **Scalar part** (second integral): Coupling through the electric scalar potential $\phi$; represents charge‑charge interaction mediated by the surface divergence of the basis functions.
 
-### 3.4 Physical Interpretation
+### 3.5 Physical Interpretation
 
 The mixed‑potential split mirrors the decomposition of the electromagnetic field into its vector and scalar potentials:
 
@@ -276,7 +276,7 @@ The mixed‑potential split mirrors the decomposition of the electromagnetic fie
 
 For RWG basis functions, the surface divergence $\nabla_s\cdot\mathbf{f}_n$ is piecewise constant on each triangle, which simplifies the evaluation of the scalar part.
 
-### 3.5 ASCII Diagram: EFIE Operator Structure
+### 3.6 ASCII Diagram: EFIE Operator Structure
 
 ```
     Complete EFIE operator: E^sca(r) = T[J](r)
@@ -306,7 +306,7 @@ For RWG basis functions, the surface divergence $\nabla_s\cdot\mathbf{f}_n$ is p
     Z[m,n] = -1im * omega_mu0 * (vec_part - scl_part)
 ```
 
-### 3.6 Matrix Assembly Visualization
+### 3.7 Matrix Assembly Visualization
 
 ```
     For basis pair (m,n):
@@ -611,7 +611,8 @@ theta = zeros(ComplexF64, P)   # PEC by default
 theta[1] = 50.0                # 50 Ω resistive
 theta[2] = 100.0im             # 100 Ω inductive
 
-Z_full = assemble_full_Z(mesh, rwg, k, theta; quad_order=3)
+Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=3)
+Z_full = assemble_full_Z(Z_efie, Mp, theta)
 ```
 
 The function `assemble_full_Z` adds the impedance contribution $-\sum_p \theta_p \mathbf{M}_p$ to the EFIE matrix.
@@ -623,8 +624,10 @@ With the matrix assembled, solve for the surface current coefficients:
 ```julia
 # Plane‑wave excitation
 E0 = [1.0, 0.0, 0.0]           # x‑polarized
-kvec = [0.0, 0.0, k]           # propagating in +z direction
-V = assemble_excitation(mesh, rwg, E0, kvec)   # right‑hand side
+k_vec = [0.0, 0.0, k]          # propagating in +z direction
+pol = [1.0, 0.0, 0.0]          # polarization
+pw = make_plane_wave(k_vec, E0, pol)
+V = assemble_excitation(mesh, rwg, pw)   # right‑hand side
 
 # Solve (using LU factorization for small problems)
 I = Z_full \ V
@@ -668,18 +671,21 @@ function check_pec_limit()
     mesh = make_rect_plate(0.05, 0.05, 4, 4)
     rwg = build_rwg(mesh)
     k = 2π / 0.1  # λ = 0.1 m
-    Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=2)
-    
-    P = number_of_patches(mesh)  # hypothetical function
+    Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=3)
+
+    partition = PatchPartition(mesh)
+    P = partition.P  # number of patches
     theta = zeros(ComplexF64, P)
-    Z_full = assemble_full_Z(mesh, rwg, k, theta; quad_order=2)
+    Mp = precompute_patch_mass(mesh, rwg, partition)
+    Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=3)
+    Z_full = assemble_full_Z(Z_efie, Mp, theta)
     
     return norm(Z_full - Z_efie) / norm(Z_efie)
 end
 
 # Exercise 2: Symmetry check
 function check_symmetry()
-    mesh = make_sphere(0.1, 128)   # coarse sphere
+    mesh = read_obj_mesh("sphere.obj")   # sphere meshes should be created externally or loaded via read_obj_mesh
     rwg = build_rwg(mesh)
     k = 2π / 0.15
     Z = assemble_Z_efie(mesh, rwg, k; quad_order=3)

@@ -260,7 +260,7 @@ end
 - `partition`: `PatchPartition` object mapping each triangle to a patch index.
 - `quad_order`: quadrature order for Gaussian integration (default 3).
 
-**Output**: A vector `Mp` of length $P$, where `Mp[p]` is an $N\times N$ dense or sparse matrix (currently dense).
+**Output**: A vector `Mp` of length $P$, where `Mp[p]` is an $N\times N$ sparse matrices (`SparseMatrixCSC`), since the code uses `spzeros` internally.
 
 ### 4.3 Example: Creating a Patch Partition
 
@@ -428,7 +428,8 @@ For thin dielectric layers, the impedance is related to surface susceptibility t
 
 ## 9. Code Mapping
 
-- **`src/Impedance.jl`** – Patch partition definition (`PatchPartition`) and patch mass matrix assembly (`precompute_patch_mass`).
+- **`src/Types.jl`** – Patch partition definition (`PatchPartition`).
+- **`src/Impedance.jl`** – Patch mass matrix assembly (`precompute_patch_mass`).
 - **`src/Adjoint.jl`** – Gradient computation (`gradient_impedance`).
 - **`src/Solve.jl`** – Assembly of full matrix $\mathbf{Z}(\boldsymbol{\theta})$ (`assemble_full_Z`).
 - **`src/EFIE.jl`** – Assembly of $\mathbf{Z}_{\mathrm{EFIE}}$.
@@ -457,7 +458,7 @@ For thin dielectric layers, the impedance is related to surface susceptibility t
 
 ### 10.4 Advanced Challenges
 
-1. **Sparse storage**: The current implementation stores $\mathbf{M}_p$ as dense matrices. Modify `precompute_patch_mass` to store only the non‑zero entries (e.g., using `SparseMatrixCSC`). Update `gradient_impedance` to work with sparse matrices and benchmark the memory and speed improvement for a large mesh.
+1. **Sparse storage benchmark**: The current implementation already stores $\mathbf{M}_p$ as sparse matrices (`SparseMatrixCSC`, via `spzeros` in `precompute_patch_mass`). Benchmark the memory savings compared to dense storage for a large mesh (e.g., $N > 2000$) by comparing `sizeof(Matrix(Mp[p]))` vs. the sparse representation. Also profile `gradient_impedance` to measure the speed‑up from sparse matrix‑vector products.
 2. **Gradient with respect to patch geometry**: Suppose patch boundaries can move (changing which triangles belong to which patch). Derive the gradient of $J$ with respect to patch‑boundary positions. This is a shape‑derivative problem that combines impedance and geometry sensitivities.
 
 ---

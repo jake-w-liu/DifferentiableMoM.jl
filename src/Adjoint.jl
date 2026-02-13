@@ -24,17 +24,18 @@ Returns λ ∈ C^N.
 
 When `solver=:gmres`, uses GMRES with the adjoint preconditioner P⁻ᴴ.
 """
-function solve_adjoint(Z::Matrix{<:Number}, Q::Matrix{<:Number},
-                       I::Vector{<:Number};
+function solve_adjoint(Z::AbstractMatrix{<:Number}, Q::Matrix{<:Number},
+                       I::AbstractVector{<:Number};
                        solver::Symbol=:direct,
                        preconditioner=nothing,
                        gmres_tol::Float64=1e-8,
                        gmres_maxiter::Int=200)
     rhs = Q * I
     if solver == :direct
+        Z isa Matrix || error("Direct adjoint solver requires a dense Matrix; use solver=:gmres for operator-based systems.")
         return Z' \ rhs
     elseif solver == :gmres
-        x, stats = solve_gmres_adjoint(Matrix{ComplexF64}(Z), Vector{ComplexF64}(rhs);
+        x, stats = solve_gmres_adjoint(Z, rhs;
                                         preconditioner=preconditioner,
                                         tol=gmres_tol, maxiter=gmres_maxiter)
         return x

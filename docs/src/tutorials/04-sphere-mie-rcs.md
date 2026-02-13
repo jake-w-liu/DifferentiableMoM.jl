@@ -46,7 +46,7 @@ a_n = -\frac{j_n(ka)}{h_n^{(1)}(ka)}, \qquad
 b_n = -\frac{[ka\,j_n(ka)]'}{[ka\,h_n^{(1)}(ka)]'}.
 \]
 
-The function `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` (`src/Mie.jl:3`) computes this series truncated at $n_\text{max} = ka + 10$, providing machine‑precision reference values.
+The function `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` (`src/Mie.jl:3`) computes this series truncated at $n_\text{max} = \max(3,\, \lceil x + 4\,x^{1/3} + 2 \rceil)$ where $x = ka$, providing machine‑precision reference values.
 
 ### EFIE Formulation for Sphere
 
@@ -73,6 +73,7 @@ A standard benchmark uses $ka = 10$ (sphere circumference ≈ 10λ), which balan
 ```julia
 using DifferentiableMoM
 using LinearAlgebra
+using Statistics
 
 freq = 2e9                     # 2 GHz
 c0   = 299792458.0
@@ -92,15 +93,10 @@ println("Target ka = $ka_target → radius a = $(round(a*100, digits=2)) cm")
 The package includes a fallback icosphere generator (subdivided icosahedron). For reproducible research, you can also supply an externally generated OBJ file.
 
 ```julia
-using .Mesh: write_obj_mesh
-
-# Create a temporary OBJ file with an icosphere (2 subdivisions)
-mesh_path = "sphere_ka10_subdiv2.obj"
-if !isfile(mesh_path)
-    # Internal function from the benchmark example
-    write_icosphere_obj(mesh_path; radius=a, subdivisions=2)
-end
-
+# The package does not include a sphere mesh generator.
+# Provide your own sphere OBJ file (e.g., generate an icosphere in Blender
+# or another meshing tool, then export as OBJ).
+mesh_path = "sphere_ka10.obj"   # replace with your sphere mesh file
 mesh = read_obj_mesh(mesh_path)
 rwg = build_rwg(mesh)
 
@@ -298,7 +294,7 @@ To verify implementation correctness, repeat with increasing mesh density and ob
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
 | **Mie RCS** | `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` | `src/Mie.jl` | 30–80 |
-| **Sphere mesh generation** | `write_icosphere_obj` (internal) | `examples/ex_pec_sphere_mie_benchmark.jl` | 27–83 |
+| **Sphere mesh generation** | `write_obj_mesh` (internal) | `examples/ex_pec_sphere_mie_benchmark.jl` | 27–83 |
 | **Radius estimation** | `estimate_sphere_radius` (internal) | `examples/ex_pec_sphere_mie_benchmark.jl` | 85–89 |
 | **Bistatic RCS** | `bistatic_rcs(E_ff; E0)` | `src/Diagnostics.jl` | 60–80 |
 | **Backscatter RCS** | `backscatter_rcs(E_ff, grid, khat_inc; E0)` | `src/Diagnostics.jl` | 100–120 |

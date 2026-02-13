@@ -245,7 +245,7 @@ You can estimate the condition number with:
 
 ```julia
 diag = condition_diagnostics(Z)
-println("Condition estimate = ", diag.cond_estimate)
+println("Condition estimate = ", diag.cond)
 ```
 
 For a plate of moderate electrical size (`L/λ ≈ 1`), the condition number may be
@@ -283,7 +283,7 @@ script.
 - **Diagnosis**:
   1. Compute `L/λ` (see Unit Debugging in the Debugging Playbook).
   2. Run `condition_diagnostics(Z)`.
-  3. Enable preconditioning: `I = solve_forward(Z, v; preconditioning=:auto)`.
+  3. Enable GMRES solver: `I = solve_forward(Z, v; solver=:gmres)`.
 - **Fix**: Correct unit mistakes, increase mesh coarseness, or enable
   preconditioning.
 
@@ -340,7 +340,7 @@ systematic diagnostic order.
 ### Basic
 
 1. **Mesh refinement**: Run the manual workflow with `Nx = Ny = 6` (instead of 4).
-   Compare the condition number (`condition_diagnostics(Z).cond_estimate`) and
+   Compare the condition number (`condition_diagnostics(Z).cond`) and
    the energy ratio. Does the condition number increase as expected (`∝ N³`)?
 2. **Frequency sweep**: Change the frequency to 1 GHz and 10 GHz (adjust `f`).
    Compute `L/λ` each time and observe how the condition number and energy ratio

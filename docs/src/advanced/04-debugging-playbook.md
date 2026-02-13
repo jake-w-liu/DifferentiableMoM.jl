@@ -203,19 +203,20 @@ accuracy. Fixing the unit mistake solves both downstream issues.
 3. **Inspect condition diagnostics**:
    ```julia
    diag = condition_diagnostics(Z)
-   println("Condition number estimate: $(diag.cond_estimate)")
+   println("Condition number estimate: $(diag.cond)")
    ```
 4. **Enable preconditioning**:
    ```julia
-   I_precond = solve_forward(Z, v; preconditioning=:auto)
-   r_rel_precond = norm(Z * I_precond - v) / norm(v)
+   I_gmres = solve_forward(Z, v; solver=:gmres)
+   r_rel_gmres = norm(Z * I_gmres - v) / norm(v)
    ```
-   If preconditioning drastically reduces residual, conditioning was the issue.
+   If switching to GMRES with a preconditioner reduces residual, conditioning was the issue.
 
 5. **Verify assembly parameters**: Double‑check `k`, `eta0`, `quad_order`, and
    mesh scaling.
 
-**Source functions**: `src/Solve.jl` (`solve_forward`, `condition_diagnostics`),
+**Source functions**: `src/Solve.jl` (`solve_forward`),
+`src/Diagnostics.jl` (`condition_diagnostics`),
 `src/EFIE.jl` (`assemble_Z_efie`).
 
 ---
@@ -249,7 +250,7 @@ accuracy. Fixing the unit mistake solves both downstream issues.
 3. **Compare with direct integration**:
    ```julia
    P_ff = sum(grid.w[q] * real(dot(E_ff[:,q], E_ff[:,q])) for q in 1:NΩ)
-   P_inc = incident_power(v, I)   # or compute from known incident field
+   P_inc = input_power(I, v)   # compute from MoM currents and excitation
    ```
 4. **Inspect polarization vectors**: Ensure `pol_mat` matches intended
    polarization (e.g., `pol_linear_x` for x‑polarized far field).
@@ -410,7 +411,7 @@ to avoid subtle errors.
 
 The forward solve uses `M^{-1} Z` and `M^{-1} v`. The adjoint solve must use the
 **same** preconditioned operator, not the original `Z`. The package handles this
-automatically when you pass `preconditioner_M` (or `preconditioning=:auto`) to
+automatically when you pass `preconditioner_M` (or `solver=:gmres`) to
 `compute_adjoint_gradient`. Verify by checking that the `factor` returned by
 `prepare_conditioned_system` is reused.
 
@@ -433,8 +434,8 @@ As a sanity check, run a small problem (`N ≤ 100`) with and without
 preconditioning:
 
 ```julia
-I1 = solve_forward(Z, v; preconditioning=:off)
-I2 = solve_forward(Z, v; preconditioning=:on)
+I1 = solve_forward(Z, v; solver=:direct)
+I2 = solve_forward(Z, v; solver=:gmres)
 rel_diff = norm(I1 - I2) / norm(I1)
 ```
 
@@ -452,7 +453,7 @@ preconditioner issues, test with a diagonal `M` (e.g., `M = Diagonal(rand(N))`).
 
 1. **Check residual of preconditioned system**:
    ```julia
-   I_pre = solve_forward(Z, v; preconditioning=:on)
+   I_pre = solve_forward(Z, v; solver=:gmres)
    r_pre = norm(Z * I_pre - v) / norm(v)
    ```
    Should be < 1e‑8.
@@ -531,8 +532,8 @@ E_pkg = compute_farfield(...)
 # Compare main beam
 idx_peak_ext = argmax(abs2.(E_ext))
 idx_peak_pkg = argmax(abs2.(E_pkg))
-angular_error = angular_distance(grid_ext.rhat[:,idx_peak_ext],
-                                 grid_ext.rhat[:,idx_peak_pkg])
+angular_error = acos(clamp(dot(grid_ext.rhat[:,idx_peak_ext],
+                               grid_ext.rhat[:,idx_peak_pkg]), -1.0, 1.0)) * 180/π
 
 # Compare gain at target direction
 gain_diff = 10*log10(abs2(E_pkg[target_idx]) / abs2(E_ext[target_idx]))
@@ -715,7 +716,7 @@ Or use `@time` inside your script to time assembly, solve, and far‑field steps
 ### Practical
 
 4. **Preconditioning comparison**: Solve a moderately sized problem (≈500
-   unknowns) with `preconditioning=:off` and `:on`. Compare residuals, solution
+   unknowns) with `solver=:direct` and `solver=:gmres`. Compare residuals, solution
    vectors, and solve times. When does preconditioning help most?
 5. **Far‑field transversality**: Compute the far field of a PEC plate and evaluate
    `max(abs.(rhat·E_ff))`. Is it below 1e‑10? If not, increase quadrature order
@@ -748,7 +749,7 @@ Before moving to the next chapter, verify you can:
 
 - [ ] Recite the seven‑step triage order and explain why skipping steps leads to false conclusions.
 - [ ] Map symptoms (RWG build failure, large residual, non‑physical pattern, inconsistent objective, gradient mismatch) to likely causes.
-- [ ] Use `mesh_quality_report`, `condition_diagnostics`, `energy_ratio`, and `check_objective_consistency` to quantify problems.
+- [ ] Use `mesh_quality_report`, `condition_diagnostics`, and `energy_ratio` to quantify problems, and manually verify objective consistency by comparing `real(dot(I, Q * I))` against direct angular integration.
 - [ ] Detect unit mistakes by computing `L/λ` and comparing with the intended regime.
 - [ ] Apply the four preconditioning debugging rules to ensure gradient consistency.
 - [ ] Follow the cross‑validation workflow when comparing with external references.

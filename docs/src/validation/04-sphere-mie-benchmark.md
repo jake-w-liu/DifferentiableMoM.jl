@@ -37,7 +37,7 @@ The package provides two primary functions:
 - **`mie_s1s2_pec(x, μ)`**: Compute Mie scattering amplitudes $S_1$, $S_2$ at size parameter $x = ka$ and $\mu = \cos\gamma$
 - **`mie_bistatic_rcs_pec(k, a, k_inc_hat, pol_inc, rhat)`**: Compute bistatic RCS for specific geometry and polarization
 
-The implementation uses recurrence relations for spherical Bessel functions and Legendre functions, truncated at $n_{\text{max}} = \lceil x + 4x^{1/3} + 2 \rceil$ for machine precision.
+The implementation uses recurrence relations for spherical Bessel functions and Legendre functions, truncated at $n_{\text{max}} = \max(3, \lceil x + 4x^{1/3} + 2 \rceil)$ for machine precision.
 
 ### 1.3 Validation Metrics
 
@@ -58,13 +58,13 @@ where $\Delta\text{dB}_i = 10\log_{10}(\sigma_{\text{MoM},i}) - 10\log_{10}(\sig
 
 ```bash
 # Basic run with fallback icosphere mesh
-julia --project=. examples/ex_pec_sphere_mie_benchmark.jl
+julia --project=. examples/02_pec_sphere_mie.jl
 
 # With custom OBJ sphere mesh
-julia --project=. examples/ex_pec_sphere_mie_benchmark.jl path/to/sphere.obj
+julia --project=. examples/02_pec_sphere_mie.jl path/to/sphere.obj
 
 # With custom mesh and frequency
-julia --project=. examples/ex_pec_sphere_mie_benchmark.jl path/to/sphere.obj 3.0
+julia --project=. examples/02_pec_sphere_mie.jl path/to/sphere.obj 3.0
 ```
 
 ### 2.2 Generated Artifacts
@@ -216,7 +216,7 @@ Key algorithms:
 - **Angular functions**: Recurrence for $\pi_n(\mu)$, $\tau_n(\mu)$
 - **Vector scattering**: Coordinate transformations for arbitrary incidence/observation
 
-### 5.2 Benchmark Script (`examples/ex_pec_sphere_mie_benchmark.jl`)
+### 5.2 Benchmark Script (`examples/02_pec_sphere_mie.jl`)
 
 Workflow:
 1. **Mesh generation/loading**: Fallback icosphere or custom OBJ
@@ -229,17 +229,22 @@ Workflow:
 
 ### 5.3 Radius Estimation Heuristic
 
-Since OBJ spheres may not be perfect, the script estimates radius:
+Since OBJ spheres may not be perfect, the benchmark script estimates the radius
+from vertex positions. There is no built-in `estimate_sphere_radius` function;
+the estimation is done inline in the example script:
 
 ```julia
-function estimate_sphere_radius(mesh::TriMesh)
-    ctr = vec(mean(mesh.xyz, dims=2))
-    radii = [norm(Vec3(mesh.xyz[:, i]) - Vec3(ctr)) for i in 1:nvertices(mesh)]
-    return mean(radii), std(radii), Vec3(ctr)
-end
+using Statistics: mean, std
+using LinearAlgebra: norm
+
+nv = size(mesh.xyz, 2)
+ctr = vec(mean(mesh.xyz, dims=2))
+radii = [norm(Vec3(mesh.xyz[:, i]) - Vec3(ctr)) for i in 1:nv]
+a_est = mean(radii)
+a_std = std(radii)
 ```
 
-**Usage**: Estimated radius used for Mie computation, with std deviation indicating mesh quality.
+**Usage**: The estimated radius `a_est` is passed to the Mie reference computation. The standard deviation `a_std` indicates mesh quality; if `a_std > 0.01 * a_est`, the mesh is significantly non-spherical.
 
 ---
 
@@ -249,10 +254,14 @@ end
 
 1. **Check radius estimation**:
    ```julia
-   a_est, a_std, ctr = estimate_sphere_radius(mesh)
+   nv = size(mesh.xyz, 2)
+   ctr = vec(mean(mesh.xyz, dims=2))
+   radii = [norm(Vec3(mesh.xyz[:, i]) - Vec3(ctr)) for i in 1:nv]
+   a_est = mean(radii)
+   a_std = std(radii)
    println("Estimated radius: $a_est ± $a_std m")
    ```
-   If $a_{\text{std}} > 0.01a$, mesh is non-spherical → use better mesh.
+   If $a_{\text{std}} > 0.01a$, mesh is non-spherical -- use better mesh.
 
 2. **Verify frequency and units**:
    - Ensure `freq` in Hz, not GHz
@@ -302,7 +311,7 @@ end
 ### 7.1 Basic Level
 
 1. **Run benchmark with default settings**:
-   - Execute `julia --project=. examples/ex_pec_sphere_mie_benchmark.jl`
+   - Execute `julia --project=. examples/02_pec_sphere_mie.jl`
    - Examine generated CSV files and plot
    - Verify MAE < 1.5 dB for fallback mesh
 
@@ -350,7 +359,7 @@ end
   - `mie_s1s2_pec`, `mie_bistatic_rcs_pec`
   - Internal: `_sph_bessel_jy_arrays`, `_mie_nmax`
 
-- **Benchmark script**: `examples/ex_pec_sphere_mie_benchmark.jl`
+- **Benchmark script**: `examples/02_pec_sphere_mie.jl`
   - Complete workflow from mesh to error metrics
   - Fallback icosphere generation
   - Radius estimation and validation
@@ -360,7 +369,7 @@ end
 
 ### 8.2 Supporting Scripts
 
-- **Sphere RCS example**: `examples/ex_pec_sphere_rcs.jl`
+- **Sphere RCS example**: `examples/02_pec_sphere_mie.jl`
 - **Visualization utilities**: `src/Visualization.jl`
 
 ### 8.3 Output Artifacts

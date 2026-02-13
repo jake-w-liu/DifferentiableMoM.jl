@@ -70,7 +70,7 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 | $\mathbf Z$ | MoM impedance matrix | $Z_{mn}=\langle\mathbf f_m,\mathcal T[\mathbf f_n]\rangle$ |
 | $\mathbf v$ | Excitation vector | $v_m=-\langle\mathbf f_m,\mathbf E_t^{\mathrm{inc}}\rangle$ |
 | $\mathbf I$ | Current coefficient vector | $\mathbf I\in\mathbb C^N$ |
-| $\mathcal T$ | EFIE operator | $\mathcal T[\mathbf J]=-i\omega\mu_0\int_\Gamma[\mathbf I+\frac{1}{k^2}\nabla\nabla]G\mathbf J\,dS'$ |
+| $\mathcal T$ | EFIE operator | $\mathcal T[\mathbf J]=-i\omega\mu_0\int_\Gamma[\bar{\mathbf I}+\frac{1}{k^2}\nabla\nabla\cdot]G\mathbf J\,dS'$ |
 | $G(\mathbf r,\mathbf r')$ | Green's function | $G=e^{-ikR}/(4\pi R)$ |
 | $\mathbf M_p$ | Patch mass matrix | $(M_p)_{mn}=\langle\mathbf f_m,\mathbf f_n\rangle$ over patch `p` |
 | $\mathbf Z_{\mathrm{imp}}$ | Impedance matrix | $\mathbf Z_{\mathrm{imp}}=-\sum_p\theta_p\mathbf M_p$ |
@@ -86,7 +86,7 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 | $\mathbf E^{\mathrm{sca}}$ | Scattered electric field | Field radiated by surface currents | V/m |
 | $\mathbf E^{\mathrm{tot}}$ | Total electric field | $\mathbf E^{\mathrm{inc}}+\mathbf E^{\mathrm{sca}}$ | V/m |
 | $\mathbf E_t$ | Tangential electric field | $\mathbf P_t\mathbf E$ | V/m |
-| $\mathbf E^\infty$ | Far-field amplitude | Asymptotic field as $r\to\infty$ | V·m |
+| $\mathbf E^\infty$ | Far-field amplitude | Asymptotic field as $r\to\infty$ | V |
 | $\mathbf H$ | Magnetic field | - | A/m |
 
 ---
@@ -99,7 +99,7 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 | $\mathbf Q$ | Quadratic objective matrix | $J=\mathbf I^\dagger\mathbf Q\mathbf I$ |
 | $\mathbf Q_t$ | Target region matrix | Numerator in ratio objective |
 | $\mathbf Q_{\mathrm{tot}}$ | Total region matrix | Denominator in ratio objective |
-| $\boldsymbol\lambda$ | Adjoint vector | Solution of $\mathbf Z^\dagger\boldsymbol\lambda=\partial\Phi/\partial\mathbf I^*$ |
+| $\boldsymbol\lambda$ | Adjoint vector | Solution of $\mathbf Z^\dagger\boldsymbol\lambda=\partial J/\partial\mathbf I^*$ |
 | $\boldsymbol\theta$ | Design parameter vector | $\boldsymbol\theta\in\mathbb R^P$ |
 | $\partial J/\partial\theta_p$ | Parameter sensitivity | Gradient w.r.t. parameter `p` |
 | $\alpha$ | Regularization parameter | Small positive scalar |
@@ -141,7 +141,7 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 |--------|---------|-------------|
 | $\kappa(\mathbf Z)$ | Condition number | $\|\mathbf Z\|\cdot\|\mathbf Z^{-1}\|$ |
 | $P_{\mathrm{rad}}$ | Radiated power | $P_{\mathrm{rad}}=\frac{1}{2\eta_0}\int |\mathbf E^\infty|^2\,d\Omega$ | W |
-| $P_{\mathrm{in}}$ | Input power | $P_{\mathrm{in}}=\frac{1}{2}\text{Re}\{\mathbf I^\dagger\mathbf v\}$ | W |
+| $P_{\mathrm{in}}$ | Input power | $P_{\mathrm{in}}=-\frac{1}{2}\text{Re}\{\mathbf I^\dagger\mathbf v\}$ | W |
 | FD | Finite Difference | Numerical gradient approximation |
 | CS | Complex Step | Exact gradient via complex perturbation |
 | RMSE | Root Mean Square Error | $\sqrt{\frac{1}{N}\sum_i|y_i-\hat{y}_i|^2}$ |

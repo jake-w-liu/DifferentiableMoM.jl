@@ -1,6 +1,6 @@
 # Types.jl — Core data structures for DifferentiableMoM
 
-export Vec3, CVec3, TriMesh, RWGData, PatchPartition, SphGrid
+export Vec3, CVec3, TriMesh, RWGData, PatchPartition, SphGrid, ScatteringResult
 export nvertices, ntriangles
 
 const Vec3 = SVector{3,Float64}
@@ -49,4 +49,22 @@ struct SphGrid
     theta::Vector{Float64}      # polar angles
     phi::Vector{Float64}        # azimuthal angles
     w::Vector{Float64}          # quadrature weights
+end
+
+"""
+    ScatteringResult
+
+Result from `solve_scattering`, containing the solution and metadata.
+"""
+struct ScatteringResult
+    I_coeffs::Vector{ComplexF64}
+    method::Symbol
+    N::Int
+    assembly_time_s::Float64
+    solve_time_s::Float64
+    preconditioner_time_s::Float64
+    gmres_iters::Int
+    gmres_residual::Float64
+    mesh_report::NamedTuple
+    warnings::Vector{String}
 end

@@ -78,8 +78,8 @@ function build_rwg(mesh::TriMesh;
         push!(vplus_opp_vec, vopp1)
         push!(vminus_opp_vec, vopp2)
 
-        r1 = Vec3(mesh.xyz[:, edge_key[1]])
-        r2 = Vec3(mesh.xyz[:, edge_key[2]])
+        r1 = _mesh_vertex(mesh, edge_key[1])
+        r2 = _mesh_vertex(mesh, edge_key[2])
         push!(len_vec, norm(r2 - r1))
 
         push!(area_p_vec, triangle_area(mesh, t1))
@@ -109,10 +109,10 @@ For T-: f_n(r) = (l_n / 2A-) * (r_opp- - r)
 """
 function eval_rwg(rwg::RWGData, n::Int, r::Vec3, t::Int)
     if t == rwg.tplus[n]
-        r_opp = Vec3(rwg.mesh.xyz[:, rwg.vplus_opp[n]])
+        r_opp = _mesh_vertex(rwg.mesh, rwg.vplus_opp[n])
         return (rwg.len[n] / (2.0 * rwg.area_plus[n])) * (r - r_opp)
     elseif t == rwg.tminus[n]
-        r_opp = Vec3(rwg.mesh.xyz[:, rwg.vminus_opp[n]])
+        r_opp = _mesh_vertex(rwg.mesh, rwg.vminus_opp[n])
         return (rwg.len[n] / (2.0 * rwg.area_minus[n])) * (r_opp - r)
     else
         return Vec3(0.0, 0.0, 0.0)

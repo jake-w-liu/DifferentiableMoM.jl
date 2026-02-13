@@ -63,7 +63,7 @@ where $\mathbf{Q}_t$ and $\mathbf{Q}_{\mathrm{tot}}$ are Hermitian positive‑se
 
 ### 2.1 Matrix Definitions
 
-Let $\mathcal{D}_t \subset \mathbb{S}^2$ be the target angular region (e.g., a conical sector around a desired steering angle) and $\mathbf{p}(\hat{\mathbf{r}})$ a unit polarization vector. The target power matrix $\mathbf{Q}_t$ has entries (see Chapter 3 of Part II)
+Let $\mathcal{D}_t \subset \mathbb{S}^2$ be the target angular region (e.g., a conical sector around a desired steering angle) and $\mathbf{p}(\hat{\mathbf{r}})$ a unit polarization vector. The target power matrix $\mathbf{Q}_t$ has entries (see Chapter 3 of Part II)
 
 ```math
 [\mathbf{Q}_t]_{mn}
@@ -75,7 +75,7 @@ Let $\mathcal{D}_t \subset \mathbb{S}^2$ be the target angular region (e.g., a c
 \label{eq:Q_target}
 ```
 
-where $\mathbf{g}_n$ are the radiation patterns of the RWG basis functions. The total‑power matrix $\mathbf{Q}_{\mathrm{tot}}$ is defined similarly but integrated over the entire sphere (or over a prescribed solid angle that defines the “total” channel, e.g., the forward hemisphere).
+where $\mathbf{g}_n$ are the radiation patterns of the RWG basis functions. The total‑power matrix $\mathbf{Q}_{\mathrm{tot}}$ is defined similarly but integrated over the entire sphere (or over a prescribed solid angle that defines the "total" channel, e.g., the forward hemisphere).
 
 By construction, $\mathbf{Q}_t, \mathbf{Q}_{\mathrm{tot}} \succeq 0$ and $\mathbf{Q}_t \preceq \mathbf{Q}_{\mathrm{tot}}$ (element‑wise) if $\mathcal{D}_t$ is a subset of the total region.
 
@@ -94,7 +94,7 @@ g \frac{\partial f}{\partial \theta_p}
 \label{eq:quotient_rule}
 ```
 
-Both $f$ and $g$ are quadratic forms, so their derivatives follow the adjoint formula derived in Chapter 1:
+Both $f$ and $g$ are quadratic forms, so their derivatives follow the adjoint formula derived in Chapter 1:
 
 ```math
 \frac{\partial f}{\partial \theta_p}
@@ -134,7 +134,7 @@ Substituting $\eqref{eq:deriv_fg}$ into $\eqref{eq:quotient_rule}$ yields the co
 
 Because $\partial \mathbf{Z}/\partial \theta_p = -\mathbf{M}_p$ (resistive) or $-i\mathbf{M}_p$ (reactive), the contractions in $\eqref{eq:deriv_fg}$ reduce to inner products involving $\mathbf{M}_p$. Let's derive these expressions step by step.
 
-First, recall the adjoint gradient formula from Chapter 1:
+First, recall the adjoint gradient formula from Chapter 1:
 ```math
 \frac{\partial f}{\partial \theta_p} = -2\,\Re\!\left\{
 \boldsymbol{\lambda}_f^\dagger
@@ -227,7 +227,7 @@ g \,\Im\{l_p^{(f)}\} - f \,\Im\{l_p^{(g)}\}
 \Bigr).
 ```
 
-These formulas are implemented in `optimize_directivity` (Section 5).
+These formulas are implemented in `optimize_directivity` (Section 5).
 
 ---
 
@@ -235,7 +235,7 @@ These formulas are implemented in `optimize_directivity` (Section 5).
 
 ### 3.1 The Tempting Single‑Adjoint Approach
 
-At first glance, one might try to combine the two adjoint systems into a single solve. Define an “effective” matrix
+At first glance, one might try to combine the two adjoint systems into a single solve. Define an "effective" matrix
 
 ```math
 \mathbf{Q}_{\mathrm{eff}} = \mathbf{Q}_t - J \mathbf{Q}_{\mathrm{tot}}.
@@ -302,14 +302,24 @@ The main ratio‑optimization entry point is
 ```julia
 function optimize_directivity(
     Z_efie, Mp, v, Q_target, Q_total, theta0;
-    reactive=true,
-    maxiter=300,
+    reactive=false,
+    maxiter=100,
     tol=1e-6,
     m_lbfgs=10,
-    lb=fill(-500.0, length(theta0)),
-    ub=fill( 500.0, length(theta0)),
-    preconditioning=:auto,
+    alpha0=0.01,
+    lb=nothing,
+    ub=nothing,
+    regularization_alpha=0.0,
+    regularization_R=nothing,
+    preconditioner_M=nothing,
+    preconditioning=:off,
+    auto_precondition_n_threshold=256,
     iterative_solver=false,
+    auto_precondition_eps_rel=1e-6,
+    solver=:direct,
+    nf_preconditioner=nothing,
+    gmres_tol=1e-8,
+    gmres_maxiter=200,
     verbose=true
 )
 ```
@@ -320,13 +330,26 @@ function optimize_directivity(
 - `v`: Right‑hand side vector (tested incident field).
 - `Q_target`, `Q_total`: Target and total power matrices $\mathbf{Q}_t$, $\mathbf{Q}_{\mathrm{tot}}$.
 - `theta0`: Initial design vector $\boldsymbol{\theta}^{(0)}$.
-- `reactive`: `true` for reactive design, `false` for resistive.
-- `maxiter`, `tol`, `m_lbfgs`: L‑BFGS parameters.
-- `lb`, `ub`: Box constraints (lower and upper bounds) for each parameter.
-- `preconditioning`, `iterative_solver`: Conditioning options (see Chapter 5).
+- `reactive`: `false` for resistive design (default), `true` for reactive.
+- `maxiter`: Maximum iterations (default 100).
+- `tol`: Gradient‑norm tolerance (default 1e-6).
+- `m_lbfgs`: L‑BFGS memory size (default 10).
+- `alpha0`: Initial inverse‑Hessian scaling for L‑BFGS (default 0.01). Used as the diagonal scaling `gamma` in the two‑loop recursion before any curvature pairs are available.
+- `lb`, `ub`: Box constraints (lower and upper bounds); `nothing` for unconstrained (default).
+- `regularization_alpha`: Tikhonov regularization parameter (default 0.0). Non‑zero values add $\alpha \mathbf{R}$ to the system matrix.
+- `regularization_R`: Custom regularization matrix; if `nothing` (default), a mass‑based regularizer is used when `regularization_alpha > 0`.
+- `preconditioner_M`: Explicit preconditioner matrix for parameter‑space conditioning (default `nothing`).
+- `preconditioning`: `:off` (default), `:on`, or `:auto`. Controls parameter‑space preconditioning (see Chapter 5).
+- `auto_precondition_n_threshold`: Patch‑count threshold for auto‑preconditioning (default 256).
+- `iterative_solver`: Boolean flag that influences auto‑preconditioning decisions in `select_preconditioner` (default `false`). Does **not** switch the solver; use `solver` for that.
+- `auto_precondition_eps_rel`: Relative tolerance for auto‑preconditioning (default 1e-6).
+- `solver`: Solver dispatch -- `:direct` (LU, default) or `:gmres`.
+- `nf_preconditioner`: Near‑field preconditioner for GMRES (default `nothing`).
+- `gmres_tol`: GMRES convergence tolerance (default 1e-8).
+- `gmres_maxiter`: Maximum GMRES iterations (default 200).
 - `verbose`: Print progress information.
 
-**Returns**: A tuple `(theta_opt, trace)`, where `theta_opt` is the optimized parameter vector and `trace` is a dictionary recording objective values, gradient norms, and iteration counts.
+**Returns**: A tuple `(theta_opt, trace)`, where `theta_opt` is the optimized parameter vector and `trace` is a `Vector{NamedTuple{(:iter, :J, :gnorm)}}` recording iteration number, objective value, and gradient norm at each iteration.
 
 ### 4.2 Internal Steps per Iteration
 
@@ -336,7 +359,7 @@ For each L‑BFGS iteration $k$, `optimize_directivity` performs:
 2. **Forward solve** $\mathbf{Z}^{(k)} \mathbf{I}^{(k)} = \mathbf{v}$.
 3. **Compute** $f^{(k)} = (\mathbf{I}^{(k)})^\dagger \mathbf{Q}_t \mathbf{I}^{(k)}$, $g^{(k)} = (\mathbf{I}^{(k)})^\dagger \mathbf{Q}_{\mathrm{tot}} \mathbf{I}^{(k)}$, $J^{(k)} = f^{(k)}/g^{(k)}$.
 4. **Adjoint solves** $\mathbf{Z}^{(k)\dagger} \boldsymbol{\lambda}_f = \mathbf{Q}_t \mathbf{I}^{(k)}$ and $\mathbf{Z}^{(k)\dagger} \boldsymbol{\lambda}_g = \mathbf{Q}_{\mathrm{tot}} \mathbf{I}^{(k)}$.
-5. **Gradient assembly** using $\eqref{eq:quotient_rule}$ and the formulas in Section 2.3.
+5. **Gradient assembly** using $\eqref{eq:quotient_rule}$ and the formulas in Section 2.3.
 6. **L‑BFGS update** with projection onto $[\mathtt{lb}, \mathtt{ub}]$.
 
 ### 4.3 Box Constraints and Projection
@@ -411,25 +434,23 @@ theta0 = zeros(P)
 theta_opt, trace = optimize_directivity(
     Z_efie, Mp, v, Q_target, Q_total, theta0;
     reactive=true,
-    maxiter=300,
+    maxiter=100,
     tol=1e-6,
     lb=fill(-500.0, P),   # capacitive/inductive limits
     ub=fill( 500.0, P),
-    preconditioning=:auto,
-    iterative_solver=false,
     verbose=true
 )
 
 # ------------------------------
 # Post‑processing
 # ------------------------------
-println("Final directivity ratio J = ", trace["J"][end])
-println("Final gradient norm = ", trace["gradnorm"][end])
+println("Final directivity ratio J = ", trace[end].J)
+println("Final gradient norm = ", trace[end].gnorm)
 ```
 
 ### 5.2 Interpreting Results
 
-- **Optimization trace**: The `trace` dictionary contains arrays `"J"`, `"gradnorm"`, `"iter"`. Plotting `J` vs. iteration shows whether convergence is monotonic or oscillatory.
+- **Optimization trace**: The `trace` is a `Vector{NamedTuple{(:iter, :J, :gnorm)}}`. Access objective values as `[t.J for t in trace]` and gradient norms as `[t.gnorm for t in trace]`. Plotting `J` vs. iteration shows whether convergence is monotonic or oscillatory.
 - **Final pattern**: Re‑assemble $\mathbf{Z}$ with `theta_opt`, solve for $\mathbf{I}$, and compute the far‑field pattern to verify beam steering and sidelobe levels.
 - **Parameter distribution**: Visualize `theta_opt` on the mesh to see the resulting reactance distribution (periodic phase‑gradient patterns are typical for beam steering).
 
@@ -439,15 +460,15 @@ println("Final gradient norm = ", trace["gradnorm"][end])
 
 ### 6.1 Regularization for Ill‑Conditioned Systems
 
-When the EFIE matrix is ill‑conditioned (low frequencies, fine meshes), both forward and adjoint solves benefit from the regularization and preconditioning techniques described in Chapter 5. The same conditioned operator must be used for all three solves (forward + two adjoint) to maintain gradient consistency.
+When the EFIE matrix is ill‑conditioned (low frequencies, fine meshes), both forward and adjoint solves benefit from the regularization and preconditioning techniques described in Chapter 5. The same conditioned operator must be used for all three solves (forward + two adjoint) to maintain gradient consistency.
 
 ### 6.2 Avoiding Division by Zero
 
-The denominator $g$ is total radiated power, which is positive for any non‑zero current. However, early in optimization, poor initial guesses could lead to nearly zero radiation (e.g., a highly reflective sheet). The code guards against $g=0$ by adding a tiny epsilon (`eps()`) to the denominator in the quotient rule.
+The denominator $g$ is total radiated power, which is positive for any non‑zero current. The code computes the ratio directly as `J_ratio = f_val / g_val` without an explicit epsilon guard. In practice, $g > 0$ whenever the current vector is non‑zero (which is guaranteed after a successful forward solve). If numerical issues are suspected (e.g., extremely lossy sheets), monitor $g$ in the optimization trace and consider adding regularization.
 
 ### 6.3 Scaling of $f$ and $g$
 
-For large problems, $f$ and $g$ can be huge (e.g., $10^{10}$). Computing $J = f/g$ directly may overflow. The implementation scales both numerator and denominator by a common factor (e.g., divide by $N$) before forming the ratio.
+The implementation computes $f$ and $g$ directly as quadratic forms (`real(dot(I, Q * I))`) and forms the ratio $J = f/g$ without any additional scaling. For typical metasurface problems, the magnitudes of $f$ and $g$ are well within double‑precision range. If very large problems lead to overflow concerns, the user can pre‑scale the $\mathbf{Q}$ matrices externally before passing them to the optimizer.
 
 ---
 
@@ -497,7 +518,7 @@ which is a generalized eigenvalue problem. The gradient‑based approach iterati
 - **`src/Adjoint.jl`** – Adjoint solves `solve_adjoint` and gradient assembly utilities.
 - **`src/QMatrix.jl`** – Construction of $\mathbf{Q}_t$ and $\mathbf{Q}_{\mathrm{tot}}$ matrices (`build_Q`, masks via `cap_mask` or custom logical masks).
 - **`src/Solve.jl`** – Forward solve and conditioned system preparation.
-- **`examples/ex_beam_steer.jl`** – Complete beam‑steering example.
+- **`examples/04_beam_steering.jl`** – Complete beam‑steering example.
 - **`test/runtests.jl`** – Verification script for ratio‑objective gradients.
 
 ---
@@ -517,7 +538,7 @@ which is a generalized eigenvalue problem. The gradient‑based approach iterati
 
 ### 10.3 Coding Exercises
 
-1. **Basic ratio optimization**: Run the example from Section 5.1 for a smaller plate ($2\lambda \times 2\lambda$) and visualize the optimization trace. Does the directivity ratio converge monotonically?
+1. **Basic ratio optimization**: Run the example from Section 5.1 for a smaller plate ($2\lambda \times 2\lambda$) and visualize the optimization trace. Does the directivity ratio converge monotonically?
 2. **Target‑region sweep**: Vary the target cone half‑width (5°, 10°, 20°) and run optimizations for each. Compare the final directivity values and far‑field patterns. Explain the trade‑off between beam width and peak directivity.
 3. **Gradient verification**: Write a finite‑difference check for the ratio gradient. Perturb each parameter by $\epsilon = 10^{-8}$ and compare with the adjoint gradient from `optimize_directivity`. Ensure relative error $< 10^{-5}$.
 
@@ -539,14 +560,14 @@ After studying this chapter, you should be able to:
 - [ ] **Interpret** optimization traces and adjust target‑region parameters to control beam width and sidelobe levels.
 - [ ] **Verify** ratio‑objective gradients with finite‑difference checks.
 
-If you can confidently check all items, you have mastered ratio‑objective optimization in `DifferentiableMoM.jl` and are ready to proceed to Chapter 4 (Optimization Workflow).
+If you can confidently check all items, you have mastered ratio‑objective optimization in `DifferentiableMoM.jl` and are ready to proceed to Chapter 4 (Optimization Workflow).
 
 ---
 
 ## 12. Further Reading
 
 1. **Directivity and ratio objectives in antenna design**:
-   - Balanis, C. A. (2016). *Antenna theory: analysis and design* (4th ed.). Wiley. (Chapter 2 covers directivity definitions.)
+   - Balanis, C. A. (2016). *Antenna theory: analysis and design* (4th ed.). Wiley. (Chapter 2 covers directivity definitions.)
    - Haupt, R. L., & Werner, D. H. (2007). *Genetic algorithms in electromagnetics*. Wiley. (Includes examples of ratio‑based fitness functions.)
 
 2. **Quotient‑rule gradients in adjoint optimization**:
@@ -555,7 +576,7 @@ If you can confidently check all items, you have mastered ratio‑objective opti
 
 3. **Beam‑steering metasurfaces**:
    - Yu, N., et al. (2011). *Light propagation with phase discontinuities: generalized laws of reflection and refraction*. Science, 334(6054), 333–337.
-   - Pfeiffer, C., & Grbic, A. (2013). *Metamaterial Huygens’ surfaces: tailoring wave fronts with reflectionless sheets*. Physical Review Letters, 110(19), 197401.
+   - Pfeiffer, C., & Grbic, A. (2013). *Metamaterial Huygens' surfaces: tailoring wave fronts with reflectionless sheets*. Physical Review Letters, 110(19), 197401.
 
 4. **Numerical stability of adjoint methods**:
    - Giles, M. B., & Pierce, N. A. (2000). *An introduction to the adjoint approach to design*. Flow, Turbulence and Combustion, 65(3–4), 393–415. (Discusses cancellation issues in adjoint right‑hand sides.)
@@ -563,4 +584,4 @@ If you can confidently check all items, you have mastered ratio‑objective opti
 
 ---
 
-*Next: Chapter 4, “Optimization Workflow,” provides an end‑to‑end practical guide for inverse design, covering objective setup, solver calls, line‑search behavior, diagnostic checks, and post‑optimization validation.*
+*Next: Chapter 4, "Optimization Workflow," provides an end‑to‑end practical guide for inverse design, covering objective setup, solver calls, line‑search behavior, diagnostic checks, and post‑optimization validation.*

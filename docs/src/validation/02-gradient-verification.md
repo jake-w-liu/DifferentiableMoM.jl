@@ -126,7 +126,7 @@ All relative errors are below $3\times 10^{-7}$, confirming adjoint correctness 
 
 ### 3.1 Complete Verification Script
 
-The convergence study (`examples/ex_convergence.jl`) includes gradient verification:
+The convergence study (`examples/01_pec_plate_basics.jl`) includes gradient verification:
 
 ```julia
 # Gradient check: impedance at one patch
@@ -289,15 +289,15 @@ end
   - `fd_grad`, `complex_step_grad`, `verify_gradient`
   
 - **Adjoint gradient computation**: `src/Adjoint.jl`
-  - `gradient_impedance`, `solve_adjoint`, `compute_ratio_gradient`
+  - `gradient_impedance`, `solve_adjoint`
 
 - **Optimization interface**: `src/Optimize.jl`
-  - `optimize_directivity`, `LBFGSOptimizer`
+  - `optimize_directivity`, `optimize_lbfgs`
 
 ### 6.2 Example Scripts
 
-- **Convergence study**: `examples/ex_convergence.jl` (includes gradient verification)
-- **Beam steering optimization**: `examples/ex_beam_steer.jl` (uses verified gradients)
+- **Convergence study**: `examples/01_pec_plate_basics.jl` (includes gradient verification)
+- **Beam steering optimization**: `examples/04_beam_steering.jl` (uses verified gradients)
 - **Test suite**: `test/runtests.jl` (regression tests)
 
 ---

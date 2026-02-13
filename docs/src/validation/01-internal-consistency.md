@@ -134,7 +134,7 @@ println("Smallest singular value: $(cond_info.sv_min)")
 
 ### 3.1 Complete Validation Script
 
-The convergence study example (`examples/ex_convergence.jl`) demonstrates systematic checks across mesh refinement:
+The convergence study example (`examples/01_pec_plate_basics.jl`) demonstrates systematic checks across mesh refinement:
 
 ```julia
 # 1. Solve EFIE
@@ -229,7 +229,7 @@ If `energy_ratio` returns 1.15 (15% excess radiation):
 For lossless structures, the EFIE matrix should be symmetric (reciprocal):
 
 ```julia
-reciprocity_error = norm(Z - Z') / norm(Z)
+reciprocity_error = norm(Z - transpose(Z)) / norm(Z)
 ```
 
 Expected: `reciprocity_error < 1e-10` for PEC with symmetric quadrature.
@@ -264,7 +264,10 @@ end
   - `bistatic_rcs`, `backscatter_rcs`
 
 - **Objective assembly**: `src/QMatrix.jl`
-  - `build_Q`, `projected_power`
+  - `build_Q`
+
+- **Projected power**: `src/Diagnostics.jl`
+  - `projected_power`
 
 - **Far-field computation**: `src/FarField.jl`
   - `radiation_vectors`, `compute_farfield`
@@ -273,9 +276,9 @@ end
 
 ### 6.2 Example Scripts
 
-- **Convergence study**: `examples/ex_convergence.jl`
+- **Convergence study**: `examples/01_pec_plate_basics.jl`
 - **Paper consistency aggregation**: `validation/paper/generate_consistency_report.jl`
-- **Sphere benchmark**: `examples/ex_pec_sphere_mie_benchmark.jl`
+- **Sphere benchmark**: `examples/02_pec_sphere_mie.jl`
 
 ---
 
@@ -295,13 +298,13 @@ end
 ### 7.2 Intermediate Level
 
 3. **Mesh convergence study**:
-   - Reproduce the convergence study from `ex_convergence.jl`
+   - Reproduce the convergence study from `01_pec_plate_basics.jl`
    - Plot energy ratio vs. mesh density
    - Verify condition number growth: $\kappa \sim O(h^{-p})$
 
 4. **Impedance sheet validation**:
    - Test a purely reactive sheet ($Z_s = i200\,\Omega$)
-   - Confirm energy ratio $< 1$ (power absorbed)
+   - Confirm energy ratio $\approx 1$ (a purely reactive sheet does not absorb power)
    - Verify reciprocity still holds
 
 ### 7.3 Advanced Level

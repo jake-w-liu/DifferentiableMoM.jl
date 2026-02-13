@@ -124,6 +124,8 @@ If $\mathbf{R}$ is positive definite, the eigenvalues $\lambda_i(\mathbf{Z}_\alp
 \lambda_i(\mathbf{Z}_\alpha) = \lambda_i(\mathbf{Z}) + \alpha\lambda_i(\mathbf{R}) \quad \text{for } i=1,\dots,N.
 ```
 
+**Caveat:** This additivity holds exactly only when $\mathbf{Z}$ and $\mathbf{R}$ commute (e.g., if both are simultaneously diagonalizable). For general EFIE and mass matrices, eigenvalue perturbation bounds (Weyl's inequality) provide approximate estimates.
+
 Since $\lambda_i(\mathbf{R}) \ge 0$, the regularization shifts all eigenvalues to the right (in the complex plane), moving small eigenvalues away from the origin and reducing the condition number.
 
 ### 2.2 Physical Interpretation
@@ -346,7 +348,7 @@ Preconditioning is recommended in the following scenarios:
 
 ### 3.7 Example: Using Auto‑Preconditioning
 
-The script `examples/ex_auto_preconditioning.jl` demonstrates the recommended usage:
+The script `examples/05_solver_methods.jl` demonstrates the recommended usage:
 
 ```julia
 using DifferentiableMoM
@@ -772,10 +774,10 @@ The two solutions should agree to within $10^{-6}$–$10^{-8}$, while the condit
 
 ### 6.10 Full Script
 
-The complete script is available as `examples/ex_auto_preconditioning.jl` in the repository. You can run it directly to reproduce the results:
+The complete script is available as `examples/05_solver_methods.jl` in the repository. You can run it directly to reproduce the results:
 
 ```bash
-julia examples/ex_auto_preconditioning.jl
+julia examples/05_solver_methods.jl
 ```
 
 ### 6.11 Interpreting the Results
@@ -1013,7 +1015,7 @@ using DifferentiableMoM: make_mass_regularizer, make_left_preconditioner,
 
 The file `src/Diagnostics.jl` provides functions for assessing matrix conditioning and solver health:
 
-- **`condition_diagnostics(Z; full=false)`** – computes the condition number $\kappa$ and extreme singular values of $\mathbf{Z}$ via a full SVD (if `full=true`) or an estimated condition number (if `full=false`). Returns a named tuple `(cond, sv_max, sv_min)`.
+- **`condition_diagnostics(Z)`** – computes the condition number $\kappa$ and extreme singular values of $\mathbf{Z}$ via a full SVD. Returns a named tuple `(cond, sv_max, sv_min)`.
 
 **Location**: `src/Diagnostics.jl`, lines ~200–250.
 
@@ -1039,9 +1041,9 @@ The file `src/Optimize.jl` ensures that conditioning is applied consistently dur
 
 Several example scripts demonstrate conditioning in practice:
 
-- **`examples/ex_auto_preconditioning.jl`** – shows how `select_preconditioner` behaves with different modes and problem sizes.
-- **`examples/ex_auto_preconditioning.jl`** (to be created) – a complete worked example of assembling an EFIE matrix, diagnosing conditioning, applying regularization/preconditioning, and verifying the results (as described in Section 6).
-- **`examples/ex_auto_preconditioning.jl`** (if present) – illustrates conditioning for low‑frequency EFIE problems.
+- **`examples/05_solver_methods.jl`** – shows how `select_preconditioner` behaves with different modes and problem sizes.
+- **`examples/05_solver_methods.jl`** (to be created) – a complete worked example of assembling an EFIE matrix, diagnosing conditioning, applying regularization/preconditioning, and verifying the results (as described in Section 6).
+- **`examples/05_solver_methods.jl`** (if present) – illustrates conditioning for low‑frequency EFIE problems.
 
 **Location**: `examples/` directory.
 
@@ -1091,7 +1093,7 @@ The existing infrastructure is designed to be modular, allowing you to plug in a
 | `src/Solve.jl` | Regularization, preconditioning, linear solves | `make_mass_regularizer`, `make_left_preconditioner`, `select_preconditioner`, `prepare_conditioned_system` |
 | `src/Diagnostics.jl` | Conditioning diagnostics | `condition_diagnostics` |
 | `src/Optimize.jl` | Optimization with consistent conditioning | `optimize_lbfgs`, `adjoint_solve` |
-| `examples/ex_auto_preconditioning.jl` | Demo of mode selection | – |
+| `examples/05_solver_methods.jl` | Demo of mode selection | – |
 
 With this roadmap, you can navigate the source code to understand, modify, or extend the conditioning capabilities of `DifferentiableMoM.jl`.
 
@@ -1121,7 +1123,7 @@ This section provides hands‑on exercises to reinforce the concepts covered in 
 
 ### 9.3 Coding Exercises
 
-1. **Basic**: Run the example script `examples/ex_auto_preconditioning.jl` and modify it to test all three modes (`:off`, `:on`, `:auto`) for a problem with $N=100$ and $N=500$. Record the condition numbers and solve times for each mode. Explain the observed differences.
+1. **Basic**: Run the example script `examples/05_solver_methods.jl` and modify it to test all three modes (`:off`, `:on`, `:auto`) for a problem with $N=100$ and $N=500$. Record the condition numbers and solve times for each mode. Explain the observed differences.
 
 2. **Regularization sweep**: Create a script that solves a low‑frequency EFIE problem ($k=0.001$) for a range of regularization parameters $\alpha = 10^{-12}, 10^{-11}, \dots, 10^{-6}$. Plot the relative error in the solution (compared to a reference solve with $\alpha=0$ and high‑precision arithmetic) versus $\alpha$. Identify the “sweet spot” where error is minimized.
 
@@ -1141,7 +1143,7 @@ This section provides hands‑on exercises to reinforce the concepts covered in 
 
 - **Conceptual 1**: Double‑precision has about 15–16 decimal digits. A condition number of $10^{12}$ can lose up to 12 digits, leaving only 3–4 accurate digits. This leads to noisy gradients and stalled optimization.
 - **Derivation 1**: Use the fact that $\mathbf{Z}$ and $\mathbf{R}$ are Hermitian, and apply Weyl’s inequality for eigenvalues of sums of Hermitian matrices.
-- **Coding 1**: See `examples/ex_auto_preconditioning.jl` for a template.
+- **Coding 1**: See `examples/05_solver_methods.jl` for a template.
 - **Advanced 1**: The diagonal preconditioner is cheap to apply but may be less effective for low‑frequency EFIE where off‑diagonal terms are significant.
 
 Complete solutions are not provided here; the goal is to encourage independent exploration and deeper engagement with the codebase.
@@ -1191,7 +1193,7 @@ For readers interested in diving deeper into the theory and practice of matrix c
 
 ### 11.4 Software and Libraries
 
-- **Julia LinearAlgebra** – The standard library provides condition number estimation (`cond`), singular value decomposition (`svd`), and iterative solvers (`gmres`, `bicgstab`).
+- **Julia LinearAlgebra** – The standard library provides condition number estimation (`cond`) and singular value decomposition (`svd`). Iterative solvers (GMRES, BiCGStab) are provided by external packages such as Krylov.jl, not by the standard LinearAlgebra library.
 - **IterativeSolvers.jl** – A Julia package with advanced Krylov methods and preconditioners.
 - **IncompleteLU.jl** – For incomplete LU factorization preconditioners, which can be effective for EFIE matrices with appropriate re‑ordering.
 

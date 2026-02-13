@@ -85,8 +85,8 @@ The Rao‑Wilton‑Glisson (RWG) basis satisfies all these requirements and has 
 
 Imagine a mesh surface composed of triangular patches. An RWG basis function is associated with **one interior edge** shared by exactly two triangles:
 
-- **"Plus" triangle $T^+$**: current flows **away from** the shared edge toward the opposite vertex.
-- **"Minus" triangle $T^-$**: current flows **toward** the shared edge from the opposite vertex.
+- **"Plus" triangle $T^+$**: current flows **toward** the shared edge from the opposite vertex.
+- **"Minus" triangle $T^-$**: current flows **away from** the shared edge toward the opposite vertex.
 
 The shared edge acts as a "bridge": the current that leaves triangle $T^+$ through the edge enters triangle $T^-$ through the same edge, guaranteeing continuity and charge conservation.
 
@@ -111,7 +111,7 @@ The function is **piecewise linear** (affine) on each triangle and vanishes outs
 - **Triangle areas $A_n^\pm$**: normalize the current density; smaller triangles yield higher current density for the same total current.
 - **Vectors $\mathbf{r} - \mathbf{r}_{+,\mathrm{opp}}$ and $\mathbf{r}_{-,\mathrm{opp}} - \mathbf{r}$**: produce a linear flow pattern that is radial with respect to the opposite vertex.
 
-**Physical picture**: In $T_n^+$ the current flows radially outward from the shared edge toward the opposite vertex; in $T_n^-$ it flows radially inward from the opposite vertex toward the shared edge. The scaling ensures that the normal component of current is continuous across the edge, i.e., the current leaving $T_n^+$ exactly equals the current entering $T_n^-$.
+**Physical picture**: In $T_n^+$ the current flows radially toward the shared edge from the opposite vertex; in $T_n^-$ it flows radially away from the shared edge toward the opposite vertex. The scaling ensures that the normal component of current is continuous across the edge, i.e., the current leaving $T_n^+$ exactly equals the current entering $T_n^-$.
 
 ### 2.4 ASCII Diagram: RWG Basis Function Geometry
 
@@ -145,8 +145,8 @@ The function is **piecewise linear** (affine) on each triangle and vanishes outs
         
         Legend:
         ● = Edge endpoints (p₁, p₂)
-        ▲ = Current flows AWAY from edge (T+ triangle)
-        ▼ = Current flows TOWARD edge (T- triangle)
+        ▲ = Current flows TOWARD edge (T+ triangle)
+        ▼ = Current flows AWAY from edge (T- triangle)
         ► = Linear current variation within triangle
         T+ area = A_n^+, T- area = A_n^-
 ```
@@ -159,8 +159,8 @@ The function is **piecewise linear** (affine) on each triangle and vanishes outs
                  ▲
                 ╱ ╲
                ╱   ╲
-              ╱     ╲   Current flows radially outward
-             ╱       ╲   from shared edge
+              ╱     ╲   Current flows radially toward
+             ╱       ╲   the shared edge from opposite vertex
             ╱         ╲
            ╱           ╲
           ╱             ╲
@@ -174,8 +174,8 @@ The function is **piecewise linear** (affine) on each triangle and vanishes outs
                  ▼
                 ╱ ╲
                ╱   ╲
-              ╱     ╲   Current flows radially inward
-             ╱       ╲   toward shared edge
+              ╱     ╲   Current flows radially away from
+             ╱       ╲   the shared edge toward opposite vertex
             ╱         ╲
            ╱           ╲
           ╱             ╲
@@ -271,7 +271,7 @@ The affine nature of RWG functions leads to a **constant surface divergence** on
 
 1. **Efficient scalar‑potential term**: Because $\nabla_s\cdot\mathbf{f}_n$ is constant on each triangle, the scalar‑potential contribution $S_{mn}$ in the mixed‑potential EFIE can be computed with minimal arithmetic. The divergence values need only be evaluated once per triangle and can be reused at every quadrature point.
 
-2. **Charge‑density interpretation**: The constant divergence directly gives the **charge density** associated with each basis function via the continuity equation $\nabla_s\cdot\mathbf{J} = -i\omega\rho$. On $T_n^+$ the charge density is $+i\omega\ell_n/A_n^+$; on $T_n^-$ it is $-i\omega\ell_n/A_n^-$. The total charge on the two triangles sums to zero, reflecting local charge conservation.
+2. **Charge‑density interpretation**: The constant divergence directly gives the **charge density** associated with each basis function via the continuity equation $\nabla_s\cdot\mathbf{J} = -i\omega\rho$. On $T_n^+$ the charge density is $+\frac{i}{\omega}\frac{\ell_n}{A_n^+}$; on $T_n^-$ it is $-\frac{i}{\omega}\frac{\ell_n}{A_n^-}$. The total charge on the two triangles sums to zero, reflecting local charge conservation.
 
 3. **Simplified integration**: When assembling the scalar‑potential term
    ```math
@@ -409,7 +409,7 @@ The standard reference triangle $\hat{T}$ is defined by vertices $(0,0)$, $(1,0)
 \int_{\hat{T}} f(\xi,\eta)\,d\xi d\eta \approx \sum_{q=1}^{N_q} w_q f(\xi_q,\eta_q)
 ```
 
-integrates polynomials of a certain degree exactly. The package provides several rules with different numbers of points and degrees of precision; the default rule (`tri_quad_rule()`) uses 7 points and integrates polynomials up to degree 5 exactly, which is sufficient for typical EFIE integrals involving smooth basis functions and the Green’s function.
+integrates polynomials of a certain degree exactly. The package provides several rules with different numbers of points and degrees of precision. Note that `tri_quad_rule` requires an explicit `order` argument (e.g., `tri_quad_rule(3)`). The default in `assemble_Z_efie` is `quad_order=3`, which gives a 3-point rule. Higher-order rules (e.g., `tri_quad_rule(7)` for a 7-point rule) integrate polynomials up to higher degrees exactly, which can improve accuracy for EFIE integrals involving smooth basis functions and the Green's function. Supported orders are 1, 3, 4, and 7.
 
 ### 5.2 Mapping to Physical Triangles
 
@@ -442,7 +442,7 @@ The quadrature module provides two key functions:
 using DifferentiableMoM
 
 mesh = make_rect_plate(0.1, 0.1, 2, 2)
-xi, w = tri_quad_rule(7)             # 7-point rule
+xi, w = tri_quad_rule(7)             # order-7 rule (7 points)
 points_phys = tri_quad_points(mesh, 1, xi)
 ```
 
@@ -770,7 +770,7 @@ Before proceeding to Chapter 4, ensure you understand:
 - [ ] The structure of the assembly loops: loops over test and source bases, then over their support triangles, then over quadrature points.
 - [ ] The role of reference‑triangle quadrature and the origin of the Jacobian factor $2A_T$.
 - [ ] The mesh‑quality checks performed before RWG construction and how to interpret `mesh_quality_report`.
-- [ ] How to inspect RWG data structures using `basis_triangles`, `div_rwg`, `edge_length`, and `triangle_area`.
+- [ ] How to inspect RWG data structures using `basis_triangles`, `div_rwg`, `rwg.len[n]`, and `triangle_area`.
 - [ ] Where to find the key implementation files: `src/RWG.jl`, `src/Mesh.jl`, `src/Quadrature.jl`, `src/EFIE.jl`.
 
 If any items are unclear, review the relevant sections or consult the mathematical prerequisites appendix.

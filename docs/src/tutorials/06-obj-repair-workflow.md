@@ -54,7 +54,7 @@ Before repairing, inspect the raw OBJ file:
 using DifferentiableMoM
 
 mesh = read_obj_mesh("Airplane.obj")
-report = mesh_quality_report(mesh; verbose=true)
+report = mesh_quality_report(mesh)
 ```
 
 Output includes counts of each defect type and a pass/fail verdict. For example:
@@ -212,11 +212,7 @@ Before simulation, assert that the mesh passes all required checks:
 assert_mesh_quality(mesh_coarse;
     allow_boundary=true,
     require_closed=false,
-    allow_nonmanifold=false,
-    allow_degenerate=false,
-    allow_invalid=false,
-    allow_orientation_conflicts=false,
-    verbose=true,
+    area_tol_rel=1e-12,
 )
 ```
 

@@ -8,9 +8,14 @@ The codebase currently provides:
 - **Specialization**: Differentiable EFIE-MoM for reactive impedance metasurface design
 - **Completeness**: Full forward-adjoint-gradient pipeline with verification
 - **Validation**: Internal consistency, dipole/loop analytical gates, Mie benchmarks, Bempp-cl cross-validation
-- **Scope**: PEC + surface impedance sheets only, dense assembly, direct solves, strong excitation/mesh tooling
+- **Assembly**: Dense O(N²), matrix-free on-demand, and ACA H-matrix O(N log² N) compressed operators
+- **Solvers**: Direct LU, GMRES (Krylov.jl) with near-field sparse/diagonal preconditioning, automatic method selection via `solve_scattering`
+- **Excitation**: Plane wave, delta gap, port, dipole, loop, imported field, pattern feed, multi-source
+- **Mesh tooling**: Quality diagnostics, automatic repair/coarsening, resolution diagnostics, midpoint refinement
+- **High-frequency**: Physical Optics (PO) solver for fast RCS reference
+- **Scope**: PEC + surface impedance sheets; thread-parallel ACA block assembly
 
-For a general EM MoM solver, the codebase is approximately **30-40% complete** in terms of feature coverage.
+For a general EM MoM solver, the codebase is approximately **45-55% complete** in terms of feature coverage.
 
 ## Development Philosophy
 1. **Maintain differentiable first**: All new features must support adjoint gradients
@@ -53,7 +58,7 @@ For a general EM MoM solver, the codebase is approximately **30-40% complete** i
 | **Reflector-feed workflow** | Imported feed + reflector illumination demo | Pattern adapter + reflector mesh example | [x] |
 
 ### 1.4 Geometry and Mesh Workflow
-**Priority: High** | 
+**Priority: High** |
 
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
@@ -61,37 +66,42 @@ For a general EM MoM solver, the codebase is approximately **30-40% complete** i
 | **Automatic mesh repair** | Drop invalid/degenerate triangles, fix orientation | `repair_mesh_for_simulation` / `repair_obj_mesh` | [x] |
 | **Automatic mesh coarsening** | Target RWG-count reduction for large OBJ meshes | `coarsen_mesh_to_target_rwg` | [x] |
 | **Reflector geometry builder** | Open parabolic reflector mesh for feed studies | `make_parabolic_reflector` | [x] |
+| **Resolution diagnostics** | Frequency-based edge-length check (λ/N criterion) | `mesh_resolution_report`, `mesh_resolution_ok` | [x] |
+| **Mesh refinement** | Uniform midpoint subdivision to target edge length | `refine_mesh_to_target_edge`, `refine_mesh_for_mom` | [x] |
 | **General CAD formats (STEP/IGES)** | Native CAD import without external conversion | MeshIO/geometry bridge | [ ] |
 
 ## Phase 2: Computational Scalability 
 
 ### 2.1 Fast Algorithms
-**Priority: Critical** | 
+**Priority: Critical** |
 
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
 | **Fast Multipole Method** | O(N log N) matrix-vector products | New module `FMM.jl`, tree structures | [ ] |
-| **H-Matrix** | Hierarchical matrices with adaptive cross | `HMatrices.jl` integration | [ ] |
-| **Matrix-free operators** | On-the-fly kernel evaluation | Operator abstraction layer | [ ] |
+| **H-Matrix / ACA** | Hierarchical matrices with adaptive cross approximation | `ClusterTree.jl` + `ACA.jl`: binary BSP tree, partially-pivoted ACA, `ACAOperator` with O(N log² N) matvec, thread-parallel block assembly | [x] |
+| **Matrix-free operators** | On-the-fly kernel evaluation | `MatrixFreeEFIEOperator` in `EFIE.jl`: `AbstractMatrix` interface, single-entry access, matvec, adjoint | [x] |
+| **Physical Optics solver** | PO high-frequency RCS reference | `PhysicalOptics.jl`: `solve_po` for PEC plane-wave scattering, no RWG needed | [x] |
 | **GPU acceleration** | CUDA/ROCm support for dense operations | `CUDA.jl`/`AMDGPU.jl` integration | [ ] |
 
 ### 2.2 Iterative Solvers
-**Priority: High** | 
+**Priority: High** |
 
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
-| **GMRES** | Generalized Minimal Residual method | `IterativeSolvers.jl` integration | [ ] |
-| **Preconditioners** | Calderón, loop-star, sparse approximate inverse | New `Preconditioners.jl` module | [ ] (mass-based regularization/left preconditioning + `:auto` implemented) |
+| **GMRES** | Generalized Minimal Residual method | `IterativeSolve.jl` via `Krylov.jl`: left/right preconditioning, forward + adjoint solvers | [x] |
+| **Near-field preconditioner** | Sparse NF extraction + LU factorization | `NearFieldPreconditioner.jl`: spatial hashing, sparse LU (`:lu`) or Jacobi diagonal (`:diag`), N-independent iteration counts | [x] |
+| **High-level workflow** | Auto method selection based on problem size | `Workflow.jl`: `solve_scattering` dispatches dense direct / dense GMRES / ACA GMRES, auto preconditioner | [x] |
+| **Advanced preconditioners** | Calderón, loop-star, sparse approximate inverse | New module | [ ] (mass-based regularization + conditioning helpers in `Solve.jl`) |
 | **Deflation** | Deflated GMRES for multiple RHS | Spectral information reuse | [ ] |
 | **Krylov recycling** | Recycled Krylov subspaces | For parameter sweeps | [ ] |
 
 ### 2.3 Parallel Computation
-**Priority: Medium** | 
+**Priority: Medium** |
 
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
 | **Distributed memory** | MPI for large-scale problems | `MPI.jl` integration | [ ] |
-| **Thread parallelism** | Multi-threaded assembly and solves | `Threads.@threads`, task parallelism | [ ] |
+| **Thread parallelism** | Multi-threaded assembly and solves | `Threads.@threads`, task parallelism | [partial] (ACA block assembly is `@threads`-parallel; dense EFIE and NF preconditioner are serial) |
 | **Hybrid parallelism** | MPI+OpenMP/threads | Hierarchical parallelization | [ ] |
 | **Domain decomposition** | For very large problems | Schur complement methods | [ ] |
 
@@ -152,10 +162,10 @@ For a general EM MoM solver, the codebase is approximately **30-40% complete** i
 
 ## Implementation Priorities Matrix
 
-### Must-Have 
+### Must-Have
 1. MFIE/CFIE formulations (essential for closed bodies)
 2. Fast Multipole Method (scalability to 100k+ unknowns)
-3. Iterative solvers with preconditioning (for large problems)
+3. ~~Iterative solvers with preconditioning~~ **DONE**: GMRES via Krylov.jl + near-field sparse/diagonal preconditioner + auto workflow
 4. Dielectric material support (broadens application domain)
 
 ### Should-Have 
@@ -178,7 +188,7 @@ For a general EM MoM solver, the codebase is approximately **30-40% complete** i
 
 ### Challenge 2: Memory Scalability
 - **Solution**: Hierarchical data structures with out-of-core options
-- **Implementation**: `HMatrices.jl` with disk caching for large problems
+- **Current**: Native ACA H-matrix (`ACAOperator`) + matrix-free operators reduce memory from O(N²) to O(N log² N). FMM would further improve to O(N log N).
 
 ### Challenge 3: Code Complexity Management
 - **Solution**: Modular architecture with clear interfaces
@@ -192,11 +202,11 @@ For a general EM MoM solver, the codebase is approximately **30-40% complete** i
 ## Success Metrics
 
 ### Technical Metrics
-- Problem size: 1M+ unknowns (with FMM)
-- Speed: 10-100x faster than current dense implementation
-- Accuracy: < 1% error on standard benchmarks
-- Memory: O(N log N) scaling achieved
+- Problem size: 1M+ unknowns (with FMM) — **current**: ACA enables ~50k+ unknowns; dense limited to ~10k
+- Speed: 10-100x faster than current dense implementation — **current**: ACA + NF preconditioner gives O(N log² N) matvec, N-independent GMRES iters
+- Accuracy: < 1% error on standard benchmarks — **current**: Mie sphere validation passing
+- Memory: O(N log N) scaling achieved — **current**: O(N log² N) via ACA; O(N²) avoided for large problems
 
 
 ---
-*Last updated: February 10, 2026*
+*Last updated: February 13, 2026*

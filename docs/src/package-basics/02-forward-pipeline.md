@@ -30,7 +30,7 @@ For a perfect electric conductor (PEC) illuminated by incident field $\mathbf{E}
 \hat{\mathbf{n}} \times \mathbf{E}^{\text{inc}}(\mathbf{r}) = \hat{\mathbf{n}} \times i\omega\mu_0 \int_\Gamma G(\mathbf{r},\mathbf{r}')\mathbf{J}(\mathbf{r}')d\Gamma' \quad \mathbf{r} \in \Gamma
 ```
 
-where $G(\mathbf{r},\mathbf{r}') = e^{ikR}/(4\pi R)$ is the free-space Green's function with $R = |\mathbf{r}-\mathbf{r}'|$, $k = \omega\sqrt{\mu_0\epsilon_0}$ is the wavenumber, and $\eta_0 = \sqrt{\mu_0/\epsilon_0}$ is the free-space impedance.
+where $G(\mathbf{r},\mathbf{r}') = e^{-ikR}/(4\pi R)$ is the free-space Green's function with $R = |\mathbf{r}-\mathbf{r}'|$, $k = \omega\sqrt{\mu_0\epsilon_0}$ is the wavenumber, and $\eta_0 = \sqrt{\mu_0/\epsilon_0}$ is the free-space impedance.
 
 ### 1.2 Impedance Boundary Condition (IBC)
 
@@ -59,11 +59,11 @@ Applying Galerkin testing with functions $\mathbf{f}_n(\mathbf{r})$ yields the l
 where:
 
 ```math
-Z_{nm} = i\omega\mu_0 \int_\Gamma \int_\Gamma G(\mathbf{r},\mathbf{r}') \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{f}_m(\mathbf{r}') d\Gamma d\Gamma' + \int_\Gamma Z_s(\mathbf{r}) \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{f}_m(\mathbf{r}) d\Gamma
+Z_{nm} = -i\omega\mu_0 \left[ \int_\Gamma \int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{f}_m(\mathbf{r}') \, G(\mathbf{r},\mathbf{r}') \, d\Gamma \, d\Gamma' - \frac{1}{k^2} \int_\Gamma \int_\Gamma (\nabla \cdot \mathbf{f}_n)(\nabla' \cdot \mathbf{f}_m) \, G(\mathbf{r},\mathbf{r}') \, d\Gamma \, d\Gamma' \right] - \int_\Gamma Z_s(\mathbf{r}) \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{f}_m(\mathbf{r}) d\Gamma
 ```
 
 ```math
-v_n = \int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{E}^{\text{inc}}(\mathbf{r}) d\Gamma
+v_n = -\int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{E}^{\text{inc}}(\mathbf{r}) d\Gamma
 ```
 
 ### 1.4 Matrix Structure
@@ -113,7 +113,7 @@ residual = norm(Z_full * I - v) / norm(v)
 The `assemble_Z_efie` function implements singularity-extracted quadrature:
 
 ```julia
-function assemble_Z_efie(mesh::TriMesh, rwg::RWG, k::Float64;
+function assemble_Z_efie(mesh::TriMesh, rwg::RWGData, k::Float64;
                         quad_order::Int=3, eta0::Float64=376.730313668)
 ```
 
@@ -121,7 +121,7 @@ function assemble_Z_efie(mesh::TriMesh, rwg::RWG, k::Float64;
 - **Singularity extraction**: Separate treatment of $1/R$ singularity using analytical integration
 - **Adaptive quadrature**: Gauss-Legendre quadrature for well-separated elements
 - **Vectorization**: Block assembly for performance
-- **Symmetry exploitation**: Only compute upper triangle for reciprocal operators
+- **Full assembly**: The code loops over all (m,n) pairs for generality
 
 **Quadrature strategy:**
 - **Self-term** ($m=n$): Semi-analytical integration with singularity extraction
@@ -136,11 +136,13 @@ Surface impedance contributes a local mass matrix:
 M^{(p)}_{nm} = \int_{\Gamma_p} \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{f}_m(\mathbf{r}) d\Gamma
 ```
 
-where $\Gamma_p$ is the $p$-th impedance patch. For patch-wise constant impedance $Z_s^{(p)}$:
+where $\Gamma_p$ is the $p$-th impedance patch. For patch-wise constant impedance, the full system matrix is:
 
 ```math
-\mathbf{Z}_{\text{total}} = \mathbf{Z}_{\text{EFIE}} + \sum_{p=1}^P Z_s^{(p)} \mathbf{M}^{(p)}
+\mathbf{Z}_{\text{total}} = \mathbf{Z}_{\text{EFIE}} - \sum_{p=1}^P c_p \mathbf{M}^{(p)}
 ```
+
+where $c_p = \theta_p$ for resistive loading (`reactive=false`) or $c_p = i\theta_p$ for reactive loading (`reactive=true`).
 
 **Implementation:**
 
@@ -162,13 +164,13 @@ Z_full = assemble_full_Z(Z_efie, Mp, theta; reactive=true)
 Plane wave excitation with propagation vector $\mathbf{k}$ and polarization $\mathbf{p}$:
 
 ```math
-\mathbf{E}^{\text{inc}}(\mathbf{r}) = \mathbf{p} e^{i\mathbf{k}\cdot\mathbf{r}}
+\mathbf{E}^{\text{inc}}(\mathbf{r}) = \mathbf{p} e^{-i\mathbf{k}\cdot\mathbf{r}}
 ```
 
 The right-hand side vector elements:
 
 ```math
-v_n = \int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{p} e^{i\mathbf{k}\cdot\mathbf{r}} d\Gamma
+v_n = \int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{p} e^{-i\mathbf{k}\cdot\mathbf{r}} d\Gamma
 ```
 
 **Implementation:**
@@ -177,10 +179,15 @@ v_n = \int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{p} e^{i\mathbf{k}\cdot\
 v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
 ```
 
-**Supported excitations:**
-- Plane waves (arbitrary direction, polarization)
-- Multiple right-hand sides (future extension)
-- Custom excitation patterns (user-defined function)
+**Supported excitation types (8 total):**
+- `PlaneWaveExcitation` — plane waves (arbitrary direction, polarization)
+- `PortExcitation` — port-based excitation
+- `DeltaGapExcitation` — delta gap voltage source
+- `DipoleExcitation` — Hertzian dipole source
+- `LoopExcitation` — magnetic loop source
+- `ImportedExcitation` — externally computed field data
+- `PatternFeedExcitation` — feed defined by a radiation pattern
+- `MultiExcitation` — combination of multiple excitation types
 
 ### 2.6 Solution Strategies (`src/Solve.jl`)
 
@@ -198,10 +205,12 @@ I = solve_forward(Z, v)  # Uses LU factorization (LAPACK)
 - $O(N^3)$ time complexity
 - $O(N^2)$ memory for factors
 
-#### Iterative Solution (Roadmap)
-An iterative solver interface is not implemented in the current release.
-The existing conditioned-system API (`prepare_conditioned_system`) is
-designed to remain compatible with future Krylov integration.
+#### Iterative Solution (GMRES)
+GMRES is available via `solver=:gmres`, with `src/IterativeSolve.jl` providing
+the Krylov.jl wrapper. Both left and right preconditioning are supported.
+For automatic method selection based on problem size, use `solve_scattering`
+in `src/Workflow.jl`, which selects dense direct, dense GMRES, or ACA GMRES
+depending on the number of unknowns.
 
 ### 2.7 Preconditioning and Conditioning
 
@@ -210,7 +219,7 @@ The EFIE operator becomes increasingly ill-conditioned with mesh refinement. The
 ```julia
 # Automatic preconditioner selection
 M_eff, enabled, reason = select_preconditioner(Mp;
-    mode=:auto,
+    mode=:off,
     iterative_solver=false)
 
 # Prepare conditioned system
@@ -327,14 +336,14 @@ rwg_fine = build_rwg(mesh_fine)
 Z_fine = assemble_Z_efie(mesh_fine, rwg_fine, k; quad_order=3, eta0=η0)
 
 # Automatic preconditioner selection
-M_eff, enabled, stats = select_preconditioner(Mp; mode=:auto, iterative_solver=false)
+M_eff, enabled, reason = select_preconditioner(Mp; mode=:auto, iterative_solver=false)
 
 if enabled
-    println("Preconditioner enabled: $(stats.preconditioner_type)")
-    Z_cond, v_cond, back = prepare_conditioned_system(Z_fine, v; preconditioner_M=M_eff)
-    I_cond = solve_system(Z_cond, v_cond)
-    I = back(I_cond)
+    println("Preconditioner enabled: $reason")
+    Z_cond, v_cond, fac = prepare_conditioned_system(Z_fine, v; preconditioner_M=M_eff)
+    I = solve_system(Z_cond, v_cond)
 else
+    Z_cond = Z_fine
     I = solve_forward(Z_fine, v)
 end
 
@@ -472,9 +481,9 @@ Combine with other techniques:
 
 ### 6.3 Example Scripts
 
-- **Forward solve / convergence**: `examples/ex_convergence.jl`
-- **Beam objective workflow**: `examples/ex_beam_steer.jl`
-- **Complex mesh forward solve**: `examples/ex_obj_rcs_pipeline.jl`
+- **Forward solve / convergence**: `examples/01_pec_plate_basics.jl`
+- **Beam objective workflow**: `examples/04_beam_steering.jl`
+- **Complex mesh forward solve**: `examples/06_aircraft_rcs.jl`
 
 ---
 

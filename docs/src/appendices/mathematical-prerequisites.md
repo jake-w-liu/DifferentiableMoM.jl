@@ -93,7 +93,8 @@ where `u ≥ 0, v ≥ 0, u + v ≤ 1`.
     - (0,1) → r₃
     - (0.5,0) → midpoint of edge r₁-r₂
     - (0,0.5) → midpoint of edge r₁-r₃
-    - (0.5,0.5) → not in triangle! (u+v=1 > 1)
+    - (0.5, 0.5) → on the boundary edge (ξ + η = 1)
+    - (0.6, 0.6) → not in triangle (ξ + η = 1.2 > 1)
     - (1/3,1/3) → centroid
     
     Area A = |(r₂ - r₁) × (r₃ - r₁)| / 2
@@ -225,7 +226,7 @@ Matrix `H` is Hermitian if `H = H†` (conjugate transpose). Properties:
 
 ---
 
-## 5) Green's Function in Electromagnetics
+## 6) Green's Function in Electromagnetics
 
 ### 3D Free-Space Green's Function
 
@@ -250,7 +251,7 @@ k = \frac{2\pi}{\lambda} = \frac{\omega}{c}
 
 ---
 
-## 6) Quadrature and Numerical Integration
+## 7) Quadrature and Numerical Integration
 
 ### Gaussian Quadrature on Triangles
 
@@ -270,7 +271,7 @@ Reference triangle integration:
 
 ---
 
-## 7) Method of Moments Concepts
+## 8) Method of Moments Concepts
 
 ### Inner Product Definition
 
@@ -292,7 +293,7 @@ where `T` is the integral operator (e.g., EFIE operator).
 
 ---
 
-## 8) Common Mathematical Identities
+## 9) Common Mathematical Identities
 
 ### Vector Triple Product
 
@@ -303,10 +304,10 @@ where `T` is the integral operator (e.g., EFIE operator).
 ### Divergence Theorem (Surface Form)
 
 ```math
-\int_\Gamma \nabla_s \cdot \mathbf F \, dS = \oint_{\partial \Gamma} \mathbf F \cdot \hat{\mathbf t} \, dl
+\int_\Gamma \nabla_s \cdot \mathbf F \, dS = \oint_{\partial \Gamma} \mathbf F \cdot \hat{\mathbf m} \, dl
 ```
 
-where `t̂` is the tangent to the boundary curve.
+where $\hat{\mathbf m} = \hat{\mathbf t} \times \hat{\mathbf n}$ is the outward co-normal to the boundary.
 
 ---
 

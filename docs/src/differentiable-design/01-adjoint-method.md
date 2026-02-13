@@ -237,7 +237,7 @@ For a quadratic objective $\mathbf{I}^\dagger \mathbf{Q} \mathbf{I}$, the adjoin
 The package provides three essential functions that implement the adjoint pipeline:
 
 - **`compute_objective(I, Q)`** – evaluates $J = \Re\{\mathbf{I}^\dagger \mathbf{Q} \mathbf{I}\}$.
-- **`solve_adjoint(Z, Q, I)`** – solves $\mathbf{Z}^\dagger \boldsymbol{\lambda} = \mathbf{Q}\mathbf{I}$ and returns $\boldsymbol{\lambda}$.
+- **`solve_adjoint(Z, Q, I; solver=:direct, preconditioner=nothing, gmres_tol=1e-8, gmres_maxiter=200)`** – solves $\mathbf{Z}^\dagger \boldsymbol{\lambda} = \mathbf{Q}\mathbf{I}$ and returns $\boldsymbol{\lambda}$. Supports both direct (LU) and iterative (GMRES) solvers via the `solver` keyword, with optional preconditioning for GMRES.
 - **`gradient_impedance(Mp, I, λ; reactive=false)`** – computes $\partial J/\partial \theta_p$ using $\eqref{eq:adjoint_grad}$ with the appropriate $\partial \mathbf{Z}/\partial \theta_p$.
 
 ### 5.2 Code Walkthrough
@@ -255,7 +255,11 @@ v = assemble_v_plane_wave(...)
 I = solve_forward(Z, v)
 
 # Objective matrix Q (e.g., target angular region)
-Q = assemble_Q_target(...)
+grid = make_sph_grid(64, 128)
+G_mat = radiation_vectors(mesh, rwg, grid, k)
+pol_ff = pol_linear_x(grid)
+mask = cap_mask(grid; theta_max=deg2rad(10.0))   # broadside cone ±10°
+Q = build_Q(G_mat, grid, pol_ff; mask=mask)
 
 # Compute objective value
 J = compute_objective(I, Q)
@@ -377,7 +381,8 @@ While this package focuses on impedance parameters, the adjoint method also appl
 - **`src/Adjoint.jl`** – Core adjoint functions: `compute_objective`, `solve_adjoint`, `gradient_impedance`.
 - **`src/Optimize.jl`** – Optimization loops that call the adjoint pipeline.
 - **`src/Solve.jl`** – Forward solve (`solve_forward`) and conditioned system preparation.
-- **`src/Impedance.jl`** – Assembly of $\mathbf{Z}(\boldsymbol{\theta})$ and patch mass matrices $\mathbf{M}_p$.
+- **`src/Solve.jl`** – Assembly of $\mathbf{Z}(\boldsymbol{\theta})$ via `assemble_full_Z`.
+- **`src/Impedance.jl`** – Assembly of impedance contribution `assemble_Z_impedance` and patch mass matrices $\mathbf{M}_p$.
 - **`src/EFIE.jl`** – Assembly of $\mathbf{Z}_{\mathrm{EFIE}}$.
 - **`test/runtests.jl`** – Verification script comparing adjoint and finite‑difference gradients.
 

@@ -261,6 +261,24 @@ rwg_coarse_out = build_rwg(coarse_result.mesh; precheck=true, allow_boundary=tru
 report_coarse_out = mesh_quality_report(coarse_result.mesh)
 @assert mesh_quality_ok(report_coarse_out; allow_boundary=true, require_closed=false)
 
+report_res_before = mesh_resolution_report(mesh_edges_test, 3e8; points_per_wavelength=2.0)
+@assert report_res_before.wavelength_m ≈ 299792458.0 / 3e8
+@assert report_res_before.edge_max_m > report_res_before.target_max_edge_m
+@assert !mesh_resolution_ok(report_res_before)
+
+refine_result = refine_mesh_to_target_edge(mesh_edges_test, 0.40; max_iters=3)
+@assert refine_result.triangles_after > refine_result.triangles_before
+@assert refine_result.edge_max_after_m <= 0.40 + 1e-12
+@assert refine_result.converged
+
+report_res_after = mesh_resolution_report(refine_result.mesh, 3e8; points_per_wavelength=2.0)
+@assert mesh_resolution_ok(report_res_after)
+
+mom_refine = refine_mesh_for_mom(mesh_edges_test, 3e8; points_per_wavelength=2.0, max_iters=3)
+@assert mom_refine.report_before.edge_max_m > mom_refine.report_before.target_max_edge_m
+@assert mom_refine.report_after.edge_max_m <= mom_refine.report_after.target_max_edge_m
+@assert mom_refine.converged
+
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
@@ -1631,6 +1649,40 @@ rel_sa_gmres = norm(lam_sa_gmres - lam_gm_direct) / max(norm(lam_gm_direct), 1e-
 println("  solve_adjoint :gmres rel error: $rel_sa_gmres")
 @assert rel_sa_gmres < 1e-6
 
+# Matrix-free EFIE operator: A*x should match dense Z*x
+A_mf = matrixfree_efie_operator(mesh, rwg, k; quad_order=3)
+x_probe = randn(ComplexF64, N)
+Ax_dense = Z_efie * x_probe
+Ax_mf = A_mf * x_probe
+rel_matvec = norm(Ax_mf - Ax_dense) / max(norm(Ax_dense), 1e-30)
+println("  matrix-free matvec rel error: $rel_matvec")
+@assert rel_matvec < 1e-10
+
+# GMRES on matrix-free operator
+I_mf_gmres, stats_mf = solve_gmres(A_mf, v; tol=1e-8, maxiter=300)
+rel_mf = norm(I_mf_gmres - I_pec) / max(norm(I_pec), 1e-30)
+println("  matrix-free GMRES rel error: $rel_mf  iters: $(stats_mf.niter)")
+@assert rel_mf < 1e-6
+
+# solve_forward / solve_adjoint dispatch on matrix-free operator
+I_sf_mf = solve_forward(A_mf, v; solver=:gmres, gmres_tol=1e-8, gmres_maxiter=300)
+rel_sf_mf = norm(I_sf_mf - I_pec) / max(norm(I_pec), 1e-30)
+@assert rel_sf_mf < 1e-6
+
+lam_sa_mf = solve_adjoint(A_mf, Q, I_pec; solver=:gmres, gmres_tol=1e-8, gmres_maxiter=300)
+lam_sa_mf_ref = Z_efie' \ (Q * I_pec)
+rel_sa_mf = norm(lam_sa_mf - lam_sa_mf_ref) / max(norm(lam_sa_mf_ref), 1e-30)
+println("  matrix-free adjoint GMRES rel error: $rel_sa_mf")
+@assert rel_sa_mf < 1e-6
+
+thrown_direct_operator = try
+    solve_forward(A_mf, v; solver=:direct)
+    false
+catch
+    true
+end
+@assert thrown_direct_operator "Expected direct solve failure on matrix-free operator"
+
 # Bad solver symbol should error
 thrown_bad_solver = try
     solve_forward(Z_gm, Vector{ComplexF64}(v); solver=:unknown)
@@ -1735,11 +1787,72 @@ P_nf = build_nearfield_preconditioner(Z_efie, mesh, rwg, lambda0)
 @assert P_nf.cutoff == lambda0
 @assert 0.0 < P_nf.nnz_ratio <= 1.0
 
+# Compare default spatial search against brute-force reference
+P_nf_bruteforce = build_nearfield_preconditioner(
+    Z_efie, mesh, rwg, lambda0; neighbor_search=:bruteforce
+)
+@assert abs(P_nf.nnz_ratio - P_nf_bruteforce.nnz_ratio) < 1e-12
+x_nf_cmp = randn(ComplexF64, N)
+y_nf_spatial = NearFieldOperator(P_nf) * x_nf_cmp
+y_nf_bruteforce = NearFieldOperator(P_nf_bruteforce) * x_nf_cmp
+rel_nf_spatial_vs_brute = norm(y_nf_spatial - y_nf_bruteforce) / max(norm(y_nf_bruteforce), 1e-30)
+println("  NF spatial vs brute rel diff: $rel_nf_spatial_vs_brute")
+@assert rel_nf_spatial_vs_brute < 1e-12
+
+# Build near-field preconditioner without dense Z (matrix-free and geometry paths)
+P_nf_mf = build_nearfield_preconditioner(A_mf, lambda0)
+@assert P_nf_mf.cutoff == lambda0
+@assert 0.0 < P_nf_mf.nnz_ratio <= 1.0
+@assert abs(P_nf_mf.nnz_ratio - P_nf.nnz_ratio) < 1e-12
+
+P_nf_mf_bruteforce = build_nearfield_preconditioner(
+    A_mf, lambda0; neighbor_search=:bruteforce
+)
+@assert abs(P_nf_mf.nnz_ratio - P_nf_mf_bruteforce.nnz_ratio) < 1e-12
+
+P_nf_geom = build_nearfield_preconditioner(mesh, rwg, k, lambda0; quad_order=3)
+@assert P_nf_geom.cutoff == lambda0
+@assert abs(P_nf_geom.nnz_ratio - P_nf.nnz_ratio) < 1e-12
+
+# Invalid neighbor-search mode should error
+thrown_bad_neighbor_search = try
+    build_nearfield_preconditioner(Z_efie, mesh, rwg, lambda0; neighbor_search=:invalid_mode)
+    false
+catch
+    true
+end
+@assert thrown_bad_neighbor_search "Expected error for invalid neighbor_search mode"
+
+# Invalid factorization mode should error
+thrown_bad_factorization = try
+    build_nearfield_preconditioner(A_mf, lambda0; factorization=:invalid_mode)
+    false
+catch
+    true
+end
+@assert thrown_bad_factorization "Expected error for invalid factorization mode"
+
+# Diagonal/Jacobi preconditioner path
+P_diag = build_nearfield_preconditioner(A_mf, lambda0; factorization=:diag)
+@assert P_diag isa DiagonalPreconditionerData
+@assert P_diag.cutoff == lambda0
+@assert 0.0 < P_diag.nnz_ratio <= 1.0
+I_diag, stats_diag = solve_gmres(A_mf, v; preconditioner=P_diag, tol=1e-8, maxiter=300)
+rel_diag = norm(I_diag - I_pec) / max(norm(I_pec), 1e-30)
+println("  Diag precond + matrix-free rel error: $rel_diag  iters: $(stats_diag.niter)")
+@assert rel_diag < 1e-6 "Diagonal-preconditioned matrix-free solve inaccurate: $rel_diag"
+
 # GMRES with near-field preconditioner
 I_nf, stats_nf = solve_gmres(Z_efie, v; preconditioner=P_nf, tol=1e-8, maxiter=200)
 rel_nf = norm(I_nf - I_pec) / max(norm(I_pec), 1e-30)
 println("  NF precond (1.0λ) rel error: $rel_nf  iters: $(stats_nf.niter)")
 @assert rel_nf < 1e-6 "Near-field preconditioned solve inaccurate: $rel_nf"
+
+# GMRES on matrix-free operator with near-field preconditioner built without dense Z
+I_nf_mf, stats_nf_mf = solve_gmres(A_mf, v; preconditioner=P_nf_mf, tol=1e-8, maxiter=300)
+rel_nf_mf = norm(I_nf_mf - I_pec) / max(norm(I_pec), 1e-30)
+println("  NF precond + matrix-free rel error: $rel_nf_mf  iters: $(stats_nf_mf.niter)")
+@assert rel_nf_mf < 1e-6 "Matrix-free near-field preconditioned solve inaccurate: $rel_nf_mf"
 
 # Compare iteration count: near-field should help vs unpreconditioned
 I_nop_nf, stats_nop_nf = solve_gmres(Z_efie, v; tol=1e-8, maxiter=200)
@@ -1869,10 +1982,391 @@ println("  All defaults unchanged")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 23: NF-preconditioned optimization
+# ─────────────────────────────────────────────────
+println("\n── Test 23: NF-preconditioned optimization ──")
+
+# Build NF preconditioner from PEC EFIE matrix
+P_nf_opt = build_nearfield_preconditioner(Z_efie, mesh, rwg, lambda0)
+println("  NF preconditioner: cutoff=$(round(P_nf_opt.cutoff, sigdigits=3)), nnz=$(round(P_nf_opt.nnz_ratio*100, digits=1))%")
+
+theta_init_nf = fill(300.0, Nt)
+
+# optimize_lbfgs with NF-preconditioned GMRES
+theta_opt_nf, trace_nf = optimize_lbfgs(
+    Z_efie, Mp, v, Q, theta_init_nf;
+    maxiter=8, tol=1e-8, alpha0=0.01, verbose=false,
+    solver=:gmres, nf_preconditioner=P_nf_opt,
+    gmres_tol=1e-8, gmres_maxiter=300,
+)
+@assert length(trace_nf) >= 2 "NF-preconditioned optimization should run at least 2 iterations"
+
+# First-iteration J should agree with direct solver
+theta_opt_dir_nf, trace_dir_nf = optimize_lbfgs(
+    Z_efie, Mp, v, Q, theta_init_nf;
+    maxiter=8, tol=1e-8, alpha0=0.01, verbose=false,
+    solver=:direct,
+)
+rel_J0_nf = abs(trace_nf[1].J - trace_dir_nf[1].J) / max(abs(trace_dir_nf[1].J), 1e-30)
+println("  First-iteration J agreement (lbfgs, NF): $rel_J0_nf")
+@assert rel_J0_nf < 1e-4 "NF-preconditioned first-iter J disagrees: $rel_J0_nf"
+
+# Gradient check: NF-preconditioned GMRES gradient vs FD
+Z_nf_check = Matrix{ComplexF64}(assemble_full_Z(Z_efie, Mp, theta_init_nf))
+I_nf_check = solve_forward(Z_nf_check, Vector{ComplexF64}(v);
+                             solver=:gmres, preconditioner=P_nf_opt,
+                             gmres_tol=1e-10, gmres_maxiter=300)
+lam_nf_check = solve_adjoint(Z_nf_check, Q, I_nf_check;
+                               solver=:gmres, preconditioner=P_nf_opt,
+                               gmres_tol=1e-10, gmres_maxiter=300)
+g_nf_check = gradient_impedance(Mp, I_nf_check, lam_nf_check)
+
+function J_of_theta_nf(theta_vec)
+    Z_t = Matrix{ComplexF64}(assemble_full_Z(Z_efie, Mp, theta_vec))
+    I_t = Z_t \ v
+    return real(dot(I_t, Q * I_t))
+end
+
+rel_errors_nf = Float64[]
+n_check_nf = min(Nt, 5)
+for p in 1:n_check_nf
+    g_fd = fd_grad(J_of_theta_nf, theta_init_nf, p; h=1e-5)
+    rel_err = abs(g_nf_check[p] - g_fd) / max(abs(g_fd), abs(g_nf_check[p]), 1e-30)
+    push!(rel_errors_nf, rel_err)
+end
+max_rel_err_nf = maximum(rel_errors_nf)
+println("  NF-preconditioned gradient max rel error vs FD: $max_rel_err_nf")
+@assert max_rel_err_nf < 1e-3 "NF-preconditioned gradient inaccurate: $max_rel_err_nf"
+
+# optimize_directivity with NF-preconditioned GMRES
+theta_opt_dir_nf_d, trace_dir_nf_d = optimize_directivity(
+    Z_efie, Mp, v, Q, Q_total_test, theta_init_nf;
+    maxiter=5, tol=1e-8, verbose=false, solver=:direct,
+)
+theta_opt_nf_d, trace_nf_d = optimize_directivity(
+    Z_efie, Mp, v, Q, Q_total_test, theta_init_nf;
+    maxiter=5, tol=1e-8, verbose=false,
+    solver=:gmres, nf_preconditioner=P_nf_opt,
+    gmres_tol=1e-8, gmres_maxiter=300,
+)
+@assert length(trace_nf_d) >= 2
+rel_J0_nf_d = abs(trace_nf_d[1].J - trace_dir_nf_d[1].J) / max(abs(trace_dir_nf_d[1].J), 1e-30)
+println("  First-iteration J_ratio agreement (directivity, NF): $rel_J0_nf_d")
+@assert rel_J0_nf_d < 1e-3
+
+# nf_preconditioner=nothing should behave same as unpreconditioned
+theta_opt_none, trace_none = optimize_lbfgs(
+    Z_efie, Mp, v, Q, theta_init_nf;
+    maxiter=3, tol=1e-8, verbose=false,
+    solver=:gmres, nf_preconditioner=nothing,
+    gmres_tol=1e-8, gmres_maxiter=300,
+)
+rel_J0_none = abs(trace_none[1].J - trace_gm[1].J) / max(abs(trace_gm[1].J), 1e-30)
+println("  nf_preconditioner=nothing matches unpreconditioned: $rel_J0_none")
+@assert rel_J0_none < 1e-10
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 24: Cluster tree construction
+# ─────────────────────────────────────────────────
+println("\n── Test 24: Cluster tree construction ──")
+
+centers_ct = rwg_centers(mesh, rwg)
+@assert length(centers_ct) == N
+
+tree_ct = build_cluster_tree(centers_ct; leaf_size=8)
+@assert length(tree_ct.perm) == N
+@assert length(tree_ct.iperm) == N
+
+# perm and iperm should be inverses
+for i in 1:N
+    @assert tree_ct.iperm[tree_ct.perm[i]] == i "perm/iperm inverse check failed at i=$i"
+end
+
+# All indices 1:N should appear in perm exactly once
+@assert sort(tree_ct.perm) == collect(1:N) "perm is not a valid permutation"
+
+# Leaf nodes should have size <= leaf_size
+for i in eachindex(tree_ct.nodes)
+    if is_leaf(tree_ct, i)
+        @assert length(tree_ct.nodes[i].indices) <= tree_ct.leaf_size "Leaf too large at node $i"
+    end
+end
+
+# Root should cover all indices
+@assert tree_ct.nodes[1].indices == 1:N "Root does not cover all indices"
+
+# Admissibility should be false for overlapping clusters, true for well-separated ones
+leaves_ct = leaf_nodes(tree_ct)
+if length(leaves_ct) >= 2
+    # Self-block is never admissible
+    @assert !is_admissible(tree_ct, leaves_ct[1], leaves_ct[1])
+end
+
+println("  Tree: $(length(tree_ct.nodes)) nodes, $(length(leaves_ct)) leaves")
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 25: ACA low-rank approximation accuracy
+# ─────────────────────────────────────────────────
+println("\n── Test 25: ACA low-rank approximation accuracy ──")
+
+# Build EFIE cache for ACA entry evaluation
+cache_aca = DifferentiableMoM._build_efie_cache(mesh, rwg, k; quad_order=3, eta0=eta0)
+
+# Find two well-separated leaf clusters for testing
+tree_aca = build_cluster_tree(centers_ct; leaf_size=8)
+leaves_aca = leaf_nodes(tree_aca)
+found_admissible = false
+global aca_row_node = 0
+global aca_col_node = 0
+for i_leaf in leaves_aca
+    for j_leaf in leaves_aca
+        if i_leaf != j_leaf && is_admissible(tree_aca, i_leaf, j_leaf; eta=1.5)
+            global aca_row_node = i_leaf
+            global aca_col_node = j_leaf
+            global found_admissible = true
+            break
+        end
+    end
+    found_admissible && break
+end
+
+if found_admissible
+    rn_aca = tree_aca.nodes[aca_row_node]
+    cn_aca = tree_aca.nodes[aca_col_node]
+    row_idx = [tree_aca.perm[k] for k in rn_aca.indices]
+    col_idx = [tree_aca.perm[k] for k in cn_aca.indices]
+
+    # Compute dense sub-block for reference
+    m_blk = length(row_idx)
+    n_blk = length(col_idx)
+    Z_sub = Matrix{ComplexF64}(undef, m_blk, n_blk)
+    for jj in 1:n_blk
+        for ii in 1:m_blk
+            Z_sub[ii, jj] = DifferentiableMoM._efie_entry(cache_aca, row_idx[ii], col_idx[jj])
+        end
+    end
+
+    # ACA low-rank approximation
+    U_aca, V_aca = aca_lowrank(cache_aca, row_idx, col_idx; tol=1e-6, max_rank=30)
+    rank_aca = size(U_aca, 2)
+    approx_aca = U_aca * V_aca'
+    err_aca = norm(approx_aca - Z_sub) / max(norm(Z_sub), 1e-30)
+
+    println("  Block size: $(m_blk) x $(n_blk), ACA rank: $rank_aca, rel error: $err_aca")
+    @assert err_aca < 1e-4 "ACA approximation too inaccurate: $err_aca"
+    @assert rank_aca < min(m_blk, n_blk) "ACA should compress: rank=$rank_aca >= min($m_blk,$n_blk)"
+else
+    println("  SKIP: no admissible block pair found (mesh too small)")
+end
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 26: ACA operator matvec accuracy
+# ─────────────────────────────────────────────────
+println("\n── Test 26: ACA operator matvec accuracy ──")
+
+A_aca_op = build_aca_operator(mesh, rwg, k;
+                               leaf_size=8, eta=1.5, aca_tol=1e-8,
+                               max_rank=50, quad_order=3, mesh_precheck=false)
+@assert size(A_aca_op) == (N, N)
+
+# Compare matvec against dense Z
+Random.seed!(42)
+x_test = randn(ComplexF64, N)
+y_dense = Z_efie * x_test
+y_aca = A_aca_op * x_test
+
+rel_matvec_err = norm(y_aca - y_dense) / norm(y_dense)
+println("  Dense blocks: $(length(A_aca_op.dense_blocks)), Low-rank blocks: $(length(A_aca_op.lowrank_blocks))")
+println("  Matvec relative error: $rel_matvec_err")
+@assert rel_matvec_err < 1e-5 "ACA matvec too inaccurate: $rel_matvec_err"
+
+# Test adjoint matvec
+A_adj = adjoint(A_aca_op)
+y_adj_dense = Z_efie' * x_test
+y_adj_aca = A_adj * x_test
+
+rel_adj_err = norm(y_adj_aca - y_adj_dense) / norm(y_adj_dense)
+println("  Adjoint matvec relative error: $rel_adj_err")
+@assert rel_adj_err < 1e-5 "ACA adjoint matvec too inaccurate: $rel_adj_err"
+
+# Test getindex fallback (used by NF preconditioner)
+for _ in 1:10
+    ii = rand(1:N)
+    jj = rand(1:N)
+    @assert A_aca_op[ii, jj] == Z_efie[ii, jj] "getindex mismatch at ($ii,$jj)"
+end
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 27: ACA operator solve (forward + adjoint)
+# ─────────────────────────────────────────────────
+println("\n── Test 27: ACA operator solve (forward + adjoint) ──")
+
+# Build NF preconditioner from geometry (not from dense Z)
+P_nf_aca = build_nearfield_preconditioner(mesh, rwg, k, lambda0;
+                                            quad_order=3, mesh_precheck=false)
+
+# Forward solve via ACA GMRES
+I_aca_gm, stats_aca = solve_gmres(A_aca_op, Vector{ComplexF64}(v);
+                                    preconditioner=P_nf_aca,
+                                    tol=1e-8, maxiter=300)
+
+# Compare against direct dense solve
+I_direct_ref = Z_efie \ v
+rel_solve_err = norm(I_aca_gm - I_direct_ref) / norm(I_direct_ref)
+println("  Forward solve relative error vs direct: $rel_solve_err")
+println("  GMRES iterations: $(stats_aca.niter)")
+@assert rel_solve_err < 1e-4 "ACA forward solve too inaccurate: $rel_solve_err"
+
+# Adjoint solve via ACA GMRES
+rhs_adj = Q * I_aca_gm
+lam_aca, stats_adj = solve_gmres_adjoint(A_aca_op, rhs_adj;
+                                           preconditioner=P_nf_aca,
+                                           tol=1e-8, maxiter=300)
+lam_direct = Z_efie' \ (Q * I_direct_ref)
+rel_adj_solve = norm(lam_aca - lam_direct) / max(norm(lam_direct), 1e-30)
+println("  Adjoint solve relative error: $rel_adj_solve")
+@assert rel_adj_solve < 1e-3 "ACA adjoint solve too inaccurate: $rel_adj_solve"
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 28: solve_scattering workflow
+# ─────────────────────────────────────────────────
+println("\n── Test 28: solve_scattering workflow ──")
+
+# Test with small mesh — auto should pick dense_direct
+pw_exc = make_plane_wave(k_vec, E0, pol)
+result_auto = solve_scattering(mesh, freq, pw_exc;
+                                verbose=false, check_resolution=false)
+@assert result_auto.method == :dense_direct "Expected :dense_direct for N=$(result_auto.N), got $(result_auto.method)"
+@assert result_auto.N == N
+
+# Verify solution matches manual dense solve
+rel_workflow_err = norm(result_auto.I_coeffs - I_pec) / norm(I_pec)
+println("  Auto (dense_direct) vs manual: rel_err=$rel_workflow_err")
+@assert rel_workflow_err < 1e-10 "Workflow dense_direct solution mismatch: $rel_workflow_err"
+
+# Force ACA GMRES method
+result_aca_forced = solve_scattering(mesh, freq, pw_exc;
+                                      method=:aca_gmres,
+                                      aca_tol=1e-8, aca_leaf_size=8,
+                                      nf_cutoff_lambda=1.0,
+                                      gmres_tol=1e-8, gmres_maxiter=300,
+                                      verbose=false, check_resolution=false)
+@assert result_aca_forced.method == :aca_gmres
+rel_aca_workflow = norm(result_aca_forced.I_coeffs - I_pec) / norm(I_pec)
+println("  Forced ACA vs dense direct: rel_err=$rel_aca_workflow")
+@assert rel_aca_workflow < 1e-4 "Workflow ACA solution mismatch: $rel_aca_workflow"
+
+# Force dense GMRES method
+result_dgm = solve_scattering(mesh, freq, pw_exc;
+                               method=:dense_gmres,
+                               nf_cutoff_lambda=1.0,
+                               gmres_tol=1e-8, gmres_maxiter=300,
+                               verbose=false, check_resolution=false)
+@assert result_dgm.method == :dense_gmres
+rel_dgm = norm(result_dgm.I_coeffs - I_pec) / norm(I_pec)
+println("  Forced dense_gmres vs direct: rel_err=$rel_dgm")
+@assert rel_dgm < 1e-6 "Workflow dense GMRES solution mismatch: $rel_dgm"
+
+# Test with pre-assembled excitation vector
+result_vec = solve_scattering(mesh, freq, v;
+                               verbose=false, check_resolution=false)
+@assert result_vec.method == :dense_direct
+@assert norm(result_vec.I_coeffs - I_pec) / norm(I_pec) < 1e-10
+
+# Test mesh resolution warning
+result_warn = solve_scattering(mesh, 1e6, pw_exc;
+                                verbose=false, check_resolution=true)
+# At 1 MHz, lambda = 300m, mesh is massively over-resolved → no warning
+@assert isempty(result_warn.warnings) || result_warn.mesh_report.meets_target
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 29: Physical Optics (PO) solver
+# ─────────────────────────────────────────────────
+println("\n── Test 29: Physical Optics (PO) solver ──")
+
+# 29a: Illumination test on flat plate
+# Plate at z=0, plane wave from +z direction (k along -z)
+po_mesh = make_rect_plate(0.2, 0.2, 5, 5)  # reuse existing test plate
+po_freq = 3e9
+po_c0 = 299792458.0
+po_lam = po_c0 / po_freq
+po_k = 2π / po_lam
+
+# Wave traveling in -z: should illuminate the +z-facing surface
+pw_down = make_plane_wave(Vec3(0.0, 0.0, -po_k), 1.0, Vec3(1.0, 0.0, 0.0))
+po_grid = make_sph_grid(36, 72)
+po_result = solve_po(po_mesh, po_freq, pw_down; grid=po_grid)
+
+n_illum = count(po_result.illuminated)
+n_total = ntriangles(po_mesh)
+# For a plate at z=0 with normals pointing in +z, wave from +z traveling -z
+# should illuminate all faces (k̂·n̂ = -1 < 0)
+println("  Illumination (wave -z on +z plate): $n_illum / $n_total")
+@assert n_illum == n_total "Expected all $n_total triangles illuminated, got $n_illum"
+
+# Wave traveling in +z: should illuminate NO faces (backside)
+pw_up = make_plane_wave(Vec3(0.0, 0.0, po_k), 1.0, Vec3(1.0, 0.0, 0.0))
+po_result_back = solve_po(po_mesh, po_freq, pw_up; grid=po_grid)
+n_illum_back = count(po_result_back.illuminated)
+println("  Illumination (wave +z on +z plate): $n_illum_back / $n_total")
+@assert n_illum_back == 0 "Expected 0 triangles illuminated, got $n_illum_back"
+
+# 29b: PO specular RCS on flat plate
+# Analytical PO: σ_specular = 4π A² / λ² for a flat plate at broadside
+Lx_po, Ly_po = 0.2, 0.2
+A_plate = Lx_po * Ly_po
+sigma_analytical = 4π * A_plate^2 / po_lam^2
+sigma_analytical_dB = 10 * log10(sigma_analytical)
+
+# Find the specular direction (θ≈π, backscatter for -z incidence → r̂ = +z)
+# Actually for -z incidence, specular reflection from plate at z=0 is +z direction
+sigma_po = bistatic_rcs(po_result.E_ff; E0=1.0)
+# Find the direction closest to +z (θ≈0)
+best_idx = argmax([po_grid.rhat[3, q] for q in 1:length(po_grid.w)])
+sigma_spec = sigma_po[best_idx]
+sigma_spec_dB = 10 * log10(max(sigma_spec, 1e-30))
+
+println("  PO specular RCS: $(round(sigma_spec_dB, digits=2)) dBsm")
+println("  Analytical 4πA²/λ²: $(round(sigma_analytical_dB, digits=2)) dBsm")
+po_err_dB = abs(sigma_spec_dB - sigma_analytical_dB)
+println("  Error: $(round(po_err_dB, digits=2)) dB")
+@assert po_err_dB < 1.5 "PO specular RCS error $(po_err_dB) dB > 1.5 dB tolerance"
+
+# 29c: PO vs MoM comparison on small plate
+# At broadside, PO and MoM should agree within a few dB for specular
+po_rwg = build_rwg(po_mesh)
+po_Z = assemble_Z_efie(po_mesh, po_rwg, po_k)
+po_v = assemble_excitation(po_mesh, po_rwg, pw_down)
+po_I = po_Z \ po_v
+po_G = radiation_vectors(po_mesh, po_rwg, po_grid, po_k)
+po_NΩ = length(po_grid.w)
+po_Eff_mom = compute_farfield(po_G, Vector{ComplexF64}(po_I), po_NΩ)
+sigma_mom = bistatic_rcs(po_Eff_mom; E0=1.0)
+sigma_mom_spec_dB = 10 * log10(max(sigma_mom[best_idx], 1e-30))
+
+mom_po_diff_dB = abs(sigma_mom_spec_dB - sigma_spec_dB)
+println("  MoM specular RCS: $(round(sigma_mom_spec_dB, digits=2)) dBsm")
+println("  MoM vs PO specular diff: $(round(mom_po_diff_dB, digits=2)) dB")
+@assert mom_po_diff_dB < 3.0 "MoM vs PO specular difference $(mom_po_diff_dB) dB > 3.0 dB"
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 22 TESTS PASSED")
+println("ALL 29 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)

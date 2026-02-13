@@ -47,9 +47,9 @@ To quantify the singularity, expand $G$ for small $R$:
 G(\mathbf{r},\mathbf{r}') = \frac{1}{4\pi R} - \frac{ik}{4\pi} + O(R).
 ```
 
-The leading term $1/(4\pi R)$ is **non‑integrable in the sense of Riemann** over a two‑dimensional domain: a double integral $\iint 1/R \, dS\, dS'$ over coincident triangles diverges logarithmically if treated naively. However, the **physical** EFIE matrix elements $Z_{mn}$ must remain finite because they represent measurable interactions between finite current elements.
+The leading term $1/(4\pi R)$ is difficult to evaluate accurately with standard product Gaussian quadrature over a two‑dimensional domain: a double integral $\iint 1/R \, dS\, dS'$ over coincident triangles converges (the singularity is integrable), but the **physical** EFIE matrix elements $Z_{mn}$ require high accuracy because they represent measurable interactions between finite current elements.
 
-The divergence is integrable in the **principal‑value sense** when the proper test‑source pairing is considered, but standard Gaussian quadrature cannot capture this cancellation accurately.
+The integral converges, but standard Gaussian quadrature cannot capture the near-singular behavior accurately without special treatment.
 
 ### 1.3 Why Product Gaussian Quadrature Fails
 
@@ -140,7 +140,7 @@ Consider a typical RF frequency $f = 3\ \text{GHz}$, giving $k = 2\pi f/c \appro
 
 The split is implemented in two functions:
 
-- **`greens_smooth(k, R)`** (in `src/Greens.jl`): computes $G_{\mathrm{smooth}} = (e^{-ikR}-1)/(4\pi R)$ with careful handling of the small‑$R$ limit using the series expansion to avoid catastrophic cancellation.
+- **`greens_smooth(r, rp, k)`** (in `src/Greens.jl`): computes $G_{\mathrm{smooth}} = (e^{-ikR}-1)/(4\pi R)$ where $R = |\mathbf{r} - \mathbf{r}'|$, taking two position vectors `r` and `rp` and the wavenumber `k`. Uses careful handling of the small‑$R$ limit via series expansion to avoid catastrophic cancellation.
 - **`self_cell_contribution`** (in `src/SingularIntegrals.jl`): accumulates the singular part $G_{\mathrm{sing}}$ using the semi‑analytical formula described in Section 3.
 
 When assembling matrix entries, the code branches depending on whether the source and observation triangles are the same (self‑interaction) or different:
@@ -694,16 +694,16 @@ Computes the smooth part of the Green’s function:
 ```math
 G_{\mathrm{smooth}}(k,R) = \frac{e^{-ikR} - 1}{4\pi R}.
 ```
-For small $R$, it uses a Taylor expansion to avoid catastrophic cancellation. This function is called for **all** quadrature points, both singular and non‑singular, because the full Green’s function is never evaluated directly—the split $G = G_{\mathrm{smooth}} + G_{\mathrm{sing}}$ is used throughout.
+For small $R$, it uses a Taylor expansion to avoid catastrophic cancellation. For self-cell interactions, the kernel is split into $G = G_{\mathrm{smooth}} + G_{\mathrm{sing}}$ and this function provides the smooth part. For non-self interactions, the full `greens(rm, rn, k)` is used directly.
 
-#### `analytical_integral_1overR(P, tri_verts)` (in `src/SingularIntegrals.jl`)
+#### `analytical_integral_1overR(P, V1, V2, V3)` (in `src/SingularIntegrals.jl`)
 Computes the singular integral
 ```math
 S(\mathbf{P}) = \int_T \frac{1}{|\mathbf{P} - \mathbf{r}'|}\, dS'
 ```
 using the closed‑form edge‑log formula described in Section 3. The arguments are:
-- `P`: observation point (3‑element vector).
-- `tri_verts`: 3×3 matrix containing the triangle vertices.
+- `P`: observation point (`Vec3`).
+- `V1`, `V2`, `V3`: three separate `Vec3` arguments representing the triangle vertices.
 
 The function returns a real number (the value of $S(\mathbf{P})$). Special cases (point on edge, point at vertex) are handled with care to avoid division by zero.
 
@@ -838,7 +838,7 @@ The following exercises reinforce the key concepts of singular integration, rang
 
 11. **Testing `greens_smooth`**: Write a Julia script that compares `greens_smooth(k,R)` (from `src/Greens.jl`) with the direct evaluation $(e^{-ikR}-1)/(4\pi R)$ for a range of $R$ values from $10^{-10}$ to $1$. Plot the relative error and verify that the series expansion used for small $R$ prevents catastrophic cancellation.
 
-12. **Validating `analytical_integral_1overR`**: Create a test that computes $S(\mathbf{P})$ for a given triangle and observation point using both `analytical_integral_1overR` and high‑order Gaussian quadrature (e.g., `tri_quad_rule(10)`). Since the integrand $1/R$ is singular when $\mathbf{P}$ lies on the triangle, place $\mathbf{P}$ slightly above the triangle (e.g., offset by $10^{-6}$ in the normal direction) to make the integral regular. Compare the results for several triangle shapes and point locations.
+12. **Validating `analytical_integral_1overR`**: Create a test that computes $S(\mathbf{P})$ for a given triangle and observation point using both `analytical_integral_1overR` and high‑order Gaussian quadrature (e.g., `tri_quad_rule(7)`). Since the integrand $1/R$ is singular when $\mathbf{P}$ lies on the triangle, place $\mathbf{P}$ slightly above the triangle (e.g., offset by $10^{-6}$ in the normal direction) to make the integral regular. Compare the results for several triangle shapes and point locations.
 
 13. **Energy conservation test**: Modify `examples/ex_convergence.jl` to also compute the energy ratio $P_{\mathrm{rad}}/P_{\mathrm{in}}$ when singular integration is **disabled** (modify `self_cell_contribution` to use standard quadrature for the singular part). Run the test for a simple plate mesh and compare the energy ratios with and without singular treatment.
 
