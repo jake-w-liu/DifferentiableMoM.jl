@@ -192,11 +192,14 @@ else
     curve_order = ["PO"]
 
     MAX_N_DIRECT = 10_000
-    # Adaptive NF cutoff: 5λ for small N, 0.5λ for large N (avoids OOM in sparse LU)
-    nf_cutoff_for(N_m) = N_m <= 10_000 ? 5.0 * λ_air : 0.5 * λ_air
+    # NF cutoff: 5λ for small N, 2λ for large N (ILU handles the fill-in)
+    nf_cutoff_for(N_m) = N_m <= 10_000 ? 5.0 * λ_air : 2.0 * λ_air
+    # Factorization: full LU for small N, ILU for large N (avoids OOM)
+    nf_fac_for(N_m) = N_m <= 10_000 ? :lu : :ilu
     gmres_maxiter_for(N_m) = N_m <= 10_000 ? 1000 : 2000
+    ILU_TAU = 1e-3
 
-    println("\n── Solver comparison (NF cutoff: 5λ for N≤10k, 0.5λ for N>10k) ──")
+    println("\n── Solver comparison (NF: 5λ+LU for N≤10k, 2λ+ILU for N>10k) ──")
     println("  Level          N     Solver        Asm(s)  Sol(s)  Iters  Backscatter  RMSE vs PO")
     println("  " * "─"^88)
 
@@ -238,9 +241,12 @@ else
         t_asm_i = @elapsed A_m = build_aca_operator(m, rwg_m, k_air;
             leaf_size=32, eta=1.5, aca_tol=1e-6, max_rank=80)
         cutoff = nf_cutoff_for(N_m)
-        println("    Building NF preconditioner (cutoff=$(round(cutoff, digits=1))m)...")
-        t_nf = @elapsed P_nf = build_nearfield_preconditioner(m, rwg_m, k_air, cutoff)
-        println("    NF: nnz=$(round(P_nf.nnz_ratio * 100, digits=1))%, build $(round(t_nf, digits=1))s")
+        fac = nf_fac_for(N_m)
+        println("    Building NF preconditioner (cutoff=$(round(cutoff, digits=1))m, fac=$fac)...")
+        t_nf = @elapsed P_nf = build_nearfield_preconditioner(m, rwg_m, k_air, cutoff;
+            factorization=fac, ilu_tau=ILU_TAU)
+        fac_info = fac == :ilu ? "ilu(τ=$(ILU_TAU))" : "lu"
+        println("    NF: nnz=$(round(P_nf.nnz_ratio * 100, digits=1))%, $fac_info, build $(round(t_nf, digits=1))s")
         t_sol_i = @elapsed begin
             I_i, stats = solve_gmres(A_m, v_m; preconditioner=P_nf,
                 tol=1e-6, maxiter=gmres_maxiter_for(N_m))
