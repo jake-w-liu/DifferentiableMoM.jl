@@ -371,6 +371,47 @@ function build_nearfield_preconditioner(mesh::TriMesh, rwg::RWGData, k, cutoff::
 end
 
 """
+    build_nearfield_preconditioner(Z_nf_sparse; factorization=:lu, ilu_tau=1e-3)
+
+Build a preconditioner directly from a pre-assembled sparse near-field matrix.
+Skips the distance-based neighbor search (useful for MLFMA where Z_near is
+already assembled with the correct sparsity pattern from the octree).
+"""
+function build_nearfield_preconditioner(Z_nf::SparseMatrixCSC{ComplexF64,Int};
+                                         factorization::Symbol=:lu,
+                                         ilu_tau::Float64=1e-3)
+    N = size(Z_nf, 1)
+    nnz_ratio = nnz(Z_nf) / max(N * N, 1)
+
+    if factorization == :ilu
+        ilu_fac = IncompleteLU.ilu(Z_nf, τ = ilu_tau)
+        return ILUPreconditionerData(ilu_fac, Inf, nnz_ratio, ilu_tau)
+    elseif factorization == :lu
+        Z_nf_fac = lu(Z_nf)
+        return NearFieldPreconditionerData(Z_nf_fac, Inf, nnz_ratio)
+    elseif factorization == :diag
+        dinv = Vector{ComplexF64}(undef, N)
+        maxabs = 0.0
+        @inbounds for i in 1:N
+            zii = Z_nf[i, i]
+            dinv[i] = zii
+            ai = abs(zii)
+            if ai > maxabs; maxabs = ai; end
+        end
+        floor_abs = 1e-10 * max(maxabs, 1.0)
+        @inbounds for i in 1:N
+            if abs(dinv[i]) < floor_abs
+                dinv[i] = floor_abs + 0im
+            end
+            dinv[i] = inv(dinv[i])
+        end
+        return DiagonalPreconditionerData(dinv, Inf, nnz_ratio)
+    else
+        error("Invalid factorization: $factorization (expected :lu, :ilu, or :diag)")
+    end
+end
+
+"""
     NearFieldOperator
 
 Callable wrapper for use with Krylov.jl as a preconditioner.
