@@ -28,9 +28,10 @@ produce a warning (or error if `error_on_underresolved=true`).
 
 # Keyword Arguments
 ## Method selection
-- `method=:auto`: one of `:auto`, `:dense_direct`, `:dense_gmres`, `:aca_gmres`
+- `method=:auto`: one of `:auto`, `:dense_direct`, `:dense_gmres`, `:aca_gmres`, `:mlfma`
 - `dense_direct_limit=2000`: N threshold below which dense direct is used
 - `dense_gmres_limit=10000`: N threshold below which dense GMRES is used (above → ACA)
+- `mlfma_threshold=50000`: N threshold above which MLFMA is used instead of ACA
 
 ## Mesh validation
 - `check_resolution=true`: run mesh resolution check
@@ -64,6 +65,7 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
                           method::Symbol=:auto,
                           dense_direct_limit::Int=2000,
                           dense_gmres_limit::Int=10000,
+                          mlfma_threshold::Int=50000,
                           check_resolution::Bool=true,
                           points_per_wavelength::Real=10.0,
                           error_on_underresolved::Bool=false,
@@ -79,8 +81,8 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
                           quad_order::Int=3,
                           c0::Real=C0_DEFAULT)
     freq_hz > 0 || error("solve_scattering: freq_hz must be > 0")
-    method in (:auto, :dense_direct, :dense_gmres, :aca_gmres) ||
-        error("solve_scattering: method must be :auto, :dense_direct, :dense_gmres, or :aca_gmres")
+    method in (:auto, :dense_direct, :dense_gmres, :aca_gmres, :mlfma) ||
+        error("solve_scattering: method must be :auto, :dense_direct, :dense_gmres, :aca_gmres, or :mlfma")
 
     warnings = String[]
     lambda = Float64(c0) / Float64(freq_hz)
@@ -115,8 +117,10 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
             selected_method = :dense_direct
         elseif N <= dense_gmres_limit
             selected_method = :dense_gmres
-        else
+        elseif N <= mlfma_threshold
             selected_method = :aca_gmres
+        else
+            selected_method = :mlfma
         end
         verbose && println("  Auto-selected method: $selected_method (N=$N)")
     else
@@ -133,6 +137,7 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
     length(v) == N || error("solve_scattering: excitation length $(length(v)) != N=$N")
 
     # ── Step 5: Assembly ──
+    local A_mlfma
     t_assembly = @elapsed begin
         if selected_method == :dense_direct || selected_method == :dense_gmres
             Z = assemble_Z_efie(mesh, rwg, k; quad_order=quad_order, mesh_precheck=false)
@@ -141,6 +146,9 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
                                        leaf_size=aca_leaf_size, eta=aca_eta,
                                        aca_tol=aca_tol, max_rank=aca_max_rank,
                                        quad_order=quad_order, mesh_precheck=false)
+        elseif selected_method == :mlfma
+            A_mlfma = build_mlfma_operator(mesh, rwg, k;
+                                            quad_order=quad_order, verbose=verbose)
         end
     end
     verbose && println("  Assembly: $(round(t_assembly, digits=3)) s")
@@ -158,6 +166,23 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
     if selected_method == :dense_direct
         P_nf = nothing
         t_precond = 0.0
+    elseif selected_method == :mlfma
+        # MLFMA uses its built-in near-field matrix for preconditioning
+        if preconditioner == :auto
+            precond_used = :ilu
+        end
+        if precond_used == :none
+            P_nf = nothing
+        else
+            factorization = precond_used == :diag ? :diag : (precond_used == :ilu ? :ilu : :lu)
+            t_precond = @elapsed begin
+                P_nf = build_nearfield_preconditioner(A_mlfma.Z_near;
+                                                       factorization=factorization)
+            end
+            nnz_ratio = nnz(A_mlfma.Z_near) / N^2
+            verbose && println("  Preconditioner ($precond_used): $(round(t_precond, digits=3)) s, " *
+                               "nnz=$(round(nnz_ratio*100, digits=1))%")
+        end
     else
         if preconditioner == :auto
             precond_used = :lu
@@ -201,6 +226,12 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
             gmres_residual = isempty(stats.residuals) ? NaN : stats.residuals[end]
         elseif selected_method == :aca_gmres
             I_coeffs, stats = solve_gmres(A_aca, v;
+                                           preconditioner=P_nf,
+                                           tol=gmres_tol, maxiter=gmres_maxiter)
+            gmres_iters = stats.niter
+            gmres_residual = isempty(stats.residuals) ? NaN : stats.residuals[end]
+        elseif selected_method == :mlfma
+            I_coeffs, stats = solve_gmres(A_mlfma, v;
                                            preconditioner=P_nf,
                                            tol=gmres_tol, maxiter=gmres_maxiter)
             gmres_iters = stats.niter

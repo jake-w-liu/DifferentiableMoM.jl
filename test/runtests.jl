@@ -2418,10 +2418,115 @@ println("  30e: ILU adjoint GMRES — $(stats_adj.niter) iters, rel error $(roun
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 31: MLFMA operator
+# ─────────────────────────────────────────────────
+println("\n--- Test 31: MLFMA operator ---")
+
+# Setup: 2λ × 2λ flat plate at 3 GHz
+mlfma_freq = 3e9
+mlfma_lambda = 299792458.0 / mlfma_freq
+mlfma_k = 2π / mlfma_lambda
+mlfma_Lx = 2 * mlfma_lambda
+mlfma_Ly = 2 * mlfma_lambda
+mlfma_Nx = 10
+mlfma_Ny = 10
+mlfma_mesh = make_rect_plate(mlfma_Lx, mlfma_Ly, mlfma_Nx, mlfma_Ny)
+mlfma_rwg = build_rwg(mlfma_mesh)
+mlfma_N = mlfma_rwg.nedges
+println("  Setup: $(mlfma_Nx)×$(mlfma_Ny) plate, N=$mlfma_N, freq=$(mlfma_freq/1e9) GHz")
+
+# 31a: Octree construction
+mlfma_centers = rwg_centers(mlfma_mesh, mlfma_rwg)
+octree = build_octree(mlfma_centers, mlfma_k; leaf_lambda=0.5)
+
+# Verify all BFs are assigned via permutation
+@assert length(octree.perm) == mlfma_N
+@assert length(octree.iperm) == mlfma_N
+@assert sort(octree.perm) == 1:mlfma_N  "perm must be a permutation of 1:N"
+
+# Verify perm/iperm are inverse of each other
+for i in 1:mlfma_N
+    @assert octree.iperm[octree.perm[i]] == i "perm/iperm inconsistency at $i"
+end
+
+leaf_level = octree.levels[octree.nLevels]
+n_leaf_boxes = length(leaf_level.boxes)
+println("  31a: Octree — $(octree.nLevels) levels, $n_leaf_boxes leaf boxes")
+
+# Verify neighbors and interaction_list don't overlap
+for box in leaf_level.boxes
+    nbr_set = Set(box.neighbors)
+    il_set = Set(box.interaction_list)
+    @assert isempty(intersect(nbr_set, il_set)) "Neighbor/interaction_list overlap for box $(box.id)"
+end
+println("  31a: PASS — no neighbor/interaction_list overlaps")
+
+# 31b: Near-field matrix accuracy
+Z_dense_mlfma = assemble_Z_efie(mlfma_mesh, mlfma_rwg, mlfma_k; mesh_precheck=false)
+Z_near_mlfma = assemble_mlfma_nearfield(octree, mlfma_mesh, mlfma_rwg, mlfma_k)
+
+# Check that near-field entries match dense for neighbor pairs
+max_nf_err = 0.0
+n_checked = 0
+for box in leaf_level.boxes
+    for nbr_id in box.neighbors
+        nbr_box = leaf_level.boxes[nbr_id]
+        for m_perm in box.bf_range
+            m = octree.perm[m_perm]
+            for n_perm in nbr_box.bf_range
+                n = octree.perm[n_perm]
+                err = abs(Z_near_mlfma[m, n] - Z_dense_mlfma[m, n])
+                ref = abs(Z_dense_mlfma[m, n])
+                if ref > 1e-15
+                    global max_nf_err = max(max_nf_err, err / ref)
+                end
+                global n_checked += 1
+            end
+        end
+    end
+end
+println("  31b: Near-field accuracy — checked $n_checked entries, max rel error = $(round(max_nf_err, sigdigits=3))")
+@assert max_nf_err < 1e-10 "Near-field entries do not match dense: max error $max_nf_err"
+println("  31b: PASS")
+
+# 31c: MLFMA matvec accuracy
+A_mlfma = build_mlfma_operator(mlfma_mesh, mlfma_rwg, mlfma_k;
+    leaf_lambda=0.5, quad_order=3, verbose=false)
+
+# Random test vector
+Random.seed!(42)
+x_test = randn(ComplexF64, mlfma_N)
+y_dense = Z_dense_mlfma * x_test
+y_mlfma = A_mlfma * x_test
+
+mlfma_matvec_err = norm(y_mlfma - y_dense) / norm(y_dense)
+println("  31c: MLFMA matvec — rel error = $(round(mlfma_matvec_err, sigdigits=3))")
+@assert mlfma_matvec_err < 0.05 "MLFMA matvec error too large: $mlfma_matvec_err (expected < 0.05)"
+println("  31c: PASS")
+
+# 31d: MLFMA + GMRES convergence
+mlfma_exc = PlaneWaveExcitation(Vec3(0.0, 0.0, -mlfma_k), 1.0, Vec3(1.0, 0.0, 0.0))
+mlfma_v = assemble_excitation(mlfma_mesh, mlfma_rwg, mlfma_exc)
+I_dense_ref = Z_dense_mlfma \ mlfma_v
+
+# Build preconditioner from MLFMA near-field
+P_mlfma = build_nearfield_preconditioner(A_mlfma.Z_near; factorization=:lu)
+I_mlfma, stats_mlfma = solve_gmres(A_mlfma, mlfma_v;
+    preconditioner=P_mlfma, tol=1e-4, maxiter=200)
+
+mlfma_sol_err = norm(I_mlfma - I_dense_ref) / norm(I_dense_ref)
+println("  31d: MLFMA+GMRES — $(stats_mlfma.niter) iters, sol rel error = $(round(mlfma_sol_err, sigdigits=3))")
+@assert stats_mlfma.niter < 200 "MLFMA GMRES did not converge in 200 iterations"
+@assert mlfma_sol_err < 0.1 "MLFMA solution error too large: $mlfma_sol_err (expected < 0.1)"
+println("  31d: PASS")
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 30 TESTS PASSED")
+println("ALL 31 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)
