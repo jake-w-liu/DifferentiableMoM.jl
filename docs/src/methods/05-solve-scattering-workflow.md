@@ -55,19 +55,21 @@ When `method=:auto` (the default), `solve_scattering` selects a solver strategy 
 \begin{cases}
 \texttt{:dense\_direct} & \text{if } N \le N_{\text{dd}}, \\
 \texttt{:dense\_gmres} & \text{if } N_{\text{dd}} < N \le N_{\text{dg}}, \\
-\texttt{:aca\_gmres} & \text{if } N > N_{\text{dg}},
+\texttt{:aca\_gmres} & \text{if } N_{\text{dg}} < N \le N_{\text{mlfma}}, \\
+\texttt{:mlfma} & \text{if } N > N_{\text{mlfma}},
 \end{cases}
 ```
 
-where $N_{\text{dd}} = 2000$ (`dense_direct_limit`) and $N_{\text{dg}} = 10{,}000$ (`dense_gmres_limit`) by default.
+where $N_{\text{dd}} = 2000$ (`dense_direct_limit`), $N_{\text{dg}} = 10{,}000$ (`dense_gmres_limit`), and $N_{\text{mlfma}} = 50{,}000$ (`mlfma_threshold`) by default.
 
 | N range | Method | Assembly | Solver | Memory |
 |---------|--------|----------|--------|--------|
 | $N \le 2000$ | `:dense_direct` | `assemble_Z_efie` | LU (`Z \ v`) | $O(N^2)$ |
 | $2000 < N \le 10{,}000$ | `:dense_gmres` | `assemble_Z_efie` | GMRES + NF preconditioner | $O(N^2)$ |
-| $N > 10{,}000$ | `:aca_gmres` | `build_aca_operator` | GMRES + NF preconditioner | $O(N \log^2 N)$ |
+| $10{,}000 < N \le 50{,}000$ | `:aca_gmres` | `build_aca_operator` | GMRES + NF preconditioner | $O(N \log^2 N)$ |
+| $N > 50{,}000$ | `:mlfma` | `build_mlfma_operator` | GMRES + reordered-ILU | $O(N \log N)$ |
 
-The dense $N \times N$ `ComplexF64` matrix occupies $16 N^2$ bytes. At $N = 2000$ this is 61 MiB (LU is fastest). At $N = 10{,}000$ it grows to 1.5 GiB (GMRES avoids $O(N^3)$ LU cost). Beyond $N = 10{,}000$, ACA H-matrix compression reduces both storage and matvec cost.
+The dense $N \times N$ `ComplexF64` matrix occupies $16 N^2$ bytes. At $N = 2000$ this is 61 MiB (LU is fastest). At $N = 10{,}000$ it grows to 1.5 GiB (GMRES avoids $O(N^3)$ LU cost). ACA H-matrix compression (used for $10k < N \le 50k$) reduces storage and matvec to $O(N \log^2 N)$. For very large problems ($N > 50{,}000$), MLFMA achieves $O(N \log N)$ complexity (see Chapter 6: MLFMA).
 
 The user can override auto-selection:
 
