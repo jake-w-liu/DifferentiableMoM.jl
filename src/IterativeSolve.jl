@@ -30,11 +30,13 @@ function solve_gmres(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:Number};
                      precond_side::Symbol=:left,
                      tol::Float64=1e-8,
                      maxiter::Int=200,
+                     memory::Int=20,
                      verbose::Bool=false)
     rhs_c = _as_complex_rhs(rhs)
 
     if preconditioner === nothing
         x, stats = Krylov.gmres(Z, rhs_c;
+                                 memory=memory,
                                  rtol=tol, atol=0.0,
                                  itmax=maxiter,
                                  verbose=(verbose ? 1 : 0))
@@ -42,6 +44,7 @@ function solve_gmres(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:Number};
         N_op = NearFieldOperator(preconditioner)
         x, stats = Krylov.gmres(Z, rhs_c;
                                  N=N_op,
+                                 memory=memory,
                                  rtol=tol, atol=0.0,
                                  itmax=maxiter,
                                  verbose=(verbose ? 1 : 0))
@@ -49,6 +52,7 @@ function solve_gmres(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:Number};
         M = NearFieldOperator(preconditioner)
         x, stats = Krylov.gmres(Z, rhs_c;
                                  M=M,
+                                 memory=memory,
                                  rtol=tol, atol=0.0,
                                  itmax=maxiter,
                                  verbose=(verbose ? 1 : 0))

@@ -588,8 +588,8 @@ function _build_spectral_phi(src_nphi::Int, tgt_nphi::Int,
 end
 
 """
-Apply spectral filtering to a (4, npts_src) matrix.
-Filters from parent sampling to child sampling using Legendre/Fourier truncation.
+Apply spectral filtering to a (4, npts_src) matrix using separated θ/φ filters.
+Used for aggregation (Lagrange interpolation child→parent).
 """
 function _filter_2step(data::Matrix{ComplexF64},
                         src::SphereSampling, tgt::SphereSampling,
@@ -628,6 +628,206 @@ function _filter_2step(data::Matrix{ComplexF64},
     return result
 end
 
+"""
+    associated_legendre_m_all(l_max, m, x)
+
+Compute P_l^m(x) for l = m, m+1, ..., l_max using stable upward recurrence.
+Uses unnormalized (Ferrer) associated Legendre functions without Condon-Shortley phase.
+"""
+function associated_legendre_m_all(l_max::Int, m::Int, x::Float64)
+    m >= 0 || error("m must be non-negative")
+    l_max >= m || error("l_max must be >= m")
+
+    P = Vector{Float64}(undef, l_max - m + 1)
+
+    # P_m^m(x) = (2m-1)!! * (1-x²)^{m/2}
+    pmm = 1.0
+    fact = 1.0
+    omx2 = sqrt(max(1.0 - x * x, 0.0))
+    for i in 1:m
+        pmm *= fact * omx2
+        fact += 2.0
+    end
+    P[1] = pmm
+
+    if l_max == m
+        return P
+    end
+
+    # P_{m+1}^m(x) = x * (2m+1) * P_m^m(x)
+    pmm1 = x * (2m + 1) * pmm
+    P[2] = pmm1
+
+    # Upward recurrence: (l-m) P_l^m = (2l-1) x P_{l-1}^m - (l+m-1) P_{l-2}^m
+    for l in (m + 2):l_max
+        pll = ((2l - 1) * x * P[l - m] - (l + m - 1) * P[l - m - 1]) / (l - m)
+        P[l - m + 1] = pll
+    end
+
+    return P
+end
+
+"""
+    _build_theta_filter_m(src_samp, tgt_samp, L_trunc, m)
+
+Build the θ spectral filter matrix for azimuthal mode m.
+Uses associated Legendre functions P_l^m for proper band-limiting of mode m.
+
+    Ft_m[i,j] = wθ_j * Σ_{l=m}^{L_trunc} (2l+1)/2 * [(l-m)!/(l+m)!] * P_l^m(x_i) * P_l^m(x_j)
+
+For m=0, this reduces to the standard Legendre filter.
+"""
+function _build_theta_filter_m(src_samp::SphereSampling, tgt_samp::SphereSampling,
+                                L_trunc::Int, m::Int)
+    nθs = src_samp.ntheta
+    nθt = tgt_samp.ntheta
+
+    src_gl_nodes, src_gl_weights = gauss_legendre(nθs)
+    tgt_gl_nodes, _ = gauss_legendre(nθt)
+
+    # Precompute normalization factors: (l-m)!/(l+m)! for l = m, ..., L_trunc
+    norm_fac = Vector{Float64}(undef, L_trunc - m + 1)
+    for l in m:L_trunc
+        # (l-m)!/(l+m)! = 1/[(l-m+1)(l-m+2)...(l+m)]
+        fac = 1.0
+        for j in (l - m + 1):(l + m)
+            fac *= j
+        end
+        norm_fac[l - m + 1] = 1.0 / fac
+    end
+
+    F = zeros(Float64, nθt, nθs)
+    for j in 1:nθs
+        xj = src_gl_nodes[j]
+        wj = src_gl_weights[j]
+        Pj = associated_legendre_m_all(L_trunc, m, xj)
+        for i in 1:nθt
+            xi = tgt_gl_nodes[i]
+            Pi = associated_legendre_m_all(L_trunc, m, xi)
+            val = 0.0
+            for l in m:L_trunc
+                idx = l - m + 1
+                val += (2l + 1) / 2.0 * norm_fac[idx] * Pi[idx] * Pj[idx]
+            end
+            F[i, j] = wj * val
+        end
+    end
+    return F
+end
+
+"""
+    _build_disagg_filters_all_m(parent_samp, child_samp, L_child)
+
+Build per-m θ filter matrices for disaggregation.
+Returns a Vector{Matrix{Float64}} indexed by m+1 (m = 0, ..., M_child),
+each of size (nθ_child × nθ_parent).
+"""
+function _build_disagg_filters_all_m(parent_samp::SphereSampling,
+                                      child_samp::SphereSampling,
+                                      L_child::Int)
+    M_child = div(child_samp.nphi, 2)
+    M_eff = min(M_child, L_child)  # can't have m > L_child
+
+    filters = Vector{Matrix{Float64}}(undef, M_eff + 1)
+    for m in 0:M_eff
+        filters[m + 1] = _build_theta_filter_m(parent_samp, child_samp, L_child, m)
+    end
+    return filters
+end
+
+"""
+Apply disaggregation spectral filter using per-m θ filters.
+Decomposes data into φ Fourier modes, applies P_l^m band-limiting for each m,
+then reconstructs at child φ points. Correctly handles all m modes.
+
+data: (4, npts_parent) → result: (4, npts_child)
+"""
+function _apply_disagg_filter(data::Matrix{ComplexF64},
+                               filters_m::Vector{Matrix{Float64}},
+                               parent_samp::SphereSampling,
+                               child_samp::SphereSampling)
+    nθp, nφp = parent_samp.ntheta, parent_samp.nphi
+    nθc, nφc = child_samp.ntheta, child_samp.nphi
+    M_eff = length(filters_m) - 1  # max m index
+
+    # φ values (uniform grid with half-sample offset)
+    parent_phi = [(j - 0.5) * 2π / nφp for j in 1:nφp]
+    child_phi  = [(j - 0.5) * 2π / nφc for j in 1:nφc]
+
+    # Step 1: DFT analysis in φ at parent sampling
+    # For each θ_s and component c, compute Fourier coefficients a_m, b_m
+    # a_0 = (1/nφ) Σ_j f(φ_j)
+    # a_m = (2/nφ) Σ_j f(φ_j) cos(mφ_j)  for m > 0
+    # b_m = (2/nφ) Σ_j f(φ_j) sin(mφ_j)  for m > 0
+    a_coeff = zeros(ComplexF64, 4, nθp, M_eff + 1)  # a_m[c, θ, m+1]
+    b_coeff = zeros(ComplexF64, 4, nθp, M_eff + 1)  # b_m[c, θ, m+1]
+
+    for it in 1:nθp
+        for ip in 1:nφp
+            q = (it - 1) * nφp + ip
+            φ = parent_phi[ip]
+            @inbounds for c in 1:4
+                dval = data[c, q]
+                a_coeff[c, it, 1] += dval  # m=0
+                for m in 1:M_eff
+                    a_coeff[c, it, m + 1] += dval * cos(m * φ)
+                    b_coeff[c, it, m + 1] += dval * sin(m * φ)
+                end
+            end
+        end
+        # Normalize
+        @inbounds for c in 1:4
+            a_coeff[c, it, 1] /= nφp
+            for m in 1:M_eff
+                a_coeff[c, it, m + 1] *= 2.0 / nφp
+                b_coeff[c, it, m + 1] *= 2.0 / nφp
+            end
+        end
+    end
+
+    # Step 2: Apply per-m θ filters
+    a_out = zeros(ComplexF64, 4, nθc, M_eff + 1)
+    b_out = zeros(ComplexF64, 4, nθc, M_eff + 1)
+
+    for m in 0:M_eff
+        Ft = filters_m[m + 1]  # (nθc, nθp)
+        for it_t in 1:nθc
+            @inbounds for c in 1:4
+                va = zero(ComplexF64)
+                vb = zero(ComplexF64)
+                for it_s in 1:nθp
+                    w = Ft[it_t, it_s]
+                    va += w * a_coeff[c, it_s, m + 1]
+                    if m > 0
+                        vb += w * b_coeff[c, it_s, m + 1]
+                    end
+                end
+                a_out[c, it_t, m + 1] = va
+                b_out[c, it_t, m + 1] = vb
+            end
+        end
+    end
+
+    # Step 3: IDFT synthesis at child φ points
+    result = zeros(ComplexF64, 4, nθc * nφc)
+    for it in 1:nθc
+        for ip in 1:nφc
+            q = (it - 1) * nφc + ip
+            φ = child_phi[ip]
+            @inbounds for c in 1:4
+                val = a_out[c, it, 1]  # m=0
+                for m in 1:M_eff
+                    val += a_out[c, it, m + 1] * cos(m * φ) +
+                           b_out[c, it, m + 1] * sin(m * φ)
+                end
+                result[c, q] = val
+            end
+        end
+    end
+
+    return result
+end
+
 # ─── MLFMAOperator ──────────────────────────────────────────────
 
 struct MLFMAOperator <: AbstractMatrix{ComplexF64}
@@ -639,10 +839,10 @@ struct MLFMAOperator <: AbstractMatrix{ComplexF64}
     samplings::Vector{SphereSampling}        # indexed by level (2:nLevels), so samplings[l-1]
     trans_factors::Vector{Dict{NTuple{3,Int}, Vector{ComplexF64}}}  # indexed same
     bf_patterns::Array{ComplexF64,3}         # (4, npts_leaf, N)
-    interp_theta::Vector{Matrix{Float64}}    # aggregation: spectral interp child→parent (θ)
-    interp_phi::Vector{Matrix{Float64}}      # aggregation: spectral interp child→parent (φ)
-    filter_theta::Vector{Matrix{Float64}}    # disaggregation: spectral filter parent→child (θ)
-    filter_phi::Vector{Matrix{Float64}}      # disaggregation: spectral filter parent→child (φ)
+    interp_theta::Vector{Matrix{Float64}}    # aggregation: Lagrange interp child→parent (θ) [unused, kept for compat]
+    interp_phi::Vector{Matrix{Float64}}      # aggregation: Lagrange interp child→parent (φ) [unused, kept for compat]
+    agg_filters::Vector{Vector{Matrix{Float64}}}    # aggregation: per-m θ filters [level][m+1]
+    disagg_filters::Vector{Vector{Matrix{Float64}}}  # disaggregation: per-m θ filters [level][m+1]
     N::Int
 end
 
@@ -732,12 +932,12 @@ function build_mlfma_operator(mesh::TriMesh, rwg::RWGData, k::Float64;
     verbose && println("$(round(time()-t0, digits=2))s")
 
     # 6. Interpolation (aggregation) and spectral filter (disaggregation) matrices
-    #    Aggregation uses Lagrange interpolation (child→parent, with correct θ ordering).
-    #    Disaggregation uses spectral filtering (parent→child band-limiting).
+    #    Aggregation uses Lagrange interpolation (child→parent, upsampling).
+    #    Disaggregation uses addition-theorem spectral filter (parent→child, band-limiting).
     interp_theta = Vector{Matrix{Float64}}()
     interp_phi = Vector{Matrix{Float64}}()
-    filt_theta = Vector{Matrix{Float64}}()
-    filt_phi = Vector{Matrix{Float64}}()
+    agg_filters = Vector{Vector{Matrix{Float64}}}()
+    disagg_filters = Vector{Vector{Matrix{Float64}}}()
 
     if nL > 2
         verbose && print("  MLFMA: Building interpolation/filter matrices... ")
@@ -745,22 +945,18 @@ function build_mlfma_operator(mesh::TriMesh, rwg::RWGData, k::Float64;
         for l in 2:nL-1
             child_samp = samplings[l]      # level l+1 (finer)
             parent_samp = samplings[l - 1]  # level l (coarser)
-            L_child = child_samp.L
 
-            # Aggregation: child → parent via Lagrange interpolation (converted to dense)
+            # Aggregation: Lagrange interp (kept as fallback, not used)
             It_sp, Ip_sp = build_interp_matrices(parent_samp, child_samp; order=6)
             push!(interp_theta, Matrix(It_sp))
             push!(interp_phi, Matrix(Ip_sp))
 
-            # Disaggregation: parent → child via spectral filtering
-            child_phi = [(j - 0.5) * 2π / child_samp.nphi for j in 1:child_samp.nphi]
-            parent_phi = [(j - 0.5) * 2π / parent_samp.nphi for j in 1:parent_samp.nphi]
-            M_child = div(child_samp.nphi, 2)
-            Ft = _build_spectral_theta(parent_samp, child_samp, L_child)
-            Fp = _build_spectral_phi(parent_samp.nphi, child_samp.nphi,
-                                      parent_phi, child_phi, M_child)
-            push!(filt_theta, Ft)
-            push!(filt_phi, Fp)
+            # Per-m spectral filters using associated Legendre P_l^m
+            L_child = child_samp.L
+            # Aggregation: child → parent (spectral interp, L_trunc = L_child)
+            push!(agg_filters, _build_disagg_filters_all_m(child_samp, parent_samp, L_child))
+            # Disaggregation: parent → child (spectral filter, L_trunc = L_child)
+            push!(disagg_filters, _build_disagg_filters_all_m(parent_samp, child_samp, L_child))
         end
         verbose && println("$(round(time()-t0, digits=2))s")
     end
@@ -769,7 +965,7 @@ function build_mlfma_operator(mesh::TriMesh, rwg::RWGData, k::Float64;
 
     return MLFMAOperator(octree, Z_near, k, eta0, prefactor,
                           samplings, trans_factors, bf_patterns,
-                          interp_theta, interp_phi, filt_theta, filt_phi, N)
+                          interp_theta, interp_phi, agg_filters, disagg_filters, N)
 end
 
 # ─── Phase shift helper ─────────────────────────────────────────
@@ -931,10 +1127,9 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
             d = cbox.center - pbox.center
 
             # Step 1: Spectral interpolation from child to parent sampling
-            if !isempty(A.interp_theta) && interp_idx <= length(A.interp_theta)
-                interpolated = _filter_2step(agg[l][ci], child_samp, parent_samp,
-                                              A.interp_theta[interp_idx],
-                                              A.interp_phi[interp_idx])
+            if !isempty(A.agg_filters) && interp_idx <= length(A.agg_filters)
+                interpolated = _apply_disagg_filter(agg[l][ci], A.agg_filters[interp_idx],
+                                                     child_samp, parent_samp)
             else
                 interpolated = copy(agg[l][ci])
             end
@@ -983,7 +1178,6 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
         parent_level = A.octree.levels[l]
         child_level = A.octree.levels[l + 1]
         parent_samp = A.samplings[l - 1]
-        child_samp = A.samplings[l]
         interp_idx = l - 1
 
         for (ci, cbox) in enumerate(child_level.boxes)
@@ -997,10 +1191,10 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
             _apply_phase_shift!(shifted, parent_samp, A.k, d, -1.0)
 
             # Step 2: Spectral filter from parent to child sampling (band-limiting)
-            if !isempty(A.filter_theta) && interp_idx <= length(A.filter_theta)
-                filtered = _filter_2step(shifted, parent_samp, child_samp,
-                                          A.filter_theta[interp_idx],
-                                          A.filter_phi[interp_idx])
+            if !isempty(A.disagg_filters) && interp_idx <= length(A.disagg_filters)
+                child_samp = A.samplings[l]
+                filtered = _apply_disagg_filter(shifted, A.disagg_filters[interp_idx],
+                                                 parent_samp, child_samp)
             else
                 filtered = shifted
             end
@@ -1101,10 +1295,9 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
             d = cbox.center - pbox.center
 
             # Step 1: Spectral interpolation from child to parent sampling
-            if !isempty(A.op.interp_theta) && interp_idx <= length(A.op.interp_theta)
-                interpolated = _filter_2step(agg[l][ci], child_samp, parent_samp,
-                                              A.op.interp_theta[interp_idx],
-                                              A.op.interp_phi[interp_idx])
+            if !isempty(A.op.agg_filters) && interp_idx <= length(A.op.agg_filters)
+                interpolated = _apply_disagg_filter(agg[l][ci], A.op.agg_filters[interp_idx],
+                                                     child_samp, parent_samp)
             else
                 interpolated = copy(agg[l][ci])
             end
@@ -1153,7 +1346,6 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
         parent_level = A.op.octree.levels[l]
         child_level = A.op.octree.levels[l + 1]
         parent_samp = A.op.samplings[l - 1]
-        child_samp = A.op.samplings[l]
         interp_idx = l - 1
 
         for (ci, cbox) in enumerate(child_level.boxes)
@@ -1167,10 +1359,10 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
             _apply_phase_shift!(shifted, parent_samp, A.op.k, d, -1.0)
 
             # Step 2: Spectral filter from parent to child sampling (band-limiting)
-            if !isempty(A.op.filter_theta) && interp_idx <= length(A.op.filter_theta)
-                filtered = _filter_2step(shifted, parent_samp, child_samp,
-                                          A.op.filter_theta[interp_idx],
-                                          A.op.filter_phi[interp_idx])
+            if !isempty(A.op.disagg_filters) && interp_idx <= length(A.op.disagg_filters)
+                child_samp = A.op.samplings[l]
+                filtered = _apply_disagg_filter(shifted, A.op.disagg_filters[interp_idx],
+                                                 parent_samp, child_samp)
             else
                 filtered = shifted
             end

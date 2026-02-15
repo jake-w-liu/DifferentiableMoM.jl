@@ -18,8 +18,12 @@ using IncompleteLU
 export NearFieldPreconditionerData,
        ILUPreconditionerData,
        DiagonalPreconditionerData,
+       BlockDiagPrecondData,
+       PermutedPrecondData,
        AbstractPreconditionerData,
        build_nearfield_preconditioner,
+       build_block_diag_preconditioner,
+       build_mlfma_preconditioner,
        NearFieldOperator,
        NearFieldAdjointOperator,
        rwg_centers
@@ -64,6 +68,36 @@ struct ILUPreconditionerData <: AbstractPreconditionerData
     cutoff::Float64
     nnz_ratio::Float64
     tau::Float64
+end
+
+"""
+    BlockDiagPrecondData <: AbstractPreconditionerData
+
+Block-diagonal (block-Jacobi) preconditioner from MLFMA leaf boxes.
+Each leaf box contributes a small dense diagonal block from Z_near,
+which is LU-factorized independently. Very fast to build and memory-efficient.
+"""
+struct BlockDiagPrecondData <: AbstractPreconditionerData
+    lu_blocks::Vector{LinearAlgebra.LU{ComplexF64, Matrix{ComplexF64}, Vector{Int64}}}
+    box_bf_indices::Vector{Vector{Int}}   # original BF indices per leaf box
+    N::Int
+    nnz_ratio::Float64
+end
+
+"""
+    PermutedPrecondData <: AbstractPreconditionerData
+
+Wraps an inner preconditioner (ILU or LU) that operates in a permuted ordering.
+On apply: permute input → apply inner preconditioner → unpermute output.
+Used for MLFMA where reordering Z_near to block-banded form before ILU
+dramatically speeds up factorization and improves quality.
+"""
+struct PermutedPrecondData{T<:AbstractPreconditionerData} <: AbstractPreconditionerData
+    inner::T
+    perm::Vector{Int}    # perm[new] = old (original → permuted)
+    iperm::Vector{Int}   # iperm[old] = new (permuted → original)
+    N::Int
+    nnz_ratio::Float64
 end
 
 """
@@ -424,6 +458,8 @@ end
 @inline _preconditioner_size(P::NearFieldPreconditionerData) = size(P.Z_nf_fac, 1)
 @inline _preconditioner_size(P::DiagonalPreconditionerData) = length(P.dinv)
 @inline _preconditioner_size(P::ILUPreconditionerData) = size(P.ilu_fac.L, 1)
+@inline _preconditioner_size(P::BlockDiagPrecondData) = P.N
+@inline _preconditioner_size(P::PermutedPrecondData) = P.N
 
 @inline function _apply_preconditioner!(y::StridedVector{ComplexF64}, P::NearFieldPreconditionerData)
     ldiv!(P.Z_nf_fac, y)
@@ -439,6 +475,14 @@ end
 
 @inline function _apply_preconditioner!(y::StridedVector{ComplexF64}, P::ILUPreconditionerData)
     ldiv!(P.ilu_fac, y)
+    return y
+end
+
+@inline function _apply_preconditioner!(y::StridedVector{ComplexF64}, P::BlockDiagPrecondData)
+    # Apply block solves using original BF indices (Z_near is in original ordering)
+    for (i, idx) in enumerate(P.box_bf_indices)
+        y[idx] = P.lu_blocks[i] \ y[idx]
+    end
     return y
 end
 
@@ -460,6 +504,28 @@ end
     ldiv!(adjoint(UpperTriangular(P.ilu_fac.U)), y)
     # Step 2: solve Lᴴ x = z  (Lᴴ is unit upper triangular)
     ldiv!(adjoint(UnitLowerTriangular(P.ilu_fac.L)), y)
+    return y
+end
+
+@inline function _apply_preconditioner_adjoint!(y::StridedVector{ComplexF64}, P::BlockDiagPrecondData)
+    for (i, idx) in enumerate(P.box_bf_indices)
+        y[idx] = adjoint(P.lu_blocks[i]) \ y[idx]
+    end
+    return y
+end
+
+@inline function _apply_preconditioner!(y::StridedVector{ComplexF64}, P::PermutedPrecondData)
+    # Permute to reordered space, apply inner preconditioner, unpermute
+    y .= y[P.perm]                         # original → permuted ordering
+    _apply_preconditioner!(y, P.inner)      # solve in permuted ordering
+    y .= y[P.iperm]                         # permuted → original ordering
+    return y
+end
+
+@inline function _apply_preconditioner_adjoint!(y::StridedVector{ComplexF64}, P::PermutedPrecondData)
+    y .= y[P.perm]
+    _apply_preconditioner_adjoint!(y, P.inner)
+    y .= y[P.iperm]
     return y
 end
 
@@ -518,4 +584,88 @@ function LinearAlgebra.mul!(y::AbstractVector, op::NearFieldAdjointOperator, x::
     length(y) == length(x) || throw(DimensionMismatch("x length $(length(x)) != $(length(y))"))
     y .= op * x
     return y
+end
+
+"""
+    build_block_diag_preconditioner(A_mlfma)
+
+Build a block-diagonal (block-Jacobi) preconditioner from MLFMA leaf boxes.
+Each leaf box's diagonal block in Z_near is LU-factorized independently.
+
+Much faster than ILU for large N: O(n_boxes × n_bf³) where n_bf is the
+average BFs per box (typically 100-500), versus O(nnz × fill) for ILU.
+Memory: n_boxes × n_bf² × 16 bytes (typically < 100 MB).
+"""
+function build_block_diag_preconditioner(A_mlfma)
+    octree = A_mlfma.octree
+    leaf_level = octree.levels[end]
+    N = size(A_mlfma, 1)
+
+    lu_blocks = LinearAlgebra.LU{ComplexF64, Matrix{ComplexF64}, Vector{Int64}}[]
+    box_bf_indices = Vector{Int}[]
+    total_nnz = 0
+    for box in leaf_level.boxes
+        # Map from MLFMA ordering to original BF indices (Z_near is in original ordering)
+        orig_idx = [octree.perm[i] for i in box.bf_range]
+        block = Matrix(A_mlfma.Z_near[orig_idx, orig_idx])
+        push!(lu_blocks, lu(block))
+        push!(box_bf_indices, orig_idx)
+        total_nnz += length(orig_idx)^2
+    end
+
+    nnz_ratio = total_nnz / N^2
+    mem_mb = round(total_nnz * 16 / 1e6, digits=1)
+    n_boxes = length(lu_blocks)
+    avg_bf = round(N / n_boxes, digits=0)
+    println("  Block-diag preconditioner: $n_boxes blocks, avg $(Int(avg_bf)) BFs/block, $(mem_mb) MB")
+
+    return BlockDiagPrecondData(lu_blocks, box_bf_indices, N, nnz_ratio)
+end
+
+"""
+    build_mlfma_preconditioner(A_mlfma; factorization=:ilu, ilu_tau=1e-2)
+
+Build a preconditioner for MLFMA by reordering Z_near to MLFMA ordering
+(block-banded structure) before factorization. This makes ILU dramatically
+faster and more effective than operating on the original scattered ordering.
+
+The resulting preconditioner handles the permutation automatically.
+"""
+function build_mlfma_preconditioner(A_mlfma;
+                                     factorization::Symbol=:ilu,
+                                     ilu_tau::Float64=1e-2)
+    octree = A_mlfma.octree
+    perm = copy(octree.perm)
+    N = size(A_mlfma, 1)
+
+    # Build inverse permutation
+    iperm = zeros(Int, N)
+    for i in 1:N
+        iperm[perm[i]] = i
+    end
+
+    # Reorder Z_near: Z_perm[i,j] = Z_near[perm[i], perm[j]]
+    # In MLFMA ordering, the matrix has block-banded structure
+    println("  Reordering Z_near to MLFMA ordering...")
+    Z_perm = A_mlfma.Z_near[perm, perm]
+
+    nnz_ratio = nnz(Z_perm) / max(N * N, 1)
+
+    if factorization == :ilu
+        println("  Running ILU(τ=$(ilu_tau)) on reordered matrix ($(nnz(Z_perm)) nnz)...")
+        t = @elapsed ilu_fac = IncompleteLU.ilu(Z_perm, τ = ilu_tau)
+        Z_perm = nothing; GC.gc()  # free the reordered copy to save memory
+        inner = ILUPreconditionerData(ilu_fac, Inf, nnz_ratio, ilu_tau)
+        println("  ILU done in $(round(t, digits=1))s")
+    elseif factorization == :lu
+        println("  Running sparse LU on reordered matrix...")
+        t = @elapsed Z_fac = lu(Z_perm)
+        Z_perm = nothing; GC.gc()
+        inner = NearFieldPreconditionerData(Z_fac, Inf, nnz_ratio)
+        println("  LU done in $(round(t, digits=1))s")
+    else
+        error("Invalid factorization: $factorization (expected :ilu or :lu)")
+    end
+
+    return PermutedPrecondData(inner, perm, iperm, N, nnz_ratio)
 end
