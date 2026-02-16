@@ -505,11 +505,141 @@ println("Achieved N=$(coarse.rwg_count) (target was $target_N)")
 
 ---
 
+## Multi-Format Mesh I/O
+
+These functions (in `src/MeshIO.jl`) extend mesh I/O beyond OBJ to support STL, Gmsh MSH, and CAD conversion.
+
+### `read_stl_mesh(path; merge_tol=0.0)`
+
+Read a triangle mesh from an STL file. Both binary and ASCII STL are auto-detected.
+
+STL stores three vertices per facet with no shared-vertex topology, so duplicate vertices must be merged. With the default `merge_tol=0.0`, vertices are merged when their coordinates are bitwise identical after Float32→Float64 conversion. Set `merge_tol` to a small positive value if your exporter introduces floating-point noise.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `AbstractString` | -- | Path to the STL file. |
+| `merge_tol` | `Float64` | `0.0` | Vertex merge tolerance. `0.0` = exact merge (bitwise). Positive values use grid-based quantization. |
+
+**Returns:** `TriMesh`
+
+**Example:**
+```julia
+mesh = read_stl_mesh("model.stl")
+report = assert_mesh_quality(mesh; allow_boundary=true)
+```
+
+---
+
+### `write_stl_mesh(path, mesh; header="...", ascii=false)`
+
+Write a `TriMesh` to an STL file. Default is binary (compact, fast). Set `ascii=true` for human-readable ASCII STL.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `path` | `AbstractString` | -- | Output file path. |
+| `mesh` | `TriMesh` | -- | Triangle mesh to write. |
+| `header` | `AbstractString` | `"Exported by DifferentiableMoM"` | Header string (80 chars max for binary). |
+| `ascii` | `Bool` | `false` | Write ASCII STL instead of binary. |
+
+**Returns:** `path`
+
+**Note:** Binary STL uses Float32 for coordinates, so vertex positions lose precision beyond ~7 significant digits. For archiving with full Float64 precision, use OBJ.
+
+---
+
+### `read_msh_mesh(path)`
+
+Read a triangle surface mesh from a Gmsh MSH file (v2 or v4 ASCII).
+
+Only 3-node triangle elements (Gmsh element type 2) are extracted. Lines, quads, tetrahedra, and other element types are silently ignored. Node IDs are remapped to 1-based contiguous indices.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `path` | `AbstractString` | Path to the MSH file. |
+
+**Returns:** `TriMesh`
+
+**Typical workflow (STEP → MSH → TriMesh):**
+```bash
+gmsh -2 model.step -o model.msh -clmax 0.01
+```
+```julia
+mesh = read_msh_mesh("model.msh")
+```
+
+---
+
+### `read_mesh(path)`
+
+Unified mesh reader that dispatches by file extension:
+
+| Extension | Reader |
+|-----------|--------|
+| `.obj` | `read_obj_mesh` |
+| `.stl` | `read_stl_mesh` |
+| `.msh` | `read_msh_mesh` |
+
+Throws an error on unsupported extensions.
+
+**Example:**
+```julia
+mesh = read_mesh("input.stl")     # auto-detects STL
+mesh = read_mesh("model.msh")     # auto-detects Gmsh MSH
+```
+
+---
+
+### `write_mesh(path, mesh; kwargs...)`
+
+Unified mesh writer that dispatches by file extension:
+
+| Extension | Writer |
+|-----------|--------|
+| `.obj` | `write_obj_mesh` |
+| `.stl` | `write_stl_mesh` |
+
+Keyword arguments are forwarded to the underlying writer.
+
+---
+
+### `convert_cad_to_mesh(cad_path, output_path; mesh_size=0.0, gmsh_exe="gmsh")`
+
+Convert a CAD file (STEP, IGES, BREP) to a triangle surface mesh by calling the Gmsh CLI. Gmsh must be installed and on PATH.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `cad_path` | `AbstractString` | -- | Input CAD file (.step, .stp, .iges, .igs, .brep). |
+| `output_path` | `AbstractString` | -- | Output mesh file (.msh, .stl, or .obj). |
+| `mesh_size` | `Float64` | `0.0` | Maximum element size (`-clmax`). `0.0` = Gmsh default. |
+| `gmsh_exe` | `AbstractString` | `"gmsh"` | Path to the Gmsh executable. |
+
+**Returns:** `TriMesh` (the imported mesh).
+
+**Example:**
+```julia
+mesh = convert_cad_to_mesh("antenna.step", "antenna.msh"; mesh_size=0.005)
+rep = repair_mesh_for_simulation(mesh)
+```
+
+**Install Gmsh:** Download from [gmsh.info](https://gmsh.info). On macOS: `brew install gmsh`. On Ubuntu: `apt install gmsh`.
+
+---
+
 ## Notes
 
 - Use `require_closed=true` for closed PEC bodies (spheres, aircraft) where boundary edges indicate a mesh defect.
 - Keep `allow_boundary=true` for open surfaces (plates, reflectors, strips).
 - The repair pipeline is idempotent: running it twice produces the same result.
+- STL binary uses Float32 for vertex coordinates; use OBJ for full Float64 precision.
+- For STEP/IGES import, install Gmsh and use `convert_cad_to_mesh` or manually run `gmsh -2 model.step -o model.msh`.
 
 ---
 
@@ -517,7 +647,8 @@ println("Achieved N=$(coarse.rwg_count) (target was $target_N)")
 
 | File | Contents |
 |------|----------|
-| `src/Mesh.jl` | All mesh creation, geometry, quality, repair, and coarsening functions |
+| `src/Mesh.jl` | Mesh creation, geometry, quality, repair, coarsening, refinement |
+| `src/MeshIO.jl` | Multi-format I/O: STL, Gmsh MSH, unified dispatcher, CAD conversion |
 | `examples/ex_obj_rcs_pipeline.jl` | End-to-end OBJ import -> repair -> coarsen -> RCS workflow |
 | `examples/ex_visualize_simulation_mesh.jl` | Mesh visualization after repair and coarsening |
 | `examples/convert_aircraft_mat_to_obj.py` | MAT-to-OBJ conversion helper (SciPy) |
@@ -529,3 +660,4 @@ println("Achieved N=$(coarse.rwg_count) (target was $target_N)")
 - **Basic:** Run `mesh_quality_report` on a mesh before and after `repair_mesh_for_simulation`. Compare the report fields.
 - **Practical:** Import an OBJ mesh, coarsen it to several target RWG counts (200, 400, 800), and plot `estimate_dense_matrix_gib` vs actual RWG count.
 - **Challenge:** Write a script that sweeps voxel cell size `h` in `cluster_mesh_vertices` and plots the resulting RWG count vs `h`. At what `h` does the mesh become too coarse (quality checks fail)?
+- **Format I/O:** Export a mesh to both OBJ and STL, read each back, and compare vertex coordinates. Verify that STL introduces Float32 rounding while OBJ preserves full precision.
