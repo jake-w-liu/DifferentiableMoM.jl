@@ -68,7 +68,7 @@ For a general EM MoM solver, the codebase is approximately **45-55% complete** i
 | **Reflector geometry builder** | Open parabolic reflector mesh for feed studies | `make_parabolic_reflector` | [x] |
 | **Resolution diagnostics** | Frequency-based edge-length check (λ/N criterion) | `mesh_resolution_report`, `mesh_resolution_ok` | [x] |
 | **Mesh refinement** | Uniform midpoint subdivision to target edge length | `refine_mesh_to_target_edge`, `refine_mesh_for_mom` | [x] |
-| **General CAD formats (STEP/IGES)** | Native CAD import without external conversion | MeshIO/geometry bridge | [ ] |
+| **General CAD formats (STEP/IGES)** | STL/MSH native import + gmsh CLI bridge for STEP/IGES | `MeshIO.jl`: `read_stl_mesh`, `read_msh_mesh`, `read_mesh` unified dispatcher, `convert_cad_to_mesh` via gmsh | [x] |
 
 ## Phase 2: Computational Scalability 
 
@@ -155,8 +155,8 @@ For a general EM MoM solver, the codebase is approximately **45-55% complete** i
 | Feature | Description | Implementation Path | Status |
 |---------|-------------|-------------------|--------|
 | **GUI/Visualization** | Interactive simulation setup and results | `Makie.jl`/`Pluto.jl` integration | [ ] |
-| **OBJ/MAT geometry workflow** | Practical import/repair/coarsen/plot pipeline | `ex_obj_rcs_pipeline.jl` | [x] |
-| **CAD import/export** | Standard format support (STEP, IGES) | `MeshIO.jl` extensions | [ ] |
+| **OBJ/MAT/STL/MSH geometry workflow** | Practical import/repair/coarsen/plot pipeline | `ex_obj_rcs_pipeline.jl` + `MeshIO.jl` (STL, MSH, unified dispatcher) | [x] |
+| **CAD import/export** | Standard format support (STEP, IGES) via gmsh CLI bridge | `MeshIO.jl`: `convert_cad_to_mesh` + native STL/MSH readers | [x] |
 | **Python interface** | PyCall/Juliacall for Python users | Wrapper generation | [ ] |
 | **Cloud deployment** | Web interface for educational use | `Genie.jl` web framework | [ ] |
 

@@ -2523,10 +2523,284 @@ println("  31d: PASS")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 32: Mesh I/O formats and geometry coverage
+# ─────────────────────────────────────────────────
+println("\n── Test 32: Mesh I/O formats and geometry coverage ──")
+
+# 32a: write_obj_mesh round-trip
+println("  32a: write_obj_mesh round-trip ...")
+obj_rt_path = joinpath(DATADIR, "tmp_roundtrip.obj")
+write_obj_mesh(obj_rt_path, mesh; header="Round-trip test")
+mesh_rt = read_obj_mesh(obj_rt_path)
+@assert nvertices(mesh_rt) == nvertices(mesh) "OBJ round-trip vertex count mismatch"
+@assert ntriangles(mesh_rt) == ntriangles(mesh) "OBJ round-trip triangle count mismatch"
+for i in 1:nvertices(mesh)
+    for d in 1:3
+        @assert abs(mesh_rt.xyz[d, i] - mesh.xyz[d, i]) < 1e-12 "OBJ round-trip vertex position mismatch at vertex $i dim $d"
+    end
+end
+report_rt = mesh_quality_report(mesh_rt)
+@assert mesh_quality_ok(report_rt; allow_boundary=true)
+println("  32a: PASS")
+
+# 32b: triangle_area explicit test
+println("  32b: triangle_area explicit test ...")
+# Right triangle with base=3 along x, height=4 along y → area = 6.0
+xyz_right = Float64[0 3 0; 0 0 4; 0 0 0]
+tri_right = reshape([1, 2, 3], 3, 1)
+mesh_right = TriMesh(xyz_right, tri_right)
+@assert abs(triangle_area(mesh_right, 1) - 6.0) < 1e-12 "Right triangle area should be 6.0"
+
+# Equilateral triangle with side s=2 → area = sqrt(3)
+s_eq = 2.0
+xyz_eq = Float64[0 s_eq s_eq/2; 0 0 s_eq*sqrt(3)/2; 0 0 0]
+tri_eq = reshape([1, 2, 3], 3, 1)
+mesh_eq = TriMesh(xyz_eq, tri_eq)
+expected_area = s_eq^2 * sqrt(3) / 4
+@assert abs(triangle_area(mesh_eq, 1) - expected_area) < 1e-12 "Equilateral triangle area mismatch"
+println("  32b: PASS")
+
+# 32c: STL binary round-trip
+println("  32c: STL binary round-trip ...")
+stl_bin_path = joinpath(DATADIR, "tmp_roundtrip_bin.stl")
+mesh_plate = make_rect_plate(0.1, 0.1, 3, 3)
+write_stl_mesh(stl_bin_path, mesh_plate)
+mesh_stl_bin = read_stl_mesh(stl_bin_path)
+# STL uses Float32 internally, so vertex count may differ slightly from merging.
+# But triangle count must match since each facet is independent.
+@assert ntriangles(mesh_stl_bin) == ntriangles(mesh_plate) "STL binary round-trip triangle count mismatch: got $(ntriangles(mesh_stl_bin)), expected $(ntriangles(mesh_plate))"
+@assert nvertices(mesh_stl_bin) == nvertices(mesh_plate) "STL binary round-trip vertex count mismatch: got $(nvertices(mesh_stl_bin)), expected $(nvertices(mesh_plate))"
+report_stl_bin = mesh_quality_report(mesh_stl_bin)
+@assert mesh_quality_ok(report_stl_bin; allow_boundary=true) "STL binary round-trip mesh quality check failed"
+# Check vertex positions (Float32 precision ~ 1e-6)
+for t in 1:ntriangles(mesh_plate)
+    for vi in 1:3
+        idx_orig = mesh_plate.tri[vi, t]
+        idx_stl = mesh_stl_bin.tri[vi, t]
+        for d in 1:3
+            @assert abs(mesh_stl_bin.xyz[d, idx_stl] - Float64(Float32(mesh_plate.xyz[d, idx_orig]))) < 1e-10 "STL binary vertex mismatch at tri $t vert $vi dim $d"
+        end
+    end
+end
+println("  32c: PASS")
+
+# 32d: STL ASCII round-trip
+println("  32d: STL ASCII round-trip ...")
+stl_ascii_path = joinpath(DATADIR, "tmp_ascii.stl")
+open(stl_ascii_path, "w") do io
+    println(io, "solid test")
+    println(io, "  facet normal 0 0 1")
+    println(io, "    outer loop")
+    println(io, "      vertex 0.0 0.0 0.0")
+    println(io, "      vertex 1.0 0.0 0.0")
+    println(io, "      vertex 1.0 1.0 0.0")
+    println(io, "    endloop")
+    println(io, "  endfacet")
+    println(io, "  facet normal 0 0 1")
+    println(io, "    outer loop")
+    println(io, "      vertex 0.0 0.0 0.0")
+    println(io, "      vertex 1.0 1.0 0.0")
+    println(io, "      vertex 0.0 1.0 0.0")
+    println(io, "    endloop")
+    println(io, "  endfacet")
+    println(io, "endsolid test")
+end
+mesh_stl_ascii = read_stl_mesh(stl_ascii_path)
+@assert nvertices(mesh_stl_ascii) == 4 "STL ASCII: expected 4 unique vertices, got $(nvertices(mesh_stl_ascii))"
+@assert ntriangles(mesh_stl_ascii) == 2 "STL ASCII: expected 2 triangles, got $(ntriangles(mesh_stl_ascii))"
+println("  32d: PASS")
+
+# 32e: STL vertex merging (tetrahedron)
+println("  32e: STL vertex merging ...")
+# Build a tetrahedron: 4 triangles, 4 unique vertices, but 12 raw vertices in STL
+xyz_tet = Float64[0 1 0.5 0.5; 0 0 sqrt(3)/2 sqrt(3)/6; 0 0 0 sqrt(2/3)]
+tri_tet = [1 1 1 2; 2 2 3 3; 3 4 4 4]
+mesh_tet = TriMesh(xyz_tet, tri_tet)
+stl_tet_path = joinpath(DATADIR, "tmp_tetra.stl")
+write_stl_mesh(stl_tet_path, mesh_tet)
+mesh_tet_rt = read_stl_mesh(stl_tet_path)
+@assert nvertices(mesh_tet_rt) == 4 "Tetrahedron STL: expected 4 unique vertices after merge, got $(nvertices(mesh_tet_rt))"
+@assert ntriangles(mesh_tet_rt) == 4 "Tetrahedron STL: expected 4 triangles, got $(ntriangles(mesh_tet_rt))"
+println("  32e: PASS")
+
+# 32f: MSH v2 import
+println("  32f: MSH v2 import ...")
+msh_v2_path = joinpath(DATADIR, "tmp_v2.msh")
+open(msh_v2_path, "w") do io
+    println(io, "\$MeshFormat")
+    println(io, "2.2 0 8")
+    println(io, "\$EndMeshFormat")
+    println(io, "\$Nodes")
+    println(io, "4")
+    println(io, "1 0.0 0.0 0.0")
+    println(io, "2 1.0 0.0 0.0")
+    println(io, "3 1.0 1.0 0.0")
+    println(io, "4 0.0 1.0 0.0")
+    println(io, "\$EndNodes")
+    println(io, "\$Elements")
+    println(io, "3")
+    println(io, "1 1 2 0 1 1 2")         # line element (should be skipped)
+    println(io, "2 2 2 0 1 1 2 3")       # triangle 1
+    println(io, "3 2 2 0 1 1 3 4")       # triangle 2
+    println(io, "\$EndElements")
+end
+mesh_msh_v2 = read_msh_mesh(msh_v2_path)
+@assert nvertices(mesh_msh_v2) == 4 "MSH v2: expected 4 vertices, got $(nvertices(mesh_msh_v2))"
+@assert ntriangles(mesh_msh_v2) == 2 "MSH v2: expected 2 triangles, got $(ntriangles(mesh_msh_v2))"
+report_msh_v2 = mesh_quality_report(mesh_msh_v2)
+@assert report_msh_v2.n_invalid_triangles == 0
+@assert report_msh_v2.n_degenerate_triangles == 0
+println("  32f: PASS")
+
+# 32g: MSH v4 import
+println("  32g: MSH v4 import ...")
+msh_v4_path = joinpath(DATADIR, "tmp_v4.msh")
+open(msh_v4_path, "w") do io
+    println(io, "\$MeshFormat")
+    println(io, "4.1 0 8")
+    println(io, "\$EndMeshFormat")
+    println(io, "\$Nodes")
+    println(io, "1 3 1 3")               # 1 entity block, 3 nodes, min tag 1, max tag 3
+    println(io, "2 1 0 3")               # entity dim=2, tag=1, parametric=0, 3 nodes
+    println(io, "1")                      # node tags
+    println(io, "2")
+    println(io, "3")
+    println(io, "0.0 0.0 0.0")          # node coordinates
+    println(io, "1.0 0.0 0.0")
+    println(io, "0.5 1.0 0.0")
+    println(io, "\$EndNodes")
+    println(io, "\$Elements")
+    println(io, "1 1 1 1")               # 1 entity block, 1 element, min tag 1, max tag 1
+    println(io, "2 1 2 1")               # entity dim=2, tag=1, type=2 (triangle), 1 element
+    println(io, "1 1 2 3")               # element tag 1, nodes 1 2 3
+    println(io, "\$EndElements")
+end
+mesh_msh_v4 = read_msh_mesh(msh_v4_path)
+@assert nvertices(mesh_msh_v4) == 3 "MSH v4: expected 3 vertices, got $(nvertices(mesh_msh_v4))"
+@assert ntriangles(mesh_msh_v4) == 1 "MSH v4: expected 1 triangle, got $(ntriangles(mesh_msh_v4))"
+# Verify vertex positions
+@assert abs(mesh_msh_v4.xyz[1, 1] - 0.0) < 1e-12
+@assert abs(mesh_msh_v4.xyz[1, 2] - 1.0) < 1e-12
+@assert abs(mesh_msh_v4.xyz[2, 3] - 1.0) < 1e-12
+println("  32g: PASS")
+
+# 32h: Unified read_mesh / write_mesh dispatcher
+println("  32h: Unified read_mesh / write_mesh dispatcher ...")
+# OBJ dispatch
+mesh_dispatch_obj = read_mesh(obj_rt_path)
+@assert nvertices(mesh_dispatch_obj) == nvertices(mesh) "read_mesh .obj dispatch failed"
+
+# STL dispatch
+mesh_dispatch_stl = read_mesh(stl_bin_path)
+@assert ntriangles(mesh_dispatch_stl) == ntriangles(mesh_plate) "read_mesh .stl dispatch failed"
+
+# MSH dispatch
+mesh_dispatch_msh = read_mesh(msh_v2_path)
+@assert ntriangles(mesh_dispatch_msh) == 2 "read_mesh .msh dispatch failed"
+
+# write_mesh OBJ
+write_out_obj = joinpath(DATADIR, "tmp_write_dispatch.obj")
+write_mesh(write_out_obj, mesh)
+@assert isfile(write_out_obj)
+
+# write_mesh STL
+write_out_stl = joinpath(DATADIR, "tmp_write_dispatch.stl")
+write_mesh(write_out_stl, mesh)
+@assert isfile(write_out_stl)
+
+# Unsupported extension
+thrown_ext = try
+    read_mesh(joinpath(DATADIR, "fake.xyz"))
+    false
+catch
+    true
+end
+@assert thrown_ext "read_mesh should throw on unsupported extension"
+
+thrown_ext_w = try
+    write_mesh(joinpath(DATADIR, "fake.xyz"), mesh)
+    false
+catch
+    true
+end
+@assert thrown_ext_w "write_mesh should throw on unsupported extension"
+println("  32h: PASS")
+
+# 32i: convert_cad_to_mesh (skip if gmsh not available)
+println("  32i: convert_cad_to_mesh (gmsh check) ...")
+gmsh_available = Sys.which("gmsh") !== nothing
+if !gmsh_available
+    # Verify helpful error message
+    thrown_gmsh = try
+        convert_cad_to_mesh("dummy.step", "dummy.msh")
+        false
+    catch e
+        occursin("not found", string(e)) || occursin("Gmsh", string(e))
+    end
+    @assert thrown_gmsh "convert_cad_to_mesh should mention gmsh in error"
+    println("  32i: SKIP (gmsh not installed) — error message verified")
+else
+    println("  32i: SKIP (gmsh available but no test CAD file) — presence verified")
+end
+
+# 32j: Closed-surface mesh workflow
+println("  32j: Closed-surface mesh workflow ...")
+ico_path = joinpath(DATADIR, "tmp_icosphere.obj")
+write_icosphere_obj(ico_path; radius=0.05, subdivisions=2)
+mesh_ico = read_obj_mesh(ico_path)
+report_ico = mesh_quality_report(mesh_ico)
+@assert report_ico.n_boundary_edges == 0 "Icosphere should have no boundary edges, got $(report_ico.n_boundary_edges)"
+@assert report_ico.n_nonmanifold_edges == 0 "Icosphere should have no non-manifold edges"
+@assert mesh_quality_ok(report_ico; allow_boundary=false, require_closed=true) "Icosphere should pass closed-surface quality check"
+println("  32j: PASS")
+
+# 32k: mesh_resolution_ok with :p95 and :median criteria
+println("  32k: mesh_resolution_ok criteria ...")
+# Use a coarse mesh that fails :max but could pass :p95 or :median
+mesh_res_test = make_rect_plate(1.0, 1.0, 2, 2)
+report_res_test = mesh_resolution_report(mesh_res_test, 3e8; points_per_wavelength=2.0)
+# The mesh has edges of similar length, so all criteria should give same result
+res_max = mesh_resolution_ok(report_res_test; criterion=:max)
+res_p95 = mesh_resolution_ok(report_res_test; criterion=:p95)
+res_med = mesh_resolution_ok(report_res_test; criterion=:median)
+# :median is most lenient, :max is strictest
+# If :max passes, all must pass. If :max fails, :median may still pass.
+if res_max
+    @assert res_p95 && res_med ":max passed but :p95 or :median failed — logic error"
+end
+# :p95 and :median should never be stricter than :max
+if !res_p95
+    @assert !res_max ":p95 failed but :max passed — impossible"
+end
+# Verify the criteria use different statistics
+@assert report_res_test.edge_max_m >= report_res_test.edge_p95_m >= report_res_test.edge_median_m "Edge statistics ordering violated"
+# Unsupported criterion should throw
+thrown_crit = try
+    mesh_resolution_ok(report_res_test; criterion=:bogus)
+    false
+catch
+    true
+end
+@assert thrown_crit "mesh_resolution_ok should throw on unknown criterion"
+println("  32k: PASS")
+
+# 32l: STL ASCII write and read-back
+println("  32l: STL ASCII write round-trip ...")
+stl_ascii_rt_path = joinpath(DATADIR, "tmp_ascii_roundtrip.stl")
+mesh_small = make_rect_plate(0.05, 0.05, 2, 2)
+write_stl_mesh(stl_ascii_rt_path, mesh_small; ascii=true)
+mesh_ascii_rt = read_stl_mesh(stl_ascii_rt_path)
+@assert ntriangles(mesh_ascii_rt) == ntriangles(mesh_small) "STL ASCII round-trip triangle mismatch"
+@assert nvertices(mesh_ascii_rt) == nvertices(mesh_small) "STL ASCII round-trip vertex mismatch"
+println("  32l: PASS")
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 31 TESTS PASSED")
+println("ALL 32 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)
