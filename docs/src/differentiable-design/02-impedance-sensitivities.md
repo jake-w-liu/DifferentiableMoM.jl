@@ -245,7 +245,7 @@ In practice, $\Gamma_p$ is a union of mesh triangles. The integral is computed b
 
 ### 4.2 Implementation via `precompute_patch_mass`
 
-The function `precompute_patch_mass` (in `src/Impedance.jl`) computes all $\mathbf{M}_p$ matrices:
+The function `precompute_patch_mass` (in `src/assembly/Impedance.jl`) computes all $\mathbf{M}_p$ matrices:
 
 ```julia
 function precompute_patch_mass(mesh, rwg, partition; quad_order=3)
@@ -291,7 +291,7 @@ More practically, patches are grouped into larger regions (e.g., $2\times2$ bloc
 
 ### 5.1 Function `gradient_impedance`
 
-The gradient formulas $\eqref{eq:grad_resistive}$ and $\eqref{eq:grad_reactive}$ are implemented in `gradient_impedance` (`src/Adjoint.jl`):
+The gradient formulas $\eqref{eq:grad_resistive}$ and $\eqref{eq:grad_reactive}$ are implemented in `gradient_impedance` (`src/optimization/Adjoint.jl`):
 
 ```julia
 function gradient_impedance(Mp, I, lambda; reactive=false)
@@ -429,10 +429,10 @@ For thin dielectric layers, the impedance is related to surface susceptibility t
 ## 9. Code Mapping
 
 - **`src/Types.jl`** – Patch partition definition (`PatchPartition`).
-- **`src/Impedance.jl`** – Patch mass matrix assembly (`precompute_patch_mass`).
-- **`src/Adjoint.jl`** – Gradient computation (`gradient_impedance`).
-- **`src/Solve.jl`** – Assembly of full matrix $\mathbf{Z}(\boldsymbol{\theta})$ (`assemble_full_Z`).
-- **`src/EFIE.jl`** – Assembly of $\mathbf{Z}_{\mathrm{EFIE}}$.
+- **`src/assembly/Impedance.jl`** – Patch mass matrix assembly (`precompute_patch_mass`).
+- **`src/optimization/Adjoint.jl`** – Gradient computation (`gradient_impedance`).
+- **`src/solver/Solve.jl`** – Assembly of full matrix $\mathbf{Z}(\boldsymbol{\theta})$ (`assemble_full_Z`).
+- **`src/assembly/EFIE.jl`** – Assembly of $\mathbf{Z}_{\mathrm{EFIE}}$.
 - **`test/runtests.jl`** – Verification script for impedance sensitivities.
 
 ---

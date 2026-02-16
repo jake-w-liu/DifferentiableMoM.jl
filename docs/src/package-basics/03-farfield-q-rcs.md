@@ -182,7 +182,7 @@ G_mat = radiation_vectors(mesh, rwg, grid, k;
     eta0=η0)
 ```
 
-**Algorithm (see `src/FarField.jl`):** For each RWG basis function $\mathbf{f}_n$ with support triangles $T_n^+$ and $T_n^-$, compute
+**Algorithm (see `src/postprocessing/FarField.jl`):** For each RWG basis function $\mathbf{f}_n$ with support triangles $T_n^+$ and $T_n^-$, compute
 
 ```math
 \mathbf{g}_n(\hat{\mathbf{r}}_q) = \frac{i k \eta_0}{4\pi} \sum_{t \in \{T_n^+, T_n^-\}} \int_{T_t} \left[ \hat{\mathbf{r}}_q \times \left( \hat{\mathbf{r}}_q \times \mathbf{f}_n(\mathbf{r}') \right) \right] e^{+i k \hat{\mathbf{r}}_q \cdot \mathbf{r}'} d\Gamma'
@@ -246,7 +246,7 @@ where:
 - $m_q$: mask value (0 or 1) selecting directions in the target region
 - $\mathbf{v}_q = \mathbf{G}[:,q]^\dagger \mathbf{p}_q$ (projected radiation vectors), with $\mathbf{G}[:,q]$ the $3\times N$ slice of radiation vectors for direction $q$.
 
-**Implementation (see `src/QMatrix.jl`):** The function `build_Q` computes the scalar projections $y_{q,n} = \mathbf{p}_q^\dagger \mathbf{g}_n(\hat{\mathbf{r}}_q)$ for each direction $q$ and basis $n$, then accumulates $Q_{mn} = \sum_q w_q m_q \, y_{q,m}^* y_{q,n}$. The double sum over $m,n$ is explicit but optimized with nested loops. For large problems, the alternative function `apply_Q` computes $\mathbf{Q}\mathbf{I}$ without forming $\mathbf{Q}$ explicitly, using the factorization $\mathbf{Q} = \mathbf{Y}^\dagger \mathbf{W} \mathbf{Y}$ where $\mathbf{Y}$ is the $N_\Omega \times N$ matrix of projected radiation vectors and $\mathbf{W}$ is a diagonal matrix of weighted mask values.
+**Implementation (see `src/optimization/QMatrix.jl`):** The function `build_Q` computes the scalar projections $y_{q,n} = \mathbf{p}_q^\dagger \mathbf{g}_n(\hat{\mathbf{r}}_q)$ for each direction $q$ and basis $n$, then accumulates $Q_{mn} = \sum_q w_q m_q \, y_{q,m}^* y_{q,n}$. The double sum over $m,n$ is explicit but optimized with nested loops. For large problems, the alternative function `apply_Q` computes $\mathbf{Q}\mathbf{I}$ without forming $\mathbf{Q}$ explicitly, using the factorization $\mathbf{Q} = \mathbf{Y}^\dagger \mathbf{W} \mathbf{Y}$ where $\mathbf{Y}$ is the $N_\Omega \times N$ matrix of projected radiation vectors and $\mathbf{W}$ is a diagonal matrix of weighted mask values.
 
 **Properties:**
 - **Hermitian**: $\mathbf{Q} = \mathbf{Q}^\dagger$
@@ -699,16 +699,16 @@ end
 
 ### 7.1 Primary Implementation Files
 
-- **Far-field grid and radiation vectors**: `src/FarField.jl`
+- **Far-field grid and radiation vectors**: `src/postprocessing/FarField.jl`
   - `make_sph_grid`, `radiation_vectors`, `compute_farfield`
 
-- **Q matrix construction**: `src/QMatrix.jl`
+- **Q matrix construction**: `src/optimization/QMatrix.jl`
   - `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`
 
-- **RCS diagnostics**: `src/Diagnostics.jl`
+- **RCS diagnostics**: `src/postprocessing/Diagnostics.jl`
   - `bistatic_rcs`, `backscatter_rcs`, `radiated_power`
 
-- **Mie theory reference**: `src/Mie.jl`
+- **Mie theory reference**: `src/postprocessing/Mie.jl`
   - `mie_bistatic_rcs_pec`, analytical validation
 
 ### 7.2 Example Scripts
@@ -719,9 +719,9 @@ end
 
 ### 7.3 Supporting Utilities
 
-- **Geometry operations**: `src/Mesh.jl` (triangle geometry helpers)
-- **Visualization**: `src/Visualization.jl` (mesh plotting utilities)
-- **Performance tools**: `src/Mesh.jl` (`estimate_dense_matrix_gib`)
+- **Geometry operations**: `src/geometry/Mesh.jl` (triangle geometry helpers)
+- **Visualization**: `src/postprocessing/Visualization.jl` (mesh plotting utilities)
+- **Performance tools**: `src/geometry/Mesh.jl` (`estimate_dense_matrix_gib`)
 
 ---
 

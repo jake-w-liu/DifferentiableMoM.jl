@@ -51,7 +51,7 @@ is
 G(\mathbf{r},\mathbf{r}') = \frac{e^{-ikR}}{4\pi R}, \qquad R = |\mathbf{r}-\mathbf{r}'|.
 ```
 
-This Green's function automatically satisfies the Sommerfeld radiation condition and is implemented by the function `greens` in `src/Greens.jl`.
+This Green's function automatically satisfies the Sommerfeld radiation condition and is implemented by the function `greens` in `src/basis/Greens.jl`.
 
 ### 1.3 Sign Consistency Check
 
@@ -258,7 +258,7 @@ After integration by parts, we obtain the **mixed-potential form** of the EFIE m
 Z_{mn}^{\mathrm{EFIE}} = -i\omega\mu_0 \left[ \iint \mathbf{f}_m(\mathbf{r})\cdot\mathbf{f}_n(\mathbf{r}')\,G\,dS\,dS' - \frac{1}{k^2} \iint (\nabla_s\cdot\mathbf{f}_m(\mathbf{r}))(\nabla_s'\cdot\mathbf{f}_n(\mathbf{r}'))\,G\,dS\,dS' \right].
 ```
 
-This is the exact expression computed by `assemble_Z_efie` in `src/EFIE.jl`. The two terms have clear physical interpretations:
+This is the exact expression computed by `assemble_Z_efie` in `src/assembly/EFIE.jl`. The two terms have clear physical interpretations:
 
 - **Vector part** (first integral): Coupling through the magnetic vector potential $\mathbf{A}$; represents direct current‑current interaction.
 - **Scalar part** (second integral): Coupling through the electric scalar potential $\phi$; represents charge‑charge interaction mediated by the surface divergence of the basis functions.
@@ -408,7 +408,7 @@ For a plane wave $\mathbf{E}^{\mathrm{inc}}(\mathbf{r}) = \mathbf{E}_0 e^{-i\mat
 V_m = -\int_{\Gamma} \mathbf{f}_m(\mathbf{r})\cdot\mathbf{E}_0 e^{-i\mathbf{k}\cdot\mathbf{r}}\,dS.
 ```
 
-This integral is evaluated numerically using quadrature rules on each triangle of the RWG function's support. The implementation is found in `src/Excitation.jl`.
+This integral is evaluated numerically using quadrature rules on each triangle of the RWG function's support. The implementation is found in `src/assembly/Excitation.jl`.
 
 ---
 
@@ -537,7 +537,7 @@ The term $-Z_s\mathbf{J}$ appears on the left side; after testing with $\mathbf{
 - **Reactive sheet** ($Z_s = iX_s$ imaginary): Stores energy reactively; the surface behaves inductively ($X_s > 0$) or capacitively ($X_s < 0$), shifting resonance frequencies.
 - **Patch approximation**: Allows spatially varying impedance profiles, useful for modeling graded metasurfaces or optimizing impedance distributions.
 
-The implementation of impedance matrices and their derivatives is found in `src/Impedance.jl`, and the full system assembly is performed by `assemble_full_Z` in `src/Solve.jl`.
+The implementation of impedance matrices and their derivatives is found in `src/assembly/Impedance.jl`, and the full system assembly is performed by `assemble_full_Z` in `src/solver/Solve.jl`.
 
 ---
 
@@ -545,7 +545,7 @@ The implementation of impedance matrices and their derivatives is found in `src/
 
 ### 6.1 Sign Consistency in the Code
 
-The Julia implementation follows the mathematical derivation exactly. In `src/EFIE.jl`, the matrix assembly uses
+The Julia implementation follows the mathematical derivation exactly. In `src/assembly/EFIE.jl`, the matrix assembly uses
 
 ```julia
 omega_mu0 = k * eta0
@@ -641,11 +641,11 @@ A useful debugging step: when `theta = zeros(...)`, the matrix `Z_full` should m
 
 ## 8. Code Mapping
 
-- **Green's function**: `src/Greens.jl` – implements $G(\mathbf{r},\mathbf{r}') = e^{-ikR}/(4\pi R)$.
-- **EFIE matrix assembly**: `src/EFIE.jl` – computes the mixed‑potential matrix elements `Z[m,n]`.
-- **Excitation vector**: `src/Excitation.jl` – builds the right‑hand side vector $\mathbf{V}$ for plane‑wave or dipole sources.
-- **Impedance matrices**: `src/Impedance.jl` – precomputes patch mass matrices $\mathbf{M}_p$ and their derivatives.
-- **Full system assembly**: `src/Solve.jl` – function `assemble_full_Z` combines EFIE and impedance matrices.
+- **Green's function**: `src/basis/Greens.jl` – implements $G(\mathbf{r},\mathbf{r}') = e^{-ikR}/(4\pi R)$.
+- **EFIE matrix assembly**: `src/assembly/EFIE.jl` – computes the mixed‑potential matrix elements `Z[m,n]`.
+- **Excitation vector**: `src/assembly/Excitation.jl` – builds the right‑hand side vector $\mathbf{V}$ for plane‑wave or dipole sources.
+- **Impedance matrices**: `src/assembly/Impedance.jl` – precomputes patch mass matrices $\mathbf{M}_p$ and their derivatives.
+- **Full system assembly**: `src/solver/Solve.jl` – function `assemble_full_Z` combines EFIE and impedance matrices.
 
 ## 9. Exercises and Problems
 

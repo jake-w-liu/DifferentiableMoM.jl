@@ -466,12 +466,12 @@ cv = CVec3(1.0 + 2.0im, 0.0, 0.0)   # complex electric field phasor
 | Type | Source File | Primary Users |
 |------|-------------|---------------|
 | `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid`, `ScatteringResult` | `src/Types.jl` | All assembly, solve, and post-processing modules |
-| `MatrixFreeEFIEOperator`, `MatrixFreeEFIEAdjointOperator` | `src/EFIE.jl` | `src/ACA.jl`, `src/NearFieldPreconditioner.jl`, `src/Workflow.jl` |
-| `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `DiagonalPreconditionerData` | `src/NearFieldPreconditioner.jl` | `src/IterativeSolve.jl`, `src/Solve.jl`, `src/Optimize.jl` |
-| `NearFieldOperator`, `NearFieldAdjointOperator` | `src/NearFieldPreconditioner.jl` | `src/IterativeSolve.jl` (internal) |
-| `ClusterNode`, `ClusterTree` | `src/ClusterTree.jl` | `src/ACA.jl` |
-| `ACAOperator`, `ACAAdjointOperator` | `src/ACA.jl` | `src/Workflow.jl`, `src/IterativeSolve.jl` |
-| Vector aliases (`Vec3`, `CVec3`) | `src/Types.jl` | `src/Mesh.jl`, `src/Greens.jl`, `src/FarField.jl`, `src/Excitation.jl` |
+| `MatrixFreeEFIEOperator`, `MatrixFreeEFIEAdjointOperator` | `src/assembly/EFIE.jl` | `src/fast/ACA.jl`, `src/solver/NearFieldPreconditioner.jl`, `src/Workflow.jl` |
+| `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `DiagonalPreconditionerData` | `src/solver/NearFieldPreconditioner.jl` | `src/solver/IterativeSolve.jl`, `src/solver/Solve.jl`, `src/optimization/Optimize.jl` |
+| `NearFieldOperator`, `NearFieldAdjointOperator` | `src/solver/NearFieldPreconditioner.jl` | `src/solver/IterativeSolve.jl` (internal) |
+| `ClusterNode`, `ClusterTree` | `src/fast/ClusterTree.jl` | `src/fast/ACA.jl` |
+| `ACAOperator`, `ACAAdjointOperator` | `src/fast/ACA.jl` | `src/Workflow.jl`, `src/solver/IterativeSolve.jl` |
+| Vector aliases (`Vec3`, `CVec3`) | `src/Types.jl` | `src/geometry/Mesh.jl`, `src/basis/Greens.jl`, `src/postprocessing/FarField.jl`, `src/assembly/Excitation.jl` |
 
 ---
 

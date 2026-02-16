@@ -306,14 +306,14 @@ Fits comfortably on 24 GB RAM (tested on Mac M3).
 
 | Concept | Source file | Key function / type |
 |---------|------------|---------------------|
-| Octree construction | `src/Octree.jl` | `build_octree`, `OctreeBox`, `OctreeLevel` |
-| MLFMA operator | `src/MLFMA.jl` | `build_mlfma_operator`, `MLFMAOperator` |
-| Radiation patterns | `src/MLFMA.jl` | `compute_bf_radiation_patterns` |
-| Translation factors | `src/MLFMA.jl` | `compute_translation_factor` |
-| Per-$m$ spectral filters | `src/MLFMA.jl` | `_apply_disagg_filter`, `_build_theta_filter_m` |
-| Spherical sampling | `src/MLFMA.jl` | `make_sphere_sampling`, `SphereSampling` |
-| Matvec | `src/MLFMA.jl` | `mul!(y, A::MLFMAOperator, x)` |
-| Reordered preconditioner | `src/NearFieldPreconditioner.jl` | `build_mlfma_preconditioner` |
+| Octree construction | `src/fast/Octree.jl` | `build_octree`, `OctreeBox`, `OctreeLevel` |
+| MLFMA operator | `src/fast/MLFMA.jl` | `build_mlfma_operator`, `MLFMAOperator` |
+| Radiation patterns | `src/fast/MLFMA.jl` | `compute_bf_radiation_patterns` |
+| Translation factors | `src/fast/MLFMA.jl` | `compute_translation_factor` |
+| Per-$m$ spectral filters | `src/fast/MLFMA.jl` | `_apply_disagg_filter`, `_build_theta_filter_m` |
+| Spherical sampling | `src/fast/MLFMA.jl` | `make_sphere_sampling`, `SphereSampling` |
+| Matvec | `src/fast/MLFMA.jl` | `mul!(y, A::MLFMAOperator, x)` |
+| Reordered preconditioner | `src/solver/NearFieldPreconditioner.jl` | `build_mlfma_preconditioner` |
 | Workflow integration | `src/Workflow.jl` | `solve_scattering(...; method=:mlfma)` |
 
 ---
@@ -393,7 +393,7 @@ Implement a frequency sweep (0.1--1.0 GHz) with MLFMA. At each frequency, rebuil
 
 - **Chew, W. C. et al.** *Fast and Efficient Algorithms in Computational Electromagnetics* (2001) -- Ch. 5-7: MLFMA theory, aggregation/disaggregation, and translation operators.
 - **Ergül, Ö. & Gürel, L.** *The Multilevel Fast Multipole Algorithm (MLFMA) for Solving Large-Scale Computational Electromagnetics Problems* (2014) -- Comprehensive MLFMA reference with implementation details.
-- **DifferentiableMoM.jl source**: `src/MLFMA.jl` for per-$m$ filter implementation; `src/Octree.jl` for tree construction algorithms.
+- **DifferentiableMoM.jl source**: `src/fast/MLFMA.jl` for per-$m$ filter implementation; `src/fast/Octree.jl` for tree construction algorithms.
 - **Memory documentation**: `MEMORY.md` in the project root for latest accuracy benchmarks and troubleshooting notes.
 
 ---

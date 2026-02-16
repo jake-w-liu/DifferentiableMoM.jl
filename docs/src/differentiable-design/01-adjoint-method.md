@@ -232,7 +232,7 @@ For a quadratic objective $\mathbf{I}^\dagger \mathbf{Q} \mathbf{I}$, the adjoin
 
 ## 5. Implementation in `DifferentiableMoM.jl`
 
-### 5.1 Core Functions (`src/Adjoint.jl`)
+### 5.1 Core Functions (`src/optimization/Adjoint.jl`)
 
 The package provides three essential functions that implement the adjoint pipeline:
 
@@ -276,7 +276,7 @@ println("Gradient norm = ", norm(g))
 
 ### 5.3 Integration with Optimization
 
-The function `optimize_lbfgs` in `src/Optimize.jl` wraps this pipeline into a projected L‑BFGS loop. At each iteration, it:
+The function `optimize_lbfgs` in `src/optimization/Optimize.jl` wraps this pipeline into a projected L‑BFGS loop. At each iteration, it:
 
 1. Assembles $\mathbf{Z}(\boldsymbol{\theta}^{(k)})$,
 2. Calls `solve_forward` and `compute_objective`,
@@ -378,12 +378,12 @@ While this package focuses on impedance parameters, the adjoint method also appl
 
 ## 10. Code Mapping
 
-- **`src/Adjoint.jl`** – Core adjoint functions: `compute_objective`, `solve_adjoint`, `gradient_impedance`.
-- **`src/Optimize.jl`** – Optimization loops that call the adjoint pipeline.
-- **`src/Solve.jl`** – Forward solve (`solve_forward`) and conditioned system preparation.
-- **`src/Solve.jl`** – Assembly of $\mathbf{Z}(\boldsymbol{\theta})$ via `assemble_full_Z`.
-- **`src/Impedance.jl`** – Assembly of impedance contribution `assemble_Z_impedance` and patch mass matrices $\mathbf{M}_p$.
-- **`src/EFIE.jl`** – Assembly of $\mathbf{Z}_{\mathrm{EFIE}}$.
+- **`src/optimization/Adjoint.jl`** – Core adjoint functions: `compute_objective`, `solve_adjoint`, `gradient_impedance`.
+- **`src/optimization/Optimize.jl`** – Optimization loops that call the adjoint pipeline.
+- **`src/solver/Solve.jl`** – Forward solve (`solve_forward`) and conditioned system preparation.
+- **`src/solver/Solve.jl`** – Assembly of $\mathbf{Z}(\boldsymbol{\theta})$ via `assemble_full_Z`.
+- **`src/assembly/Impedance.jl`** – Assembly of impedance contribution `assemble_Z_impedance` and patch mass matrices $\mathbf{M}_p$.
+- **`src/assembly/EFIE.jl`** – Assembly of $\mathbf{Z}_{\mathrm{EFIE}}$.
 - **`test/runtests.jl`** – Verification script comparing adjoint and finite‑difference gradients.
 
 ---

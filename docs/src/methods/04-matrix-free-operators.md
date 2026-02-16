@@ -258,13 +258,13 @@ println("Adjoint GMRES: $(adj_stats.niter) iterations")
 
 | Source file | Key types / functions | Role |
 |-------------|----------------------|------|
-| `src/EFIE.jl` | `EFIEApplyCache`, `_efie_entry`, `_build_efie_cache` | Internal cache and entry evaluator |
-| `src/EFIE.jl` | `MatrixFreeEFIEOperator`, `MatrixFreeEFIEAdjointOperator` | User-facing operator types |
-| `src/EFIE.jl` | `matrixfree_efie_operator`, `efie_entry` | Public constructors and entry API |
-| `src/EFIE.jl` | `assemble_Z_efie` | Dense assembly (uses same cache internally) |
-| `src/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner` | Sparse preconditioner from operator entries |
-| `src/IterativeSolve.jl` | `solve_gmres`, `solve_gmres_adjoint` | GMRES wrappers accepting any `AbstractMatrix` |
-| `src/ACA.jl` | `build_aca_operator` | ACA H-matrix using `_efie_entry` |
+| `src/assembly/EFIE.jl` | `EFIEApplyCache`, `_efie_entry`, `_build_efie_cache` | Internal cache and entry evaluator |
+| `src/assembly/EFIE.jl` | `MatrixFreeEFIEOperator`, `MatrixFreeEFIEAdjointOperator` | User-facing operator types |
+| `src/assembly/EFIE.jl` | `matrixfree_efie_operator`, `efie_entry` | Public constructors and entry API |
+| `src/assembly/EFIE.jl` | `assemble_Z_efie` | Dense assembly (uses same cache internally) |
+| `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner` | Sparse preconditioner from operator entries |
+| `src/solver/IterativeSolve.jl` | `solve_gmres`, `solve_gmres_adjoint` | GMRES wrappers accepting any `AbstractMatrix` |
+| `src/fast/ACA.jl` | `build_aca_operator` | ACA H-matrix using `_efie_entry` |
 | `src/Workflow.jl` | `solve_scattering` | Auto method selection |
 
 ---

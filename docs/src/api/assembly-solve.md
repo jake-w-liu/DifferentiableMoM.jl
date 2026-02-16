@@ -618,11 +618,11 @@ I, stats = solve_gmres(A, v; preconditioner=P_nf)
 
 | File | Contents |
 |------|----------|
-| `src/EFIE.jl` | Dense assembly (`assemble_Z_efie`), matrix-free operators (`MatrixFreeEFIEOperator`, `matrixfree_efie_operator`, `efie_entry`) |
-| `src/Impedance.jl` | Impedance blocks (`precompute_patch_mass`, `assemble_Z_impedance`) |
-| `src/Solve.jl` | `solve_forward`, `solve_system`, `assemble_full_Z`, conditioning helpers |
-| `src/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner`, `rwg_centers`, operator wrappers |
-| `src/IterativeSolve.jl` | `solve_gmres`, `solve_gmres_adjoint` |
+| `src/assembly/EFIE.jl` | Dense assembly (`assemble_Z_efie`), matrix-free operators (`MatrixFreeEFIEOperator`, `matrixfree_efie_operator`, `efie_entry`) |
+| `src/assembly/Impedance.jl` | Impedance blocks (`precompute_patch_mass`, `assemble_Z_impedance`) |
+| `src/solver/Solve.jl` | `solve_forward`, `solve_system`, `assemble_full_Z`, conditioning helpers |
+| `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner`, `rwg_centers`, operator wrappers |
+| `src/solver/IterativeSolve.jl` | `solve_gmres`, `solve_gmres_adjoint` |
 
 ---
 

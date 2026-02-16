@@ -68,7 +68,7 @@ where $\epsilon \sim 10^{-30}$ prevents division by zero.
 
 ## 2) Implementation in `DifferentiableMoM.jl`
 
-### 2.1 Verification Functions (`src/Verification.jl`)
+### 2.1 Verification Functions (`src/optimization/Verification.jl`)
 
 - **`fd_grad(f, theta, p; h=1e-6, scheme=:central)`**: Finite-difference gradient
 - **`complex_step_grad(f, theta, p; eps=1e-30)`**: Complex-step gradient (holomorphic `f` only)
@@ -285,13 +285,13 @@ end
 
 ### 6.1 Primary Implementation Files
 
-- **Verification utilities**: `src/Verification.jl`
+- **Verification utilities**: `src/optimization/Verification.jl`
   - `fd_grad`, `complex_step_grad`, `verify_gradient`
   
-- **Adjoint gradient computation**: `src/Adjoint.jl`
+- **Adjoint gradient computation**: `src/optimization/Adjoint.jl`
   - `gradient_impedance`, `solve_adjoint`
 
-- **Optimization interface**: `src/Optimize.jl`
+- **Optimization interface**: `src/optimization/Optimize.jl`
   - `optimize_directivity`, `optimize_lbfgs`
 
 ### 6.2 Example Scripts

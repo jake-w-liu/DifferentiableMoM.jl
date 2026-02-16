@@ -313,10 +313,10 @@ where $\hat{\mathbf m} = \hat{\mathbf t} \times \hat{\mathbf n}$ is the outward 
 
 ## Code Mapping
 
-- Vector and triangle operations: `src/Mesh.jl`
-- Quadrature rules: `src/Quadrature.jl`
-- Green's function: `src/Greens.jl`
-- Linear algebra utilities: `src/Solve.jl`
+- Vector and triangle operations: `src/geometry/Mesh.jl`
+- Quadrature rules: `src/basis/Quadrature.jl`
+- Green's function: `src/basis/Greens.jl`
+- Linear algebra utilities: `src/solver/Solve.jl`
 
 ---
 

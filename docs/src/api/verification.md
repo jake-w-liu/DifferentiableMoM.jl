@@ -146,8 +146,8 @@ end
 
 | File | Contents |
 |------|----------|
-| `src/Verification.jl` | `complex_step_grad`, `fd_grad`, `verify_gradient` |
-| `src/Adjoint.jl` | Adjoint gradient code being verified |
+| `src/optimization/Verification.jl` | `complex_step_grad`, `fd_grad`, `verify_gradient` |
+| `src/optimization/Adjoint.jl` | Adjoint gradient code being verified |
 
 ---
 

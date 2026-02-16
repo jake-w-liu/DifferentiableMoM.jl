@@ -179,8 +179,8 @@ accuracy. Fixing the unit mistake solves both downstream issues.
    rwg = build_rwg(mesh; precheck=true, allow_boundary=true)
    ```
 
-**Source functions**: `src/Mesh.jl` (`mesh_quality_report`, `repair_mesh_for_simulation`),
-`src/RWG.jl` (`build_rwg`).
+**Source functions**: `src/geometry/Mesh.jl` (`mesh_quality_report`, `repair_mesh_for_simulation`),
+`src/basis/RWG.jl` (`build_rwg`).
 
 ---
 
@@ -215,9 +215,9 @@ accuracy. Fixing the unit mistake solves both downstream issues.
 5. **Verify assembly parameters**: Double‑check `k`, `eta0`, `quad_order`, and
    mesh scaling.
 
-**Source functions**: `src/Solve.jl` (`solve_forward`),
-`src/Diagnostics.jl` (`condition_diagnostics`),
-`src/EFIE.jl` (`assemble_Z_efie`).
+**Source functions**: `src/solver/Solve.jl` (`solve_forward`),
+`src/postprocessing/Diagnostics.jl` (`condition_diagnostics`),
+`src/assembly/EFIE.jl` (`assemble_Z_efie`).
 
 ---
 
@@ -255,8 +255,8 @@ accuracy. Fixing the unit mistake solves both downstream issues.
 4. **Inspect polarization vectors**: Ensure `pol_mat` matches intended
    polarization (e.g., `pol_linear_x` for x‑polarized far field).
 
-**Source functions**: `src/FarField.jl` (`radiation_vectors`, `compute_farfield`),
-`src/Diagnostics.jl` (`energy_ratio`).
+**Source functions**: `src/postprocessing/FarField.jl` (`radiation_vectors`, `compute_farfield`),
+`src/postprocessing/Diagnostics.jl` (`energy_ratio`).
 
 ---
 
@@ -291,7 +291,7 @@ accuracy. Fixing the unit mistake solves both downstream issues.
 4. **Check polarization matrix**: `pol_mat` should have shape `(3, NΩ)` and be
    orthogonal to `rhat`.
 
-**Source functions**: `src/QMatrix.jl` (`build_Q`), `src/FarField.jl` (`pol_linear_x`, …).
+**Source functions**: `src/optimization/QMatrix.jl` (`build_Q`), `src/postprocessing/FarField.jl` (`pol_linear_x`, …).
 
 ---
 
@@ -335,8 +335,8 @@ gradient > 1e‑6.
 4. **Verify gradient on a small problem** (`Nt ≤ 10`) where finite differences
    are cheap and reliable.
 
-**Source functions**: `src/Adjoint.jl` (`solve_adjoint`, `gradient_impedance`),
-`src/Solve.jl` (`transform_patch_matrices`), `src/Verification.jl` (`fd_grad`).
+**Source functions**: `src/optimization/Adjoint.jl` (`solve_adjoint`, `gradient_impedance`),
+`src/solver/Solve.jl` (`transform_patch_matrices`), `src/optimization/Verification.jl` (`fd_grad`).
 
 ---
 
@@ -468,7 +468,7 @@ preconditioner issues, test with a diagonal `M` (e.g., `M = Diagonal(rand(N))`).
    cond(M)   # should be moderate (≲ 1e6)
    ```
 
-**Source functions**: `src/Solve.jl` (`make_left_preconditioner`,
+**Source functions**: `src/solver/Solve.jl` (`make_left_preconditioner`,
 `prepare_conditioned_system`, `transform_patch_matrices`).
 
 ---
@@ -685,13 +685,13 @@ Or use `@time` inside your script to time assembly, solve, and far‑field steps
 
 | Component | Source File | Key Functions |
 |-----------|-------------|---------------|
-| Mesh diagnostics, repair, coarsening | `src/Mesh.jl` | `mesh_quality_report`, `repair_mesh_for_simulation`, `coarsen_mesh_to_target_rwg`, `estimate_dense_matrix_gib` |
-| EFIE assembly | `src/EFIE.jl`, `src/Excitation.jl` | `assemble_Z_efie`, `assemble_v_plane_wave` |
-| Solving and conditioning | `src/Solve.jl` | `solve_forward`, `make_left_preconditioner`, `prepare_conditioned_system` |
-| Far‑field and Q matrices | `src/FarField.jl`, `src/QMatrix.jl` | `radiation_vectors`, `compute_farfield`, `build_Q` |
-| Diagnostics | `src/Diagnostics.jl` | `energy_ratio`, `condition_diagnostics`, `bistatic_rcs`, `backscatter_rcs` |
-| Adjoint gradient | `src/Adjoint.jl` | `solve_adjoint`, `gradient_impedance`, `compute_objective` |
-| Gradient verification | `src/Verification.jl` | `fd_grad`, `complex_step_grad`, `verify_gradient` |
+| Mesh diagnostics, repair, coarsening | `src/geometry/Mesh.jl` | `mesh_quality_report`, `repair_mesh_for_simulation`, `coarsen_mesh_to_target_rwg`, `estimate_dense_matrix_gib` |
+| EFIE assembly | `src/assembly/EFIE.jl`, `src/assembly/Excitation.jl` | `assemble_Z_efie`, `assemble_v_plane_wave` |
+| Solving and conditioning | `src/solver/Solve.jl` | `solve_forward`, `make_left_preconditioner`, `prepare_conditioned_system` |
+| Far‑field and Q matrices | `src/postprocessing/FarField.jl`, `src/optimization/QMatrix.jl` | `radiation_vectors`, `compute_farfield`, `build_Q` |
+| Diagnostics | `src/postprocessing/Diagnostics.jl` | `energy_ratio`, `condition_diagnostics`, `bistatic_rcs`, `backscatter_rcs` |
+| Adjoint gradient | `src/optimization/Adjoint.jl` | `solve_adjoint`, `gradient_impedance`, `compute_objective` |
+| Gradient verification | `src/optimization/Verification.jl` | `fd_grad`, `complex_step_grad`, `verify_gradient` |
 | End‑to‑end tests | `test/runtests.jl` | Test suite that exercises all components |
 
 > Note: The exact location of adjoint and verification functions may vary; check

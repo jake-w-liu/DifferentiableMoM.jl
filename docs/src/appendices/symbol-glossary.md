@@ -152,8 +152,8 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 ## Code Mapping
 
 - Core types and vector aliases: `src/Types.jl`
-- Geometry and mesh operations: `src/Mesh.jl`
-- RWG basis: `src/RWG.jl`
-- Green's function: `src/Greens.jl`
-- Matrix assembly: `src/EFIE.jl`, `src/Impedance.jl`
-- Optimization: `src/Adjoint.jl`, `src/Optimize.jl`
+- Geometry and mesh operations: `src/geometry/Mesh.jl`
+- RWG basis: `src/basis/RWG.jl`
+- Green's function: `src/basis/Greens.jl`
+- Matrix assembly: `src/assembly/EFIE.jl`, `src/assembly/Impedance.jl`
+- Optimization: `src/optimization/Adjoint.jl`, `src/optimization/Optimize.jl`

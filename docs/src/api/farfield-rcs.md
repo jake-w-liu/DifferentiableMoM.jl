@@ -360,11 +360,11 @@ rel_error = abs.(rcs_mom .- rcs_mie) ./ max.(rcs_mie, 1e-30)
 
 | File | Contents |
 |------|----------|
-| `src/FarField.jl` | `make_sph_grid`, `radiation_vectors`, `compute_farfield` |
-| `src/QMatrix.jl` | `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask` |
-| `src/Diagnostics.jl` | `radiated_power`, `projected_power`, `input_power`, `energy_ratio`, `condition_diagnostics` |
-| `src/Excitation.jl` | `assemble_v_plane_wave` |
-| `src/Mie.jl` | `mie_s1s2_pec`, `mie_bistatic_rcs_pec` |
+| `src/postprocessing/FarField.jl` | `make_sph_grid`, `radiation_vectors`, `compute_farfield` |
+| `src/optimization/QMatrix.jl` | `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask` |
+| `src/postprocessing/Diagnostics.jl` | `radiated_power`, `projected_power`, `input_power`, `energy_ratio`, `condition_diagnostics` |
+| `src/assembly/Excitation.jl` | `assemble_v_plane_wave` |
+| `src/postprocessing/Mie.jl` | `mie_s1s2_pec`, `mie_bistatic_rcs_pec` |
 
 ---
 

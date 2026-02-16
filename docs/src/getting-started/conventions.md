@@ -111,10 +111,10 @@ When comparing with external solvers:
 
 ## Code Mapping
 
-- Green kernel and convention: `src/Greens.jl`
-- Spherical grid definition: `src/FarField.jl`
-- Objective/adjoint implementation: `src/Adjoint.jl`, `src/Optimize.jl`
-- Units in diagnostics/RCS: `src/Diagnostics.jl`
+- Green kernel and convention: `src/basis/Greens.jl`
+- Spherical grid definition: `src/postprocessing/FarField.jl`
+- Objective/adjoint implementation: `src/optimization/Adjoint.jl`, `src/optimization/Optimize.jl`
+- Units in diagnostics/RCS: `src/postprocessing/Diagnostics.jl`
 
 ---
 

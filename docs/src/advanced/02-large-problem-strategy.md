@@ -147,7 +147,7 @@ When coarsening is applied, adopt a tiered validation strategy:
 1. **Mesh‑quality tier**: `mesh_quality_ok` passes with your chosen tolerances.
 2. **Solver‑residual tier**: Relative residual `norm(Z*I - v)/norm(v)` < 1e‑8.
 3. **Internal‑consistency tier**: Far‑field power conservation holds within
-   a few percent (check `energy_ratio` function in `src/Diagnostics.jl`).
+   a few percent (check `energy_ratio` function in `src/postprocessing/Diagnostics.jl`).
 4. **Engineering‑observable tier**: Key metrics (main lobe, monostatic RCS,
    trend vs. parameter) are stable across coarsening levels.
 5. **External‑validation tier** (optional): Compare with a high‑fidelity
@@ -170,7 +170,7 @@ coarse_result = coarsen_mesh_to_target_rwg(mesh, target_rwg; max_iters=10, ...)
 
 ### How Coarsening Works
 
-The algorithm (`src/Mesh.jl:461`) iterates:
+The algorithm (`src/geometry/Mesh.jl:461`) iterates:
 
 1. **Vertex clustering**: Voxelize the bounding box with cell size $h$ and
    replace all vertices within a cell by their centroid.
@@ -281,7 +281,7 @@ grid_cut = make_sph_grid(theta_range, [phi_fixed])   # 181 points
 
 ### Optimization‑Specific Simplifications
 
-For gradient‑based optimization (`src/Optimize.jl`):
+For gradient‑based optimization (`src/optimization/Optimize.jl`):
 
 - Start with a **coarse mesh** (low $N$) for initial exploration.
 - Use **coarse far‑field grid** (e.g., $N_\theta=31$, $N_\varphi=36$) for
@@ -313,7 +313,7 @@ structures or dense discretizations. Left preconditioning solves
 
 where $\mathbf{M}$ is a preconditioner designed to approximate $\mathbf{Z}^{-1}$.
 The package constructs $\mathbf{M}$ from the patch‑mass matrices
-$\mathbf{M}_p$ (see `src/Solve.jl:67`):
+$\mathbf{M}_p$ (see `src/solver/Solve.jl:67`):
 
 ```math
 \mathbf{M} = \sum_p \mathbf{M}_p + \epsilon \mathbf{I},
@@ -343,7 +343,7 @@ improves the condition number.
 
 ### Auto‑Mode Logic
 
-The `:auto` mode (`src/Solve.jl:106`) decides whether to apply preconditioning
+The `:auto` mode (`src/solver/Solve.jl:106`) decides whether to apply preconditioning
 based on:
 
 1. **User override**: If `preconditioner_M` is provided, use it.
@@ -578,12 +578,12 @@ println(report)
 
 | Functionality | Source File | Key Functions / Lines |
 |---------------|-------------|-----------------------|
-| Memory estimation | `src/Mesh.jl` | `estimate_dense_matrix_gib` (line 328) |
-| Mesh coarsening | `src/Mesh.jl` | `coarsen_mesh_to_target_rwg` (line 461) |
-| Mesh repair | `src/Mesh.jl` | `repair_mesh_for_simulation` (line …) |
-| Preconditioner construction | `src/Solve.jl` | `make_left_preconditioner` (line 67), `select_preconditioner` (line 106) |
-| Conditioned system solve | `src/Solve.jl` | `prepare_conditioned_system` (line 179) |
-| Optimization with preconditioning | `src/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
+| Memory estimation | `src/geometry/Mesh.jl` | `estimate_dense_matrix_gib` (line 328) |
+| Mesh coarsening | `src/geometry/Mesh.jl` | `coarsen_mesh_to_target_rwg` (line 461) |
+| Mesh repair | `src/geometry/Mesh.jl` | `repair_mesh_for_simulation` (line …) |
+| Preconditioner construction | `src/solver/Solve.jl` | `make_left_preconditioner` (line 67), `select_preconditioner` (line 106) |
+| Conditioned system solve | `src/solver/Solve.jl` | `prepare_conditioned_system` (line 179) |
+| Optimization with preconditioning | `src/optimization/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
 | Large OBJ demo | `examples/06_aircraft_rcs.jl` | Full workflow with repair, coarsen, solve, RCS |
 | Auto‑preconditioning example | `examples/05_solver_methods.jl` | Decision logic and recommended settings |
 

@@ -324,13 +324,13 @@ systematic diagnostic order.
 
 | Task | Source File | Key Functions |
 |------|-------------|---------------|
-| Mesh creation | `src/Mesh.jl` | `make_rect_plate` |
-| RWG basis | `src/RWG.jl` | `build_rwg` |
-| EFIE assembly | `src/EFIE.jl` | `assemble_Z_efie` |
-| Excitation vector | `src/Excitation.jl` | `assemble_v_plane_wave` |
-| Linear solve | `src/Solve.jl` | `solve_forward` |
-| Far‑field computation | `src/FarField.jl` | `radiation_vectors`, `compute_farfield` |
-| Energy balance check | `src/Diagnostics.jl` | `energy_ratio` |
+| Mesh creation | `src/geometry/Mesh.jl` | `make_rect_plate` |
+| RWG basis | `src/basis/RWG.jl` | `build_rwg` |
+| EFIE assembly | `src/assembly/EFIE.jl` | `assemble_Z_efie` |
+| Excitation vector | `src/assembly/Excitation.jl` | `assemble_v_plane_wave` |
+| Linear solve | `src/solver/Solve.jl` | `solve_forward` |
+| Far‑field computation | `src/postprocessing/FarField.jl` | `radiation_vectors`, `compute_farfield` |
+| Energy balance check | `src/postprocessing/Diagnostics.jl` | `energy_ratio` |
 | Example script | `examples/ex_convergence.jl` | Complete convergence study |
 
 ---

@@ -20,7 +20,7 @@ You will learn to:
 
 After this tutorial, you should be able to:
 
-1. **Understand the Mie series** for PEC sphere scattering and its implementation in `src/Mie.jl`.
+1. **Understand the Mie series** for PEC sphere scattering and its implementation in `src/postprocessing/Mie.jl`.
 2. **Generate sphere meshes** with controllable resolution (icosphere subdivisions or imported OBJ).
 3. **Run the end‑to‑end MoM workflow** for bistatic RCS: EFIE assembly, plane‑wave excitation, far‑field computation.
 4. **Compute error metrics** (MAE, RMSE, backscatter Δ) between MoM and Mie results.
@@ -46,7 +46,7 @@ a_n = -\frac{j_n(ka)}{h_n^{(1)}(ka)}, \qquad
 b_n = -\frac{[ka\,j_n(ka)]'}{[ka\,h_n^{(1)}(ka)]'}.
 \]
 
-The function `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` (`src/Mie.jl:3`) computes this series truncated at $n_\text{max} = \max(3,\, \lceil x + 4\,x^{1/3} + 2 \rceil)$ where $x = ka$, providing machine‑precision reference values.
+The function `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` (`src/postprocessing/Mie.jl:3`) computes this series truncated at $n_\text{max} = \max(3,\, \lceil x + 4\,x^{1/3} + 2 \rceil)$ where $x = ka$, providing machine‑precision reference values.
 
 ### EFIE Formulation for Sphere
 
@@ -293,12 +293,12 @@ To verify implementation correctness, repeat with increasing mesh density and ob
 
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
-| **Mie RCS** | `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` | `src/Mie.jl` | 30–80 |
+| **Mie RCS** | `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` | `src/postprocessing/Mie.jl` | 30–80 |
 | **Sphere mesh generation** | `write_obj_mesh` (internal) | `examples/ex_pec_sphere_mie_benchmark.jl` | 27–83 |
 | **Radius estimation** | `estimate_sphere_radius` (internal) | `examples/ex_pec_sphere_mie_benchmark.jl` | 85–89 |
-| **Bistatic RCS** | `bistatic_rcs(E_ff; E0)` | `src/Diagnostics.jl` | 60–80 |
-| **Backscatter RCS** | `backscatter_rcs(E_ff, grid, khat_inc; E0)` | `src/Diagnostics.jl` | 100–120 |
-| **Far‑field computation** | `compute_farfield(G_mat, I, NΩ)` | `src/FarField.jl` | 200–220 |
+| **Bistatic RCS** | `bistatic_rcs(E_ff; E0)` | `src/postprocessing/Diagnostics.jl` | 60–80 |
+| **Backscatter RCS** | `backscatter_rcs(E_ff, grid, khat_inc; E0)` | `src/postprocessing/Diagnostics.jl` | 100–120 |
+| **Far‑field computation** | `compute_farfield(G_mat, I, NΩ)` | `src/postprocessing/FarField.jl` | 200–220 |
 | **Complete benchmark** | `ex_pec_sphere_mie_benchmark.jl` | `examples/` | full script |
 
 **Standalone MoM sphere RCS** (no Mie comparison): `examples/ex_pec_sphere_rcs.jl`.
@@ -342,7 +342,7 @@ Before declaring your MoM implementation validated, complete these steps:
 ## Further Reading
 
 - **Paper Section 5.1** – Sphere benchmark as a validation gate.
-- **`src/Mie.jl`** – Implementation of Mie series for PEC sphere.
-- **`src/Diagnostics.jl`** – RCS computation utilities.
+- **`src/postprocessing/Mie.jl`** – Implementation of Mie series for PEC sphere.
+- **`src/postprocessing/Diagnostics.jl`** – RCS computation utilities.
 - **Tutorial 5: Airplane RCS** – Applying the validated MoM to a complex platform.
 - **Balanis, *Advanced Engineering Electromagnetics*, Chapter 11** – Detailed derivation of Mie series.

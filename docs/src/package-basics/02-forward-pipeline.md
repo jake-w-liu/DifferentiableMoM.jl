@@ -108,7 +108,7 @@ cond_info = condition_diagnostics(Z_full)
 residual = norm(Z_full * I - v) / norm(v)
 ```
 
-### 2.3 EFIE Matrix Assembly (`src/EFIE.jl`)
+### 2.3 EFIE Matrix Assembly (`src/assembly/EFIE.jl`)
 
 The `assemble_Z_efie` function implements singularity-extracted quadrature:
 
@@ -128,7 +128,7 @@ function assemble_Z_efie(mesh::TriMesh, rwg::RWGData, k::Float64;
 - **Near-term** ($R < \lambda/10$): Higher-order adaptive quadrature
 - **Far-term**: Standard Gauss-Legendre with reduced order
 
-### 2.4 Impedance Loading (`src/Impedance.jl`)
+### 2.4 Impedance Loading (`src/assembly/Impedance.jl`)
 
 Surface impedance contributes a local mass matrix:
 
@@ -159,7 +159,7 @@ Z_full = assemble_full_Z(Z_efie, Mp, theta; reactive=true)
 - **Reactive**: `reactive=true` → $Z_s = i\theta_p$
 - **Complex**: Combine real and imaginary parts
 
-### 2.5 Excitation Assembly (`src/Excitation.jl`)
+### 2.5 Excitation Assembly (`src/assembly/Excitation.jl`)
 
 Plane wave excitation with propagation vector $\mathbf{k}$ and polarization $\mathbf{p}$:
 
@@ -189,7 +189,7 @@ v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
 - `PatternFeedExcitation` — feed defined by a radiation pattern
 - `MultiExcitation` — combination of multiple excitation types
 
-### 2.6 Solution Strategies (`src/Solve.jl`)
+### 2.6 Solution Strategies (`src/solver/Solve.jl`)
 
 #### Direct Solution (Default)
 ```julia
@@ -206,7 +206,7 @@ I = solve_forward(Z, v)  # Uses LU factorization (LAPACK)
 - $O(N^2)$ memory for factors
 
 #### Iterative Solution (GMRES)
-GMRES is available via `solver=:gmres`, with `src/IterativeSolve.jl` providing
+GMRES is available via `solver=:gmres`, with `src/solver/IterativeSolve.jl` providing
 the Krylov.jl wrapper. Both left and right preconditioning are supported.
 For automatic method selection based on problem size, use `solve_scattering`
 in `src/Workflow.jl`, which selects dense direct, dense GMRES, or ACA GMRES
@@ -457,27 +457,27 @@ Combine with other techniques:
 
 ### 6.1 Primary Implementation Files
 
-- **EFIE operator assembly**: `src/EFIE.jl`
+- **EFIE operator assembly**: `src/assembly/EFIE.jl`
   - `assemble_Z_efie`, singularity extraction, quadrature
 
-- **Impedance loading**: `src/Impedance.jl` + `src/Solve.jl`
+- **Impedance loading**: `src/assembly/Impedance.jl` + `src/solver/Solve.jl`
   - `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_full_Z`
 
-- **Excitation assembly**: `src/Excitation.jl`
+- **Excitation assembly**: `src/assembly/Excitation.jl`
   - `assemble_v_plane_wave`, incident field integration
 
-- **Linear algebra solvers**: `src/Solve.jl`
+- **Linear algebra solvers**: `src/solver/Solve.jl`
   - `solve_forward`, `solve_system`
   - `select_preconditioner`, `prepare_conditioned_system`
 
-- **Diagnostics**: `src/Diagnostics.jl`
+- **Diagnostics**: `src/postprocessing/Diagnostics.jl`
   - `condition_diagnostics`, `energy_ratio`, residual checks
 
 ### 6.2 Supporting Modules
 
-- **Basis functions**: `src/RWG.jl` (RWG construction)
-- **Geometry utilities**: `src/Mesh.jl` (triangle operations)
-- **Green kernels and quadrature**: `src/Greens.jl`, `src/Quadrature.jl`
+- **Basis functions**: `src/basis/RWG.jl` (RWG construction)
+- **Geometry utilities**: `src/geometry/Mesh.jl` (triangle operations)
+- **Green kernels and quadrature**: `src/basis/Greens.jl`, `src/basis/Quadrature.jl`
 
 ### 6.3 Example Scripts
 

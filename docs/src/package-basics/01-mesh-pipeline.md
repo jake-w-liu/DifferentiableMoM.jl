@@ -380,17 +380,17 @@ I_coarse = solve_forward(Z, v)
 
 ### 6.1 Primary Implementation Files
 
-- **Mesh data structures and algorithms**: `src/Mesh.jl`
+- **Mesh data structures and algorithms**: `src/geometry/Mesh.jl`
   - `make_rect_plate`, `read_obj_mesh`, `write_obj_mesh`
   - `mesh_quality_report`, `mesh_quality_ok`, `assert_mesh_quality`
   - `repair_mesh_for_simulation`, `repair_obj_mesh`
   - `coarsen_mesh_to_target_rwg`, `estimate_dense_matrix_gib`
 
-- **RWG basis generation**: `src/RWG.jl`
+- **RWG basis generation**: `src/basis/RWG.jl`
   - `build_rwg`
   - Pre-check integration with mesh quality system
 
-- **Visualization utilities**: `src/Visualization.jl`
+- **Visualization utilities**: `src/postprocessing/Visualization.jl`
   - Mesh inspection and quality visualization
 
 ### 6.2 Example Scripts
@@ -401,8 +401,8 @@ I_coarse = solve_forward(Z, v)
 
 ### 6.3 Supporting Functions
 
-- **Geometry utilities**: `src/Mesh.jl` (`triangle_area`, `triangle_center`, `triangle_normal`)
-- **Performance estimation**: `src/Mesh.jl` (`estimate_dense_matrix_gib`)
+- **Geometry utilities**: `src/geometry/Mesh.jl` (`triangle_area`, `triangle_center`, `triangle_normal`)
+- **Performance estimation**: `src/geometry/Mesh.jl` (`estimate_dense_matrix_gib`)
 
 ---
 

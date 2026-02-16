@@ -260,9 +260,9 @@ println("Final gradient norm: ", trace[end].gnorm)
 
 | File | Contents |
 |------|----------|
-| `src/Adjoint.jl` | `compute_objective`, `solve_adjoint`, `gradient_impedance` |
-| `src/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
-| `src/Solve.jl` | Conditioning helpers used by optimizers |
+| `src/optimization/Adjoint.jl` | `compute_objective`, `solve_adjoint`, `gradient_impedance` |
+| `src/optimization/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
+| `src/solver/Solve.jl` | Conditioning helpers used by optimizers |
 
 ---
 

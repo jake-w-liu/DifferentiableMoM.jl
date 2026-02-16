@@ -238,8 +238,8 @@ Since each cell contains $O(1)$ basis functions (for uniform mesh density) and e
 
 The iterative solver and preconditioner are implemented in two dedicated source files:
 
-- **`src/NearFieldPreconditioner.jl`**: Preconditioner construction, operator wrappers, spatial hashing.
-- **`src/IterativeSolve.jl`**: GMRES wrapper functions using Krylov.jl.
+- **`src/solver/NearFieldPreconditioner.jl`**: Preconditioner construction, operator wrappers, spatial hashing.
+- **`src/solver/IterativeSolve.jl`**: GMRES wrapper functions using Krylov.jl.
 
 These files depend on earlier definitions (types, mesh, RWG, EFIE) and must be included in the correct order in `src/DifferentiableMoM.jl`. Specifically, `NearFieldPreconditioner.jl` must precede `IterativeSolve.jl` because the operator types `NearFieldOperator` and `NearFieldAdjointOperator` are used as preconditioners in the GMRES calls.
 
@@ -415,7 +415,7 @@ In impedance optimization, the adjoint method computes gradients of an objective
 \mathbf{Z}^\dagger \boldsymbol{\lambda} = \frac{\partial \Phi}{\partial \mathbf{I}^*} = \mathbf{Q}\mathbf{I},
 ```
 
-where $\mathbf{Q}$ is a quadratic objective matrix and $\mathbf{I}$ is the forward solution (see `src/Adjoint.jl`). Once $\boldsymbol{\lambda}$ is known, the gradient is
+where $\mathbf{Q}$ is a quadratic objective matrix and $\mathbf{I}$ is the forward solution (see `src/optimization/Adjoint.jl`). Once $\boldsymbol{\lambda}$ is known, the gradient is
 
 ```math
 \frac{\partial \Phi}{\partial \theta_p} = 2\,\operatorname{Re}\!\bigl\{\boldsymbol{\lambda}^\dagger \mathbf{M}_p \mathbf{I}\bigr\},
@@ -457,7 +457,7 @@ lambda, stats_adj = solve_gmres_adjoint(Z, Q * I; preconditioner=P_nf)
 
 ### 6.4 Integration with the Optimization Loop
 
-The optimizer in `src/Optimize.jl` accepts a near-field preconditioner via the `nf_preconditioner` keyword argument. When provided, both `solve_forward` and `solve_adjoint` dispatch to the GMRES path with the given preconditioner:
+The optimizer in `src/optimization/Optimize.jl` accepts a near-field preconditioner via the `nf_preconditioner` keyword argument. When provided, both `solve_forward` and `solve_adjoint` dispatch to the GMRES path with the given preconditioner:
 
 ```julia
 result = optimize_directivity(
@@ -684,11 +684,11 @@ This section maps the concepts presented in this chapter to the source files and
 
 | File | Purpose |
 |---|---|
-| `src/NearFieldPreconditioner.jl` | Near-field sparse preconditioner: type definitions, spatial hashing, sparse matrix assembly, LU factorization, operator wrappers |
-| `src/IterativeSolve.jl` | GMRES solver wrappers via Krylov.jl: forward and adjoint solves with preconditioner dispatch |
-| `src/Solve.jl` | High-level solver dispatch (`solve_forward`, `solve_system`) that routes to direct or GMRES |
-| `src/Adjoint.jl` | Adjoint equation solve (`solve_adjoint`) and gradient computation (`gradient_impedance`) |
-| `src/EFIE.jl` | `MatrixFreeEFIEOperator` definition and `matrixfree_efie_operator` constructor |
+| `src/solver/NearFieldPreconditioner.jl` | Near-field sparse preconditioner: type definitions, spatial hashing, sparse matrix assembly, LU factorization, operator wrappers |
+| `src/solver/IterativeSolve.jl` | GMRES solver wrappers via Krylov.jl: forward and adjoint solves with preconditioner dispatch |
+| `src/solver/Solve.jl` | High-level solver dispatch (`solve_forward`, `solve_system`) that routes to direct or GMRES |
+| `src/optimization/Adjoint.jl` | Adjoint equation solve (`solve_adjoint`) and gradient computation (`gradient_impedance`) |
+| `src/assembly/EFIE.jl` | `MatrixFreeEFIEOperator` definition and `matrixfree_efie_operator` constructor |
 | `src/Workflow.jl` | `solve_scattering` high-level API with automatic method selection and preconditioner setup |
 
 ### 9.2 Key Functions
@@ -776,11 +776,11 @@ gradient_impedance(Mp, I, lambda)
 
 7. Compare the convergence behavior of `:lu` and `:diag` factorizations by plotting the residual history (available in `stats.residuals`) for both preconditioners on the same problem. How many additional iterations does the diagonal preconditioner require?
 
-8. Verify adjoint consistency: for a small problem ($N \approx 100$) with impedance parameters, compute the adjoint gradient and compare with a centered finite-difference approximation. Use the `fd_grad` utility from `src/Verification.jl`. The relative error should be below $10^{-5}$.
+8. Verify adjoint consistency: for a small problem ($N \approx 100$) with impedance parameters, compute the adjoint gradient and compare with a centered finite-difference approximation. Use the `fd_grad` utility from `src/optimization/Verification.jl`. The relative error should be below $10^{-5}$.
 
 ### Advanced
 
-9. Implement a **block-diagonal preconditioner** that partitions the RWG basis functions into spatial clusters (e.g., using the cluster tree from `src/ClusterTree.jl`) and factorizes each diagonal block independently. Compare its iteration count with the standard near-field preconditioner.
+9. Implement a **block-diagonal preconditioner** that partitions the RWG basis functions into spatial clusters (e.g., using the cluster tree from `src/fast/ClusterTree.jl`) and factorizes each diagonal block independently. Compare its iteration count with the standard near-field preconditioner.
 
 10. Investigate the effect of mesh non-uniformity on preconditioner performance. Create a mesh with locally refined regions and measure GMRES iteration counts with a fixed cutoff. Does the cutoff need to be adapted to the local mesh density?
 
@@ -797,7 +797,7 @@ gradient_impedance(Mp, I, lambda)
 - [ ] Set up the adjoint preconditioner $\mathbf{Z}_{\mathrm{nf}}^{-\dagger}$ and verify that the same `P_nf` object is reused for both forward and adjoint directions.
 - [ ] Choose between `:lu` and `:diag` factorization modes based on problem size and memory constraints.
 - [ ] Diagnose GMRES convergence issues using `stats.niter` and `stats.residuals`, and apply appropriate remedies (increase cutoff, switch factorization, check mesh).
-- [ ] Locate the relevant source files: `src/NearFieldPreconditioner.jl`, `src/IterativeSolve.jl`, `src/Solve.jl`, `src/Adjoint.jl`, `src/Workflow.jl`.
+- [ ] Locate the relevant source files: `src/solver/NearFieldPreconditioner.jl`, `src/solver/IterativeSolve.jl`, `src/solver/Solve.jl`, `src/optimization/Adjoint.jl`, `src/Workflow.jl`.
 
 ---
 

@@ -73,7 +73,7 @@ The EFIE matrix condition number $\kappa(\mathbf{Z}) = \sigma_{\max}/\sigma_{\mi
 
 ### 2.1 Energy Ratio Computation
 
-The `energy_ratio` function in `src/Diagnostics.jl` implements the complete check:
+The `energy_ratio` function in `src/postprocessing/Diagnostics.jl` implements the complete check:
 
 ```julia
 ratio = energy_ratio(I, v, E_ff, grid; eta0=η0)
@@ -259,20 +259,20 @@ end
 
 ### 6.1 Primary Implementation Files
 
-- **Diagnostic functions**: `src/Diagnostics.jl`
+- **Diagnostic functions**: `src/postprocessing/Diagnostics.jl`
   - `radiated_power`, `input_power`, `energy_ratio`, `condition_diagnostics`
   - `bistatic_rcs`, `backscatter_rcs`
 
-- **Objective assembly**: `src/QMatrix.jl`
+- **Objective assembly**: `src/optimization/QMatrix.jl`
   - `build_Q`
 
-- **Projected power**: `src/Diagnostics.jl`
+- **Projected power**: `src/postprocessing/Diagnostics.jl`
   - `projected_power`
 
-- **Far-field computation**: `src/FarField.jl`
+- **Far-field computation**: `src/postprocessing/FarField.jl`
   - `radiation_vectors`, `compute_farfield`
 
-- **Forward solver**: `src/Solve.jl`, `src/EFIE.jl`, `src/Excitation.jl`
+- **Forward solver**: `src/solver/Solve.jl`, `src/assembly/EFIE.jl`, `src/assembly/Excitation.jl`
 
 ### 6.2 Example Scripts
 

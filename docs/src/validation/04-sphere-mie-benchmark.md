@@ -208,7 +208,7 @@ end
 
 ## 5) Code Implementation Details
 
-### 5.1 Mie Theory Implementation (`src/Mie.jl`)
+### 5.1 Mie Theory Implementation (`src/postprocessing/Mie.jl`)
 
 Key algorithms:
 - **Spherical Bessel functions**: Recurrence relations for $j_n(x)$, $y_n(x)$
@@ -355,7 +355,7 @@ a_std = std(radii)
 
 ### 8.1 Primary Files
 
-- **Mie theory**: `src/Mie.jl`
+- **Mie theory**: `src/postprocessing/Mie.jl`
   - `mie_s1s2_pec`, `mie_bistatic_rcs_pec`
   - Internal: `_sph_bessel_jy_arrays`, `_mie_nmax`
 
@@ -364,13 +364,13 @@ a_std = std(radii)
   - Fallback icosphere generation
   - Radius estimation and validation
 
-- **RCS diagnostics**: `src/Diagnostics.jl`
+- **RCS diagnostics**: `src/postprocessing/Diagnostics.jl`
   - `bistatic_rcs`, `backscatter_rcs`
 
 ### 8.2 Supporting Scripts
 
 - **Sphere RCS example**: `examples/02_pec_sphere_mie.jl`
-- **Visualization utilities**: `src/Visualization.jl`
+- **Visualization utilities**: `src/postprocessing/Visualization.jl`
 
 ### 8.3 Output Artifacts
 

@@ -702,7 +702,7 @@ These validation gates are run as part of the continuous‑integration pipeline.
 
 ### 12.1 Primary Source File
 
-All excitation‑related code resides in **`src/Excitation.jl`**. The file is organized as follows:
+All excitation‑related code resides in **`src/assembly/Excitation.jl`**. The file is organized as follows:
 
 - **Lines 1‑50**: Exports and abstract type definition.
 - **Lines 51‑150**: Struct definitions for all excitation types.

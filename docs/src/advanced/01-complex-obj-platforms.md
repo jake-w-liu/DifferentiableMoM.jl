@@ -20,7 +20,7 @@ After this chapter, you should be able to:
 
 ## 1) Common OBJ Failure Modes
 
-Complex CAD meshes exported as OBJ files often contain geometric and topological defects that prevent successful RWG discretization and EFIE assembly. The package’s mesh‑quality pipeline (`src/Mesh.jl`) detects these issues early, but understanding their nature helps you decide which repairs are essential.
+Complex CAD meshes exported as OBJ files often contain geometric and topological defects that prevent successful RWG discretization and EFIE assembly. The package’s mesh‑quality pipeline (`src/geometry/Mesh.jl`) detects these issues early, but understanding their nature helps you decide which repairs are essential.
 
 ### 1.1 Topological Defects
 
@@ -216,18 +216,18 @@ Plot `backscatter_db` vs. `targets` to identify the “knee” where further ref
 
 ### 5.1 Primary Source Files
 
-- **`src/Mesh.jl`** – contains `read_obj_mesh`, `write_obj_mesh`, `repair_mesh_for_simulation`, `coarsen_mesh_to_target_rwg`, `mesh_quality_report`, and `mesh_wireframe_segments`. This module handles all geometry import, repair, coarsening, and quality diagnostics.
-- **`src/Visualization.jl`** – provides `plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview` for visual validation.
-- **`src/EFIE.jl`**, **`src/Excitation.jl`**, **`src/Solve.jl`** – assemble and solve the forward system on the coarsened mesh.
+- **`src/geometry/Mesh.jl`** – contains `read_obj_mesh`, `write_obj_mesh`, `repair_mesh_for_simulation`, `coarsen_mesh_to_target_rwg`, `mesh_quality_report`, and `mesh_wireframe_segments`. This module handles all geometry import, repair, coarsening, and quality diagnostics.
+- **`src/postprocessing/Visualization.jl`** – provides `plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview` for visual validation.
+- **`src/assembly/EFIE.jl`**, **`src/assembly/Excitation.jl`**, **`src/solver/Solve.jl`** – assemble and solve the forward system on the coarsened mesh.
 
 ### 5.2 Example Scripts
 
 - **`examples/06_aircraft_rcs.jl`** – complete workflow for a complex platform: import, repair, coarsening, solve, far‑field and RCS extraction. This script is the reference implementation for this chapter.
-<!-- ex_visualize_simulation_mesh.jl -- no equivalent script exists; use plot_mesh_wireframe / plot_mesh_comparison from src/Visualization.jl directly -->
+<!-- ex_visualize_simulation_mesh.jl -- no equivalent script exists; use plot_mesh_wireframe / plot_mesh_comparison from src/postprocessing/Visualization.jl directly -->
 
 ### 5.3 Supporting Utilities
 
-- **`src/Mesh.jl`** – triangle operations (`triangle_area`, `triangle_center`, `triangle_normal`) and `estimate_dense_matrix_gib`.
+- **`src/geometry/Mesh.jl`** – triangle operations (`triangle_area`, `triangle_center`, `triangle_normal`) and `estimate_dense_matrix_gib`.
 
 ---
 
