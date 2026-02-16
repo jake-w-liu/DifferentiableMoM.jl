@@ -133,7 +133,7 @@ Validate simulation results and compute scattering cross sections.
 High-frequency approximate solver for electrically large problems where full MoM is too expensive.
 
 - **Physical optics solve:** `solve_po`
-  Compute PO surface currents and far-field scattering using the tangential magnetic field approximation on illuminated faces. Returns `POResult`. See `src/PhysicalOptics.jl`.
+  Compute PO surface currents and far-field scattering using the tangential magnetic field approximation on illuminated faces. Returns `POResult`. See `src/postprocessing/PhysicalOptics.jl`.
 
 - **Types:** `POResult`
   Result container for PO solutions, analogous to `ScatteringResult` for MoM.

@@ -51,7 +51,7 @@ For **reactive impedance** ($Z_s = i\theta_p$), $\partial Z/\partial\theta_p = -
       = -2\,\Im\{\lambda^\dagger M_p I\}.
 \]
 
-These closed‑form expressions are implemented in `gradient_impedance` (`src/Adjoint.jl:45`).
+These closed‑form expressions are implemented in `gradient_impedance` (`src/optimization/Adjoint.jl:45`).
 
 ### Finite‑Difference Verification
 
@@ -77,7 +77,7 @@ When the objective is holomorphic in $\theta$, the complex‑step method
 g_p^{\text{CS}} = \frac{\Im\{J(\theta + i\epsilon e_p)\}}{\epsilon},\qquad \epsilon \sim 10^{-30}
 \]
 
-provides machine‑precision gradients without subtractive cancellation. The function `verify_gradient` (`src/Verification.jl:42`) automatically compares adjoint, finite‑difference, and complex‑step results.
+provides machine‑precision gradients without subtractive cancellation. The function `verify_gradient` (`src/optimization/Verification.jl:42`) automatically compares adjoint, finite‑difference, and complex‑step results.
 
 ---
 
@@ -235,7 +235,7 @@ The curve should have a V‑shape; a flat plateau indicates numerical noise domi
 
 ### Preconditioning Consistency
 
-If you use left preconditioning (`preconditioner_M`), the derivative blocks must be transformed as $M_p \to M^{-1} M_p$. The function `transform_patch_matrices` (`src/Solve.jl:135`) handles this automatically when `preconditioner_M` is passed to `gradient_impedance`. Verify that the same preconditioner is used in forward, adjoint, and gradient computations.
+If you use left preconditioning (`preconditioner_M`), the derivative blocks must be transformed as $M_p \to M^{-1} M_p$. The function `transform_patch_matrices` (`src/solver/Solve.jl:135`) handles this automatically when `preconditioner_M` is passed to `gradient_impedance`. Verify that the same preconditioner is used in forward, adjoint, and gradient computations.
 
 ---
 
@@ -256,7 +256,7 @@ If errors show a consistent factor (e.g., 0.5, 2, 4), verify the gradient formul
 - Resistive: $+2\Re\{\lambda^\dagger M_p I\}$ (factor 2)
 - Reactive: $-2\Im\{\lambda^\dagger M_p I\}$ (factor −2)
 
-The `gradient_impedance` implementation (`src/Adjoint.jl:45`) already includes these factors; a scaling discrepancy suggests `Mp` is incorrectly normalized.
+The `gradient_impedance` implementation (`src/optimization/Adjoint.jl:45`) already includes these factors; a scaling discrepancy suggests `Mp` is incorrectly normalized.
 
 ### Error 3: Large Errors Only for Ill‑Conditioned Parameters
 
@@ -284,14 +284,14 @@ Complex‑step requires the objective to be holomorphic. If $J(\theta)$ involves
 
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
-| **Adjoint solve** | `solve_adjoint(Z, Q, I)` | `src/Adjoint.jl` | 25–29 |
-| **Gradient computation** | `gradient_impedance(Mp, I, λ; reactive)` | `src/Adjoint.jl` | 45–64 |
-| **Finite‑difference derivative** | `fd_grad(f, theta, p; h, scheme)` | `src/Verification.jl` | 27–39 |
-| **Complex‑step derivative** | `complex_step_grad(f, theta, p; eps)` | `src/Verification.jl` | 15–20 |
-| **Gradient verification** | `verify_gradient(f_obj, g_adj, theta; …)` | `src/Verification.jl` | 42–86 |
-| **Full system assembly** | `assemble_full_Z(Z_efie, Mp, theta; reactive)` | `src/Solve.jl` | 34–44 |
-| **Forward solve** | `solve_forward(Z, v)` | `src/Solve.jl` | 13–15 |
-| **Patch mass matrices** | `precompute_patch_mass(mesh, rwg, partition)` | `src/Impedance.jl` | 15–64 |
+| **Adjoint solve** | `solve_adjoint(Z, Q, I)` | `src/optimization/Adjoint.jl` | 25–29 |
+| **Gradient computation** | `gradient_impedance(Mp, I, λ; reactive)` | `src/optimization/Adjoint.jl` | 45–64 |
+| **Finite‑difference derivative** | `fd_grad(f, theta, p; h, scheme)` | `src/optimization/Verification.jl` | 27–39 |
+| **Complex‑step derivative** | `complex_step_grad(f, theta, p; eps)` | `src/optimization/Verification.jl` | 15–20 |
+| **Gradient verification** | `verify_gradient(f_obj, g_adj, theta; …)` | `src/optimization/Verification.jl` | 42–86 |
+| **Full system assembly** | `assemble_full_Z(Z_efie, Mp, theta; reactive)` | `src/solver/Solve.jl` | 34–44 |
+| **Forward solve** | `solve_forward(Z, v)` | `src/solver/Solve.jl` | 13–15 |
+| **Patch mass matrices** | `precompute_patch_mass(mesh, rwg, partition)` | `src/assembly/Impedance.jl` | 15–64 |
 
 **Example from the beam‑steering tutorial** (`examples/ex_beam_steer.jl:210‑226`):
 
@@ -328,7 +328,7 @@ end
 ### Practical (60 minutes)
 
 1. **Add left preconditioning** with `make_left_preconditioner(Mp; eps_rel=1e-6)`. Use `prepare_conditioned_system` for forward/adjoint solves and `transform_patch_matrices` for gradient computation. Verify that gradients still match.
-2. **Test a far‑field objective** using `build_Q` from `src/QMatrix.jl`. Compute the gradient for maximising power in a $10^\circ$ cone and verify against finite differences.
+2. **Test a far‑field objective** using `build_Q` from `src/optimization/QMatrix.jl`. Compute the gradient for maximising power in a $10^\circ$ cone and verify against finite differences.
 3. **Compare complex‑step and finite‑difference** errors for ill‑conditioned systems. Increase the frequency to 30 GHz (smaller mesh relative to wavelength) and observe how conditioning affects verification accuracy.
 
 ### Advanced (90 minutes)
@@ -354,7 +354,7 @@ Before moving to optimization, complete these verification steps:
 ## Further Reading
 
 - **Paper Section 3.2** – Adjoint gradient derivation for impedance parameters (Eq. 25).
-- **`src/Adjoint.jl`** – Full implementation of `solve_adjoint` and `gradient_impedance`.
-- **`src/Verification.jl`** – Gradient verification utilities with complex‑step and finite‑difference.
+- **`src/optimization/Adjoint.jl`** – Full implementation of `solve_adjoint` and `gradient_impedance`.
+- **`src/optimization/Verification.jl`** – Gradient verification utilities with complex‑step and finite‑difference.
 - **Tutorial 3: Beam‑Steering Design** – Applies verified gradients to a realistic inverse‑design problem.
 - **Martins et al., *ACM Trans. Math. Softw.*, 2019** – Comprehensive review of adjoint methods and verification techniques.

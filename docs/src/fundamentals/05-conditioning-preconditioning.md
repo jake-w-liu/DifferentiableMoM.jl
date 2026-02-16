@@ -70,7 +70,7 @@ When $\kappa(\mathbf{Z})$ exceeds $10^8$–$10^{12}$ (typical for EFIE at low fr
 
 ### 1.5 Conditioning Diagnostics in `DifferentiableMoM.jl`
 
-The package provides the function `condition_diagnostics` (in `src/Diagnostics.jl`) to quantify conditioning:
+The package provides the function `condition_diagnostics` (in `src/postprocessing/Diagnostics.jl`) to quantify conditioning:
 
 ```julia
 using DifferentiableMoM
@@ -289,7 +289,7 @@ Physically, the mass‑based preconditioner **counteracts the ill‑scaling** be
 
 ### 3.3 Mass‑Based Preconditioner Construction
 
-The function `make_left_preconditioner` (in `src/Solve.jl`) builds a preconditioner from the patch mass matrices $\mathbf{M}_p$:
+The function `make_left_preconditioner` (in `src/solver/Solve.jl`) builds a preconditioner from the patch mass matrices $\mathbf{M}_p$:
 
 ```math
 \mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}, \qquad \mathbf{R} = \sum_p \mathbf{M}_p,
@@ -993,9 +993,9 @@ Following this systematic approach will help you harness the benefits of conditi
 
 This section provides a roadmap to the source files that implement conditioning and preconditioning in `DifferentiableMoM.jl`. Understanding where the key functions are defined will help you debug issues, extend the functionality, or adapt the code to your specific needs.
 
-### 8.1 Core Conditioning Functions (`src/Solve.jl`)
+### 8.1 Core Conditioning Functions (`src/solver/Solve.jl`)
 
-The file `src/Solve.jl` contains all the high‑level functions for regularization, preconditioning, and linear solves:
+The file `src/solver/Solve.jl` contains all the high‑level functions for regularization, preconditioning, and linear solves:
 
 - **`make_mass_regularizer(Mp)`** – builds the global mass regularizer $\mathbf{R} = \sum_p \mathbf{M}_p$ from patch mass matrices.
 - **`make_left_preconditioner(Mp; eps_rel=1e-8)`** – constructs the mass‑based preconditioner $\mathbf{M} = \mathbf{R} + \epsilon\mathbf{I}$ and returns its LU factorization.
@@ -1003,7 +1003,7 @@ The file `src/Solve.jl` contains all the high‑level functions for regularizati
 - **`prepare_conditioned_system(Z, v; regularization_alpha=0.0, regularization_R=nothing, preconditioner_M=nothing, preconditioner_factor=nothing)`** – applies regularization and preconditioning in the correct order, returning the conditioned matrix $\mathbf{Z}_{\text{eff}}$, right‑hand side $\mathbf{v}_{\text{eff}}$, and the preconditioner factorization (if any).
 - **`solve_system(Z, rhs)`** – generic linear solve (defaults to backslash, but can be extended to iterative solvers).
 
-**Location**: `src/Solve.jl`, lines ~50–150 (exact line numbers may vary with version).
+**Location**: `src/solver/Solve.jl`, lines ~50–150 (exact line numbers may vary with version).
 
 **Usage example**:
 ```julia
@@ -1011,13 +1011,13 @@ using DifferentiableMoM: make_mass_regularizer, make_left_preconditioner,
                          select_preconditioner, prepare_conditioned_system
 ```
 
-### 8.2 Conditioning Diagnostics (`src/Diagnostics.jl`)
+### 8.2 Conditioning Diagnostics (`src/postprocessing/Diagnostics.jl`)
 
-The file `src/Diagnostics.jl` provides functions for assessing matrix conditioning and solver health:
+The file `src/postprocessing/Diagnostics.jl` provides functions for assessing matrix conditioning and solver health:
 
 - **`condition_diagnostics(Z)`** – computes the condition number $\kappa$ and extreme singular values of $\mathbf{Z}$ via a full SVD. Returns a named tuple `(cond, sv_max, sv_min)`.
 
-**Location**: `src/Diagnostics.jl`, lines ~200–250.
+**Location**: `src/postprocessing/Diagnostics.jl`, lines ~200–250.
 
 **Usage example**:
 ```julia
@@ -1026,14 +1026,14 @@ stats = condition_diagnostics(Z)
 println("Condition number = ", stats.cond)
 ```
 
-### 8.3 Optimization Integration (`src/Optimize.jl`)
+### 8.3 Optimization Integration (`src/optimization/Optimize.jl`)
 
-The file `src/Optimize.jl` ensures that conditioning is applied consistently during gradient‑based optimization:
+The file `src/optimization/Optimize.jl` ensures that conditioning is applied consistently during gradient‑based optimization:
 
 - **`optimize_lbfgs(f, g!, θ0; ...)`** – the main L‑BFGS optimizer that calls forward and adjoint solves. Inside the optimization loop, `prepare_conditioned_system` is called **once per iteration** and the resulting conditioned operator is reused for both forward and adjoint solves to guarantee gradient accuracy.
 - **`adjoint_solve(Z_eff, ∂Φ∂I; preconditioner_factor=nothing)`** – solves the adjoint equation using the same preconditioner factorization (if any) that was used in the forward solve.
 
-**Location**: `src/Optimize.jl`, lines ~100–300.
+**Location**: `src/optimization/Optimize.jl`, lines ~100–300.
 
 **Usage note**: When writing custom optimization loops, follow the pattern in `optimize_lbfgs` to maintain adjoint consistency.
 
@@ -1090,9 +1090,9 @@ The existing infrastructure is designed to be modular, allowing you to plug in a
 
 | File | Purpose | Key functions |
 |------|---------|---------------|
-| `src/Solve.jl` | Regularization, preconditioning, linear solves | `make_mass_regularizer`, `make_left_preconditioner`, `select_preconditioner`, `prepare_conditioned_system` |
-| `src/Diagnostics.jl` | Conditioning diagnostics | `condition_diagnostics` |
-| `src/Optimize.jl` | Optimization with consistent conditioning | `optimize_lbfgs`, `adjoint_solve` |
+| `src/solver/Solve.jl` | Regularization, preconditioning, linear solves | `make_mass_regularizer`, `make_left_preconditioner`, `select_preconditioner`, `prepare_conditioned_system` |
+| `src/postprocessing/Diagnostics.jl` | Conditioning diagnostics | `condition_diagnostics` |
+| `src/optimization/Optimize.jl` | Optimization with consistent conditioning | `optimize_lbfgs`, `adjoint_solve` |
 | `examples/05_solver_methods.jl` | Demo of mode selection | – |
 
 With this roadmap, you can navigate the source code to understand, modify, or extend the conditioning capabilities of `DifferentiableMoM.jl`.

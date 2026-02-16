@@ -397,8 +397,8 @@ end
 
 | File | Contents |
 |------|----------|
-| `src/ClusterTree.jl` | `ClusterNode`, `ClusterTree`, `build_cluster_tree`, admissibility queries |
-| `src/ACA.jl` | `ACAOperator`, `build_aca_operator`, `aca_lowrank`, H-matrix matvec |
+| `src/fast/ClusterTree.jl` | `ClusterNode`, `ClusterTree`, `build_cluster_tree`, admissibility queries |
+| `src/fast/ACA.jl` | `ACAOperator`, `build_aca_operator`, `aca_lowrank`, H-matrix matvec |
 | `src/Workflow.jl` | `solve_scattering`, auto method selection, mesh validation |
 | `src/Types.jl` | `ScatteringResult` |
 

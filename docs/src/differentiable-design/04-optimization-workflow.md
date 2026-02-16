@@ -315,7 +315,7 @@ Test robustness by perturbing the optimized design:
 
 ### 6.3 Visualization
 
-- **Impedance distribution**: Plot `theta_opt` on the mesh surface using `plot_mesh_wireframe` or `plot_mesh_comparison` from `src/Visualization.jl`.
+- **Impedance distribution**: Plot `theta_opt` on the mesh surface using `plot_mesh_wireframe` or `plot_mesh_comparison` from `src/postprocessing/Visualization.jl`.
 - **Far‑field pattern**: 2D cuts or 3D radiation plots.
 - **Optimization trace**: $J$ vs. iteration, $\|\mathbf{g}\|$ vs. iteration.
 
@@ -397,12 +397,12 @@ Use this checklist when an optimization fails or behaves unexpectedly:
 
 ## 9. Code Mapping
 
-- **`src/Optimize.jl`** – Core optimizers `optimize_lbfgs` and `optimize_directivity`.
-- **`src/Adjoint.jl`** – Gradient computation (`gradient_impedance`) and adjoint solves.
-- **`src/Solve.jl`** – Forward solve (`solve_forward`) and conditioned system preparation.
-- **`src/Impedance.jl`** – Patch mass matrices and impedance assembly.
-- **`src/QMatrix.jl`** – Objective matrix construction.
-- **`src/Visualization.jl`** – Plotting utilities (`plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview`).
+- **`src/optimization/Optimize.jl`** – Core optimizers `optimize_lbfgs` and `optimize_directivity`.
+- **`src/optimization/Adjoint.jl`** – Gradient computation (`gradient_impedance`) and adjoint solves.
+- **`src/solver/Solve.jl`** – Forward solve (`solve_forward`) and conditioned system preparation.
+- **`src/assembly/Impedance.jl`** – Patch mass matrices and impedance assembly.
+- **`src/optimization/QMatrix.jl`** – Objective matrix construction.
+- **`src/postprocessing/Visualization.jl`** – Plotting utilities (`plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview`).
 - **`examples/04_beam_steering.jl`** – Complete beam‑steering example and demonstration of the full workflow.
 
 ---

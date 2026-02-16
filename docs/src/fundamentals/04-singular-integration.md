@@ -140,8 +140,8 @@ Consider a typical RF frequency $f = 3\ \text{GHz}$, giving $k = 2\pi f/c \appro
 
 The split is implemented in two functions:
 
-- **`greens_smooth(r, rp, k)`** (in `src/Greens.jl`): computes $G_{\mathrm{smooth}} = (e^{-ikR}-1)/(4\pi R)$ where $R = |\mathbf{r} - \mathbf{r}'|$, taking two position vectors `r` and `rp` and the wavenumber `k`. Uses careful handling of the small‑$R$ limit via series expansion to avoid catastrophic cancellation.
-- **`self_cell_contribution`** (in `src/SingularIntegrals.jl`): accumulates the singular part $G_{\mathrm{sing}}$ using the semi‑analytical formula described in Section 3.
+- **`greens_smooth(r, rp, k)`** (in `src/basis/Greens.jl`): computes $G_{\mathrm{smooth}} = (e^{-ikR}-1)/(4\pi R)$ where $R = |\mathbf{r} - \mathbf{r}'|$, taking two position vectors `r` and `rp` and the wavenumber `k`. Uses careful handling of the small‑$R$ limit via series expansion to avoid catastrophic cancellation.
+- **`self_cell_contribution`** (in `src/assembly/SingularIntegrals.jl`): accumulates the singular part $G_{\mathrm{sing}}$ using the semi‑analytical formula described in Section 3.
 
 When assembling matrix entries, the code branches depending on whether the source and observation triangles are the same (self‑interaction) or different:
 
@@ -205,7 +205,7 @@ Here, for edge $i$ with endpoints $\mathbf{A}_i$ and $\mathbf{B}_i$:
 - $\ell_{A_i}$ and $\ell_{B_i}$ are the signed distances along the edge from the projection of $\mathbf{P}$ to $\mathbf{A}_i$ and $\mathbf{B}_i$, respectively (positive when the projection lies between the vertices, negative otherwise).
 - $R_{A_i} = |\mathbf{P} - \mathbf{A}_i|$ and $R_{B_i} = |\mathbf{P} - \mathbf{B}_i|$ are the Euclidean distances from $\mathbf{P}$ to the vertices.
 
-The formula is implemented in the function `analytical_integral_1overR` in `src/SingularIntegrals.jl`.
+The formula is implemented in the function `analytical_integral_1overR` in `src/assembly/SingularIntegrals.jl`.
 
 ### 3.3 Geometric Derivation
 
@@ -421,7 +421,7 @@ For more severe singularities (e.g., the $1/R^2$ kernel of the MFIE), a higher�
 
 ### 4.6 Implementation in `self_cell_contribution`
 
-The function `self_cell_contribution` in `src/SingularIntegrals.jl` carries out the steps above. It loops over the quadrature points of the test triangle, evaluates the inner integrals (singular and regular), and accumulates the contribution to the matrix block. The regular inner integral is computed by calling the same quadrature routine used for non‑singular interactions, but with the regularized kernel $[\mathbf{f}_n(\mathbf{r}')-\mathbf{f}_n(\mathbf{P})]/R$.
+The function `self_cell_contribution` in `src/assembly/SingularIntegrals.jl` carries out the steps above. It loops over the quadrature points of the test triangle, evaluates the inner integrals (singular and regular), and accumulates the contribution to the matrix block. The regular inner integral is computed by calling the same quadrature routine used for non‑singular interactions, but with the regularized kernel $[\mathbf{f}_n(\mathbf{r}')-\mathbf{f}_n(\mathbf{P})]/R$.
 
 ---
 
@@ -680,23 +680,23 @@ This section provides a roadmap to the source files that implement singular inte
 
 | File | Purpose | Key functions |
 |------|---------|---------------|
-| `src/Greens.jl` | Green’s function evaluation and kernel splitting. | `greens`, `greens_smooth`, `grad_greens` |
-| `src/SingularIntegrals.jl` | Analytical integration of singular kernels. | `analytical_integral_1overR`, `self_cell_contribution` |
-| `src/EFIE.jl` | EFIE matrix assembly with self/non‑self branching. | `assemble_Z_efie` (self-cell path calls `self_cell_contribution`) |
-| `src/Quadrature.jl` | Gaussian quadrature rules on triangles. | `tri_quad_rule`, `tri_quad_points` |
-| `src/RWG.jl` | RWG basis function evaluation. | `eval_rwg`, `div_rwg`, `basis_triangles` |
+| `src/basis/Greens.jl` | Green’s function evaluation and kernel splitting. | `greens`, `greens_smooth`, `grad_greens` |
+| `src/assembly/SingularIntegrals.jl` | Analytical integration of singular kernels. | `analytical_integral_1overR`, `self_cell_contribution` |
+| `src/assembly/EFIE.jl` | EFIE matrix assembly with self/non‑self branching. | `assemble_Z_efie` (self-cell path calls `self_cell_contribution`) |
+| `src/basis/Quadrature.jl` | Gaussian quadrature rules on triangles. | `tri_quad_rule`, `tri_quad_points` |
+| `src/basis/RWG.jl` | RWG basis function evaluation. | `eval_rwg`, `div_rwg`, `basis_triangles` |
 | `test/runtests.jl` | Unit/integration tests for singular integration and convergence gates. | Includes checks for `analytical_integral_1overR` usage via EFIE assembly |
 
 ### 8.2 Key Functions and Their Roles
 
-#### `greens_smooth(r, rp, k)` (in `src/Greens.jl`)
+#### `greens_smooth(r, rp, k)` (in `src/basis/Greens.jl`)
 Computes the smooth part of the Green’s function:
 ```math
 G_{\mathrm{smooth}}(k,R) = \frac{e^{-ikR} - 1}{4\pi R}.
 ```
 For small $R$, it uses a Taylor expansion to avoid catastrophic cancellation. For self-cell interactions, the kernel is split into $G = G_{\mathrm{smooth}} + G_{\mathrm{sing}}$ and this function provides the smooth part. For non-self interactions, the full `greens(rm, rn, k)` is used directly.
 
-#### `analytical_integral_1overR(P, V1, V2, V3)` (in `src/SingularIntegrals.jl`)
+#### `analytical_integral_1overR(P, V1, V2, V3)` (in `src/assembly/SingularIntegrals.jl`)
 Computes the singular integral
 ```math
 S(\mathbf{P}) = \int_T \frac{1}{|\mathbf{P} - \mathbf{r}'|}\, dS'
@@ -707,7 +707,7 @@ using the closed‑form edge‑log formula described in Section 3. The argumen
 
 The function returns a real number (the value of $S(\mathbf{P})$). Special cases (point on edge, point at vertex) are handled with care to avoid division by zero.
 
-#### `self_cell_contribution(...)` (in `src/SingularIntegrals.jl`)
+#### `self_cell_contribution(...)` (in `src/assembly/SingularIntegrals.jl`)
 Accumulates the singular contribution for a **self triangle pair** (`tm == tn`).
 In the current implementation, near-neighbor non-self pairs are handled by
 standard Gaussian quadrature; only exact self-cell pairs use singular extraction.
@@ -721,7 +721,7 @@ The self-cell routine performs the following steps:
    - Regular part: quadrature over $\frac{\mathbf{f}_n(\mathbf{r}')-\mathbf{f}_n(\mathbf{P})}{|\mathbf{P}-\mathbf{r}'|}$.
 5. Multiplies by weights and Jacobians and returns the total contribution.
 
-#### `assemble_Z_efie` (in `src/EFIE.jl`)
+#### `assemble_Z_efie` (in `src/assembly/EFIE.jl`)
 This is the top‑level assembly routine that decides whether to call
 `self_cell_contribution` or use standard product quadrature. The current
 decision logic is:
@@ -759,7 +759,7 @@ To illustrate how the pieces fit together, here is the data flow for computing a
 
 If you need to implement singular integration for a different kernel (e.g., the Magnetic Field Integral Equation kernel $\nabla G \times$), follow these steps:
 
-1. **Add a new analytical integral function** in `src/SingularIntegrals.jl` for the new singular kernel (e.g., `analytical_integral_gradG`).
+1. **Add a new analytical integral function** in `src/assembly/SingularIntegrals.jl` for the new singular kernel (e.g., `analytical_integral_gradG`).
 2. **Extend `self_cell_contribution`** to handle the new kernel, possibly adding another regularization similar to the vector‑part decomposition.
 3. **Modify `assemble_Z_efie`** (or create a new assembly routine) to call the extended self‑cell function when appropriate.
 
@@ -836,7 +836,7 @@ The following exercises reinforce the key concepts of singular integration, rang
 
 ### 9.3 Coding and Verification
 
-11. **Testing `greens_smooth`**: Write a Julia script that compares `greens_smooth(k,R)` (from `src/Greens.jl`) with the direct evaluation $(e^{-ikR}-1)/(4\pi R)$ for a range of $R$ values from $10^{-10}$ to $1$. Plot the relative error and verify that the series expansion used for small $R$ prevents catastrophic cancellation.
+11. **Testing `greens_smooth`**: Write a Julia script that compares `greens_smooth(k,R)` (from `src/basis/Greens.jl`) with the direct evaluation $(e^{-ikR}-1)/(4\pi R)$ for a range of $R$ values from $10^{-10}$ to $1$. Plot the relative error and verify that the series expansion used for small $R$ prevents catastrophic cancellation.
 
 12. **Validating `analytical_integral_1overR`**: Create a test that computes $S(\mathbf{P})$ for a given triangle and observation point using both `analytical_integral_1overR` and high‑order Gaussian quadrature (e.g., `tri_quad_rule(7)`). Since the integrand $1/R$ is singular when $\mathbf{P}$ lies on the triangle, place $\mathbf{P}$ slightly above the triangle (e.g., offset by $10^{-6}$ in the normal direction) to make the integral regular. Compare the results for several triangle shapes and point locations.
 
@@ -872,7 +872,7 @@ Before proceeding to Chapter 5, ensure you understand:
 - [ ] Why the scalar‑potential term simplifies because RWG divergences are constant on each triangle, requiring no subtraction.
 - [ ] The symptoms of incorrect singular integration: energy imbalance, unstable mesh convergence, unreliable gradients, low‑frequency breakdown.
 - [ ] How the implementation branches in `assemble_Z_efie` between singular (self/adjacent) and regular (distant) triangle pairs.
-- [ ] The key functions: `greens_smooth` (in `src/Greens.jl`), `analytical_integral_1overR` and `self_cell_contribution` (in `src/SingularIntegrals.jl`).
+- [ ] The key functions: `greens_smooth` (in `src/basis/Greens.jl`), `analytical_integral_1overR` and `self_cell_contribution` (in `src/assembly/SingularIntegrals.jl`).
 
 If any items are unclear, review the relevant sections or consult the mathematical prerequisites appendix.
 

@@ -286,7 +286,7 @@ The affine nature of RWG functions leads to a **constant surface divergence** on
    ```
    These equalities are automatically verified in the package's test suite and can be used to debug custom meshes.
 
-The implementation in `src/RWG.jl` provides the function `div_rwg(rwg, n, tidx)` that returns the constant divergence of basis $n$ on triangle `tidx`. This function is called repeatedly during matrix assembly without recomputing geometric quantities.
+The implementation in `src/basis/RWG.jl` provides the function `div_rwg(rwg, n, tidx)` that returns the constant divergence of basis $n$ on triangle `tidx`. This function is called repeatedly during matrix assembly without recomputing geometric quantities.
 
 ---
 
@@ -362,7 +362,7 @@ Although this naïve double loop has $O(N^2)$ complexity, the actual implementat
 
 ### 4.3 Mapping to the Code: `vec_part - scl_part`
 
-In the file `src/EFIE.jl`, the matrix assembly is performed by functions that explicitly separate the vector and scalar contributions. The key line reads
+In the file `src/assembly/EFIE.jl`, the matrix assembly is performed by functions that explicitly separate the vector and scalar contributions. The key line reads
 
 ```julia
 integrand = vec_part - scl_part
@@ -376,10 +376,10 @@ The subtraction reflects the minus sign in the formula $Z_{mn}= -i\omega\mu_0[V_
 
 #### Code location and function calls
 
-- **Entry point**: `assemble_Z_efie(mesh, rwg, k; quad_order=3)` in `src/EFIE.jl`.
-- **Quadrature evaluation**: `tri_quad_rule` and `tri_quad_points` from `src/Quadrature.jl`.
-- **RWG evaluation**: `eval_rwg(rwg, n, r, tidx)` and `div_rwg(rwg, n, tidx)` from `src/RWG.jl`.
-- **Green’s function**: `greens(r, rp, k)` defined in `src/Greens.jl`.
+- **Entry point**: `assemble_Z_efie(mesh, rwg, k; quad_order=3)` in `src/assembly/EFIE.jl`.
+- **Quadrature evaluation**: `tri_quad_rule` and `tri_quad_points` from `src/basis/Quadrature.jl`.
+- **RWG evaluation**: `eval_rwg(rwg, n, r, tidx)` and `div_rwg(rwg, n, tidx)` from `src/basis/RWG.jl`.
+- **Green’s function**: `greens(r, rp, k)` defined in `src/basis/Greens.jl`.
 
 The assembly loops are written in a vectorized style that processes multiple quadrature points simultaneously, improving performance on modern CPUs.
 
@@ -428,7 +428,7 @@ Consequently, an integral over the physical triangle becomes
 
 The factor $2A_T$ appears **outside** the sum because the Jacobian is constant over the triangle. This factor is a frequent source of hidden scaling bugs; forgetting it leads to results that are off by a factor proportional to triangle area.
 
-### 5.3 Implementation in `src/Quadrature.jl`
+### 5.3 Implementation in `src/basis/Quadrature.jl`
 
 The quadrature module provides two key functions:
 
@@ -450,7 +450,7 @@ During EFIE assembly, `tri_quad_points` is called once per triangle and the resu
 
 ### 5.4 Accuracy and Convergence Considerations
 
-The choice of quadrature rule affects both accuracy and computational cost. For well‑separated triangle pairs, the integrand is smooth and a moderate‑order rule (e.g., 7 points) yields high accuracy. When the source and test triangles coincide, the Green’s kernel is singular. In `DifferentiableMoM.jl`, that self-cell singularity is handled by analytical extraction (`src/SingularIntegrals.jl`) rather than by increasing quadrature order alone.
+The choice of quadrature rule affects both accuracy and computational cost. For well‑separated triangle pairs, the integrand is smooth and a moderate‑order rule (e.g., 7 points) yields high accuracy. When the source and test triangles coincide, the Green’s kernel is singular. In `DifferentiableMoM.jl`, that self-cell singularity is handled by analytical extraction (`src/assembly/SingularIntegrals.jl`) rather than by increasing quadrature order alone.
 
 A useful rule of thumb: the quadrature rule should integrate polynomials of degree $2p$ exactly, where $p$ is the polynomial degree of the basis functions. Since RWG functions are linear (affine) on each triangle, $p=1$, so a rule that integrates degree‑2 polynomials exactly is sufficient for the vector part $\mathbf{f}_m\cdot\mathbf{f}_n$. However, the Green’s function adds complexity, and a higher‑order rule is often used in practice to maintain accuracy across a range of distances.
 
@@ -510,7 +510,7 @@ The keyword arguments control whether boundary edges (edges belonging to only on
 
 By default, `build_rwg(mesh; precheck=true)` calls `mesh_quality_report` internally and throws an informative error if any critical defect is found. This prevents silent failures later during matrix assembly. If you are confident that your mesh is valid (e.g., it comes from a trusted meshing tool), you can disable the precheck with `precheck=false` for a slight speed gain.
 
-**Code location**: The mesh‑quality routines are implemented in `src/Mesh.jl` (notably `mesh_quality_report`, `mesh_quality_ok`, and `assert_mesh_quality`). The RWG constructor `build_rwg` in `src/RWG.jl` calls these checks when `precheck=true`.
+**Code location**: The mesh‑quality routines are implemented in `src/geometry/Mesh.jl` (notably `mesh_quality_report`, `mesh_quality_ok`, and `assert_mesh_quality`). The RWG constructor `build_rwg` in `src/basis/RWG.jl` calls these checks when `precheck=true`.
 
 ---
 
@@ -595,7 +595,7 @@ The two products should equal $+\ell_n$ and $-\ell_n$ up to rounding error (typi
 ### 7.5 Visualizing Current Flow (Optional)
 
 `DifferentiableMoM.jl` includes mesh-level visualization utilities in
-`src/Visualization.jl`, and RWG values can also be inspected directly. The
+`src/postprocessing/Visualization.jl`, and RWG values can also be inspected directly. The
 following snippet shows how to extract the current direction at the centroid of
 each support triangle:
 
@@ -657,18 +657,18 @@ This section provides a concise roadmap to the source files that implement the R
 
 | File | Purpose | Key contents |
 |------|---------|--------------|
-| `src/RWG.jl` | Construction and evaluation of RWG basis functions. | `RWGData`, `build_rwg`, `eval_rwg`, `div_rwg`, `basis_triangles`. |
-| `src/Mesh.jl` | Mesh types, geometry helpers, and quality checks. | `TriMesh`, `make_rect_plate`, `triangle_area`, `mesh_quality_report`, `assert_mesh_quality`. |
-| `src/Quadrature.jl` | Gaussian quadrature rules on triangles. | `tri_quad_rule`, `tri_quad_points`. |
-| `src/Greens.jl` | Free‑space Green’s function utilities. | `greens`, `greens_smooth`, `grad_greens`. |
-| `src/SingularIntegrals.jl` | Self-cell singularity extraction. | `analytical_integral_1overR`, `self_cell_contribution`. |
-| `src/EFIE.jl` | Assembly of the EFIE operator matrix. | `assemble_Z_efie`. |
-| `src/Impedance.jl` | Impedance-term assembly and derivatives. | `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_dZ_dtheta`. |
-| `src/Solve.jl` | Linear solves and conditioned systems. | `solve_forward`, `solve_system`, `assemble_full_Z`, `prepare_conditioned_system`. |
+| `src/basis/RWG.jl` | Construction and evaluation of RWG basis functions. | `RWGData`, `build_rwg`, `eval_rwg`, `div_rwg`, `basis_triangles`. |
+| `src/geometry/Mesh.jl` | Mesh types, geometry helpers, and quality checks. | `TriMesh`, `make_rect_plate`, `triangle_area`, `mesh_quality_report`, `assert_mesh_quality`. |
+| `src/basis/Quadrature.jl` | Gaussian quadrature rules on triangles. | `tri_quad_rule`, `tri_quad_points`. |
+| `src/basis/Greens.jl` | Free‑space Green’s function utilities. | `greens`, `greens_smooth`, `grad_greens`. |
+| `src/assembly/SingularIntegrals.jl` | Self-cell singularity extraction. | `analytical_integral_1overR`, `self_cell_contribution`. |
+| `src/assembly/EFIE.jl` | Assembly of the EFIE operator matrix. | `assemble_Z_efie`. |
+| `src/assembly/Impedance.jl` | Impedance-term assembly and derivatives. | `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_dZ_dtheta`. |
+| `src/solver/Solve.jl` | Linear solves and conditioned systems. | `solve_forward`, `solve_system`, `assemble_full_Z`, `prepare_conditioned_system`. |
 
 ### 8.2 Key Data Structures
 
-**`RWGData`** (defined in `src/Types.jl` / constructed in `src/RWG.jl`):
+**`RWGData`** (defined in `src/Types.jl` / constructed in `src/basis/RWG.jl`):
 - `tplus::Vector{Int}` – indices of the “plus” triangle for each basis.
 - `tminus::Vector{Int}` – indices of the “minus” triangle for each basis.
 - `vplus_opp::Vector{Int}` – vertex opposite the shared edge in the plus triangle.
@@ -687,21 +687,21 @@ This section provides a concise roadmap to the source files that implement the R
 
 | Function | File | Description |
 |----------|------|-------------|
-| `eval_rwg(rwg, n, r, tidx)` | `src/RWG.jl` | Evaluate $\mathbf{f}_n(\mathbf{r})$ on triangle `tidx` at point `r`. |
-| `div_rwg(rwg, n, tidx)` | `src/RWG.jl` | Return $\nabla_s\cdot\mathbf{f}_n$ on triangle `tidx` (constant). |
-| `rwg.len[n]` | `src/RWG.jl` | Length $\ell_n$ of the edge associated with basis $n$. |
-| `triangle_area(mesh, tidx)` | `src/Mesh.jl` | Area of triangle `tidx`. |
-| `basis_triangles(rwg, n)` | `src/RWG.jl` | Return `(plus_triangle, minus_triangle)` for basis $n$. |
-| `tri_quad_points(mesh, t, xi)` | `src/Quadrature.jl` | Map quadrature points from reference to physical triangle. |
-| `assemble_Z_efie(mesh, rwg, k; quad_order=3)` | `src/EFIE.jl` | Assemble the full EFIE impedance matrix. |
-| `greens(r, rp, k)` | `src/Greens.jl` | Compute $e^{-ikR}/(4\pi R)$. |
+| `eval_rwg(rwg, n, r, tidx)` | `src/basis/RWG.jl` | Evaluate $\mathbf{f}_n(\mathbf{r})$ on triangle `tidx` at point `r`. |
+| `div_rwg(rwg, n, tidx)` | `src/basis/RWG.jl` | Return $\nabla_s\cdot\mathbf{f}_n$ on triangle `tidx` (constant). |
+| `rwg.len[n]` | `src/basis/RWG.jl` | Length $\ell_n$ of the edge associated with basis $n$. |
+| `triangle_area(mesh, tidx)` | `src/geometry/Mesh.jl` | Area of triangle `tidx`. |
+| `basis_triangles(rwg, n)` | `src/basis/RWG.jl` | Return `(plus_triangle, minus_triangle)` for basis $n$. |
+| `tri_quad_points(mesh, t, xi)` | `src/basis/Quadrature.jl` | Map quadrature points from reference to physical triangle. |
+| `assemble_Z_efie(mesh, rwg, k; quad_order=3)` | `src/assembly/EFIE.jl` | Assemble the full EFIE impedance matrix. |
+| `greens(r, rp, k)` | `src/basis/Greens.jl` | Compute $e^{-ikR}/(4\pi R)$. |
 
 ### 8.4 How to Extend the Code
 
 If you wish to implement a different integral equation (e.g., Magnetic Field Integral Equation, MFIE) or a higher‑order basis function, the following steps are recommended:
 
-1. **Add new basis functions** in a new source file under `src/` (for example, a future `HigherOrderBasis.jl`) following the pattern of `src/RWG.jl`. Provide evaluation and divergence routines.
-2. **Create a new assembly routine** in a new file under `src/` (for example, a future `MFIE.jl`) that mirrors the structure of `src/EFIE.jl` but implements the desired operator.
+1. **Add new basis functions** in a new source file under `src/` (for example, a future `HigherOrderBasis.jl`) following the pattern of `src/basis/RWG.jl`. Provide evaluation and divergence routines.
+2. **Create a new assembly routine** in a new file under `src/` (for example, a future `MFIE.jl`) that mirrors the structure of `src/assembly/EFIE.jl` but implements the desired operator.
 3. **Extend the mesh quality checks** if the new basis requires additional geometric constraints (e.g., curved elements).
 4. **Integrate with the solve path** by adding a wrapper that assembles your new operator and calls `solve_forward`/`solve_system` consistently.
 
@@ -755,7 +755,7 @@ The following exercises reinforce the key concepts of this chapter, ranging from
 
 14. **Singular integration**: Investigate the accuracy of Gaussian quadrature for the double‑surface integral $V_{mn}$ when triangles $T_m$ and $T_n$ are close together. Write a script that computes $V_{mn}$ for a fixed pair of triangles as their separation distance $d$ decreases from $0.1\lambda$ to $10^{-6}\lambda$. Plot the relative error (compared to a reference high‑order quadrature) vs. $d$ and discuss the onset of the “singular integration” problem.
 
-15. **Differentiable assembly**: The package provides derivative-verification utilities (`complex_step_grad`, `fd_grad`) in `src/Verification.jl`. Write a small test that checks $\partial Z_{mn}/\partial k$ for selected entries against a centered finite-difference estimate.
+15. **Differentiable assembly**: The package provides derivative-verification utilities (`complex_step_grad`, `fd_grad`) in `src/optimization/Verification.jl`. Write a small test that checks $\partial Z_{mn}/\partial k$ for selected entries against a centered finite-difference estimate.
 
 ---
 
@@ -771,7 +771,7 @@ Before proceeding to Chapter 4, ensure you understand:
 - [ ] The role of reference‑triangle quadrature and the origin of the Jacobian factor $2A_T$.
 - [ ] The mesh‑quality checks performed before RWG construction and how to interpret `mesh_quality_report`.
 - [ ] How to inspect RWG data structures using `basis_triangles`, `div_rwg`, `rwg.len[n]`, and `triangle_area`.
-- [ ] Where to find the key implementation files: `src/RWG.jl`, `src/Mesh.jl`, `src/Quadrature.jl`, `src/EFIE.jl`.
+- [ ] Where to find the key implementation files: `src/basis/RWG.jl`, `src/geometry/Mesh.jl`, `src/basis/Quadrature.jl`, `src/assembly/EFIE.jl`.
 
 If any items are unclear, review the relevant sections or consult the mathematical prerequisites appendix.
 

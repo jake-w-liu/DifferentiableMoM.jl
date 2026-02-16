@@ -507,7 +507,7 @@ println("Achieved N=$(coarse.rwg_count) (target was $target_N)")
 
 ## Multi-Format Mesh I/O
 
-These functions (in `src/MeshIO.jl`) extend mesh I/O beyond OBJ to support STL, Gmsh MSH, and CAD conversion.
+These functions (in `src/geometry/MeshIO.jl`) extend mesh I/O beyond OBJ to support STL, Gmsh MSH, and CAD conversion.
 
 ### `read_stl_mesh(path; merge_tol=0.0)`
 
@@ -647,8 +647,8 @@ rep = repair_mesh_for_simulation(mesh)
 
 | File | Contents |
 |------|----------|
-| `src/Mesh.jl` | Mesh creation, geometry, quality, repair, coarsening, refinement |
-| `src/MeshIO.jl` | Multi-format I/O: STL, Gmsh MSH, unified dispatcher, CAD conversion |
+| `src/geometry/Mesh.jl` | Mesh creation, geometry, quality, repair, coarsening, refinement |
+| `src/geometry/MeshIO.jl` | Multi-format I/O: STL, Gmsh MSH, unified dispatcher, CAD conversion |
 | `examples/ex_obj_rcs_pipeline.jl` | End-to-end OBJ import -> repair -> coarsen -> RCS workflow |
 | `examples/ex_visualize_simulation_mesh.jl` | Mesh visualization after repair and coarsening |
 | `examples/convert_aircraft_mat_to_obj.py` | MAT-to-OBJ conversion helper (SciPy) |

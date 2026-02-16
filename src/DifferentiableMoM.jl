@@ -7,31 +7,51 @@ using Random
 using Krylov
 
 include("Types.jl")
-include("Mesh.jl")
-include("MeshIO.jl")
-include("RWG.jl")
-include("Quadrature.jl")
-include("Greens.jl")
-include("SingularIntegrals.jl")
-include("EFIE.jl")
-include("ClusterTree.jl")
-include("ACA.jl")
-include("Octree.jl")
-include("MLFMA.jl")
-include("Impedance.jl")
-include("Excitation.jl")
-include("FarField.jl")
-include("QMatrix.jl")
-include("Solve.jl")
-include("NearFieldPreconditioner.jl")
-include("IterativeSolve.jl")
-include("Adjoint.jl")
-include("Verification.jl")
-include("Optimize.jl")
+
+# Geometry
+include("geometry/Mesh.jl")
+include("geometry/MeshIO.jl")
+
+# Basis functions & quadrature
+include("basis/RWG.jl")
+include("basis/Quadrature.jl")
+include("basis/Greens.jl")
+
+# Assembly
+include("assembly/SingularIntegrals.jl")
+include("assembly/EFIE.jl")
+include("assembly/Impedance.jl")
+include("assembly/Excitation.jl")
+
+# Fast methods
+include("fast/ClusterTree.jl")
+include("fast/ACA.jl")
+include("fast/Octree.jl")
+include("fast/MLFMA.jl")
+
+# Post-processing (FarField needed by QMatrix)
+include("postprocessing/FarField.jl")
+
+# Optimization objectives
+include("optimization/QMatrix.jl")
+
+# Solvers
+include("solver/Solve.jl")
+include("solver/NearFieldPreconditioner.jl")
+include("solver/IterativeSolve.jl")
+
+# Adjoint & optimization
+include("optimization/Adjoint.jl")
+include("optimization/Verification.jl")
+include("optimization/Optimize.jl")
+
+# Workflow
 include("Workflow.jl")
-include("Diagnostics.jl")
-include("PhysicalOptics.jl")
-include("Mie.jl")
-include("Visualization.jl")
+
+# Post-processing (remaining)
+include("postprocessing/Diagnostics.jl")
+include("postprocessing/PhysicalOptics.jl")
+include("postprocessing/Mie.jl")
+include("postprocessing/Visualization.jl")
 
 end # module

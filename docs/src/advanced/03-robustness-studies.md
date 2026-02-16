@@ -52,7 +52,7 @@ where $\theta$ are the design variables (patch impedances), $\xi$ denotes the
 scenario parameters (frequency $f$, incidence angle $(\theta_{\text{inc}},\phi_{\text{inc}})$,
 polarization, etc.), $\mathbf I(\theta;\xi)$ is the forward solution of the EFIE
 under scenario $\xi$, and $\mathbf Q_{\text{target}},\mathbf Q_{\text{total}}$
-are the far‑field projection matrices defined in `src/FarField.jl`.
+are the far‑field projection matrices defined in `src/postprocessing/FarField.jl`.
 
 ### Why Single‑Scenario Designs Are Narrowband
 
@@ -432,12 +432,12 @@ sets a clear baseline for comparing different robust‑design strategies.
 | Component | Source File | Key Functions / Lines |
 |-----------|-------------|-----------------------|
 | Robustness sweep driver | `validation/robustness/run_robustness_sweep.jl` | `main()` (line 38), `build_target_mask` (line 20), `mean_dir_at_theta` (line 31) |
-| Beam‑steering objective & gradient | `src/Optimize.jl`, `src/Adjoint.jl` | `optimize_directivity`, `solve_adjoint`, `gradient_impedance` |
-| EFIE assembly | `src/EFIE.jl` | `assemble_Z_efie` (line …) |
-| Excitation assembly | `src/Excitation.jl` | `assemble_v_plane_wave` (line …) |
-| Far‑field matrices | `src/FarField.jl`, `src/QMatrix.jl` | `radiation_vectors`, `build_Q` |
-| Diagnostics | `src/Diagnostics.jl` | `energy_ratio`, `projected_power`, `condition_diagnostics` |
-| Mesh & RWG utilities | `src/Mesh.jl`, `src/RWG.jl` | `make_rect_plate`, `build_rwg` |
+| Beam‑steering objective & gradient | `src/optimization/Optimize.jl`, `src/optimization/Adjoint.jl` | `optimize_directivity`, `solve_adjoint`, `gradient_impedance` |
+| EFIE assembly | `src/assembly/EFIE.jl` | `assemble_Z_efie` (line …) |
+| Excitation assembly | `src/assembly/Excitation.jl` | `assemble_v_plane_wave` (line …) |
+| Far‑field matrices | `src/postprocessing/FarField.jl`, `src/optimization/QMatrix.jl` | `radiation_vectors`, `build_Q` |
+| Diagnostics | `src/postprocessing/Diagnostics.jl` | `energy_ratio`, `projected_power`, `condition_diagnostics` |
+| Mesh & RWG utilities | `src/geometry/Mesh.jl`, `src/basis/RWG.jl` | `make_rect_plate`, `build_rwg` |
 
 > Note: Line numbers are approximate; refer to the latest source files.
 

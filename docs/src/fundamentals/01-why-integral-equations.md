@@ -445,10 +445,10 @@ end
 ### 11.1 Relevant Source Files
 
 - **Core type aliases and numeric conventions:** `src/Types.jl`
-- **Green's function implementation:** `src/Greens.jl`
-- **EFIE operator assembly:** `src/EFIE.jl`
-- **RWG basis functions:** `src/RWG.jl`
-- **Linear system solver:** `src/Solve.jl`
+- **Green's function implementation:** `src/basis/Greens.jl`
+- **EFIE operator assembly:** `src/assembly/EFIE.jl`
+- **RWG basis functions:** `src/basis/RWG.jl`
+- **Linear system solver:** `src/solver/Solve.jl`
 
 ### 11.2 Mathematical Prerequisites Review
 

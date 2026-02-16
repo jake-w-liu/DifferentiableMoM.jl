@@ -134,7 +134,7 @@ The cluster tree recursively partitions the set of RWG basis function centers in
 
 ### 3.2 Data Structures
 
-The cluster tree is built from two structs defined in `src/ClusterTree.jl`:
+The cluster tree is built from two structs defined in `src/fast/ClusterTree.jl`:
 
 ```julia
 struct ClusterNode
@@ -240,7 +240,7 @@ where $\alpha_{\ell m}$ depends only on the observation point and $\beta_{\ell m
 
 ### 4.3 The Partially-Pivoted ACA Algorithm
 
-The function `aca_lowrank` in `src/ACA.jl` implements partially-pivoted ACA. The algorithm builds the low-rank factorization one rank at a time:
+The function `aca_lowrank` in `src/fast/ACA.jl` implements partially-pivoted ACA. The algorithm builds the low-rank factorization one rank at a time:
 
 **Input**: Entry evaluation function, row indices $\mathcal{I}$, column indices $\mathcal{J}$, tolerance `tol`, maximum rank `max_rank`.
 
@@ -321,7 +321,7 @@ The maximum rank `max_rank` (default 50) is a safety bound that prevents runaway
 
 ### 5.1 Two-Phase Block Assembly
 
-The function `build_aca_operator` in `src/ACA.jl` assembles the H-matrix operator in two phases:
+The function `build_aca_operator` in `src/fast/ACA.jl` assembles the H-matrix operator in two phases:
 
 **Phase 1 (Serial): Block task enumeration**
 
@@ -694,11 +694,11 @@ This section maps the concepts discussed in this chapter to the source files in
 
 | File | Purpose | Key Exports |
 |------|---------|-------------|
-| `src/ClusterTree.jl` | Binary space-partitioning tree | `ClusterNode`, `ClusterTree`, `build_cluster_tree`, `is_admissible` |
-| `src/ACA.jl` | ACA low-rank approximation, H-matrix operator | `ACAOperator`, `ACAAdjointOperator`, `build_aca_operator`, `aca_lowrank` |
-| `src/EFIE.jl` | Entry evaluation cache used by ACA | `EFIEApplyCache`, `_efie_entry` |
-| `src/NearFieldPreconditioner.jl` | Sparse preconditioner (works with ACAOperator) | `build_nearfield_preconditioner`, `NearFieldOperator` |
-| `src/IterativeSolve.jl` | GMRES wrapper (accepts ACAOperator) | `solve_gmres` |
+| `src/fast/ClusterTree.jl` | Binary space-partitioning tree | `ClusterNode`, `ClusterTree`, `build_cluster_tree`, `is_admissible` |
+| `src/fast/ACA.jl` | ACA low-rank approximation, H-matrix operator | `ACAOperator`, `ACAAdjointOperator`, `build_aca_operator`, `aca_lowrank` |
+| `src/assembly/EFIE.jl` | Entry evaluation cache used by ACA | `EFIEApplyCache`, `_efie_entry` |
+| `src/solver/NearFieldPreconditioner.jl` | Sparse preconditioner (works with ACAOperator) | `build_nearfield_preconditioner`, `NearFieldOperator` |
+| `src/solver/IterativeSolve.jl` | GMRES wrapper (accepts ACAOperator) | `solve_gmres` |
 | `src/Workflow.jl` | High-level API with auto method selection | `solve_scattering` |
 
 ### 10.2 Data Flow
@@ -718,11 +718,11 @@ The complete ACA pipeline follows this flow:
 
 | Function | Location | Role |
 |----------|----------|------|
-| `_efie_entry(cache, m, n)` | `src/EFIE.jl` | Evaluate single EFIE matrix entry |
-| `_build_efie_cache(mesh, rwg, k)` | `src/EFIE.jl` | Precompute quadrature points, areas, RWG values |
-| `_enum_block_tasks!(tasks, tree, i, j)` | `src/ACA.jl` | Recursive block classification |
-| `_fill_dense_block_batched!(data, cache, rows, cols)` | `src/ACA.jl` | Batched dense block assembly |
-| `aca_lowrank(cache, rows, cols)` | `src/ACA.jl` | Partially-pivoted ACA for one block |
+| `_efie_entry(cache, m, n)` | `src/assembly/EFIE.jl` | Evaluate single EFIE matrix entry |
+| `_build_efie_cache(mesh, rwg, k)` | `src/assembly/EFIE.jl` | Precompute quadrature points, areas, RWG values |
+| `_enum_block_tasks!(tasks, tree, i, j)` | `src/fast/ACA.jl` | Recursive block classification |
+| `_fill_dense_block_batched!(data, cache, rows, cols)` | `src/fast/ACA.jl` | Batched dense block assembly |
+| `aca_lowrank(cache, rows, cols)` | `src/fast/ACA.jl` | Partially-pivoted ACA for one block |
 
 ---
 

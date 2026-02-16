@@ -152,8 +152,8 @@ The `camera` parameter is `(azimuth, elevation)` in degrees:
 
 | File | Contents |
 |------|----------|
-| `src/Visualization.jl` | `plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview` |
-| `src/Mesh.jl` | `mesh_wireframe_segments` (extracts edge segments from `TriMesh`) |
+| `src/postprocessing/Visualization.jl` | `plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview` |
+| `src/geometry/Mesh.jl` | `mesh_wireframe_segments` (extracts edge segments from `TriMesh`) |
 
 **Example scripts:** `examples/ex_visualize_simulation_mesh.jl`, `examples/ex_obj_rcs_pipeline.jl`
 

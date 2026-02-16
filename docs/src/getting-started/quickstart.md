@@ -97,8 +97,8 @@ julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
 
 ## Code Mapping
 
-- Forward assembly: `src/EFIE.jl`, `src/Excitation.jl`, `src/Solve.jl`
-- Far-field and objectives: `src/FarField.jl`, `src/QMatrix.jl`, `src/Diagnostics.jl`
+- Forward assembly: `src/assembly/EFIE.jl`, `src/assembly/Excitation.jl`, `src/solver/Solve.jl`
+- Far-field and objectives: `src/postprocessing/FarField.jl`, `src/optimization/QMatrix.jl`, `src/postprocessing/Diagnostics.jl`
 - Example implementations: `examples/04_beam_steering.jl`, `examples/01_pec_plate_basics.jl`
 
 ---

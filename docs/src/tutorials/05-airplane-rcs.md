@@ -282,12 +282,12 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
-| **OBJ import** | `read_obj_mesh` | `src/Mesh.jl` | 100–120 |
-| **Mesh repair** | `repair_mesh_for_simulation` | `src/Mesh.jl` | 300–350 |
-| **Coarsening** | `coarsen_mesh_to_target_rwg` | `src/Mesh.jl` | 400–450 |
-| **RWG building** | `build_rwg` | `src/RWG.jl` | 50–80 |
-| **Memory estimate** | `estimate_dense_matrix_gib` | `src/Mesh.jl` | 200–220 |
-| **Mesh preview** | `save_mesh_preview` | `src/Visualization.jl` | 150–200 |
+| **OBJ import** | `read_obj_mesh` | `src/geometry/Mesh.jl` | 100–120 |
+| **Mesh repair** | `repair_mesh_for_simulation` | `src/geometry/Mesh.jl` | 300–350 |
+| **Coarsening** | `coarsen_mesh_to_target_rwg` | `src/geometry/Mesh.jl` | 400–450 |
+| **RWG building** | `build_rwg` | `src/basis/RWG.jl` | 50–80 |
+| **Memory estimate** | `estimate_dense_matrix_gib` | `src/geometry/Mesh.jl` | 200–220 |
+| **Mesh preview** | `save_mesh_preview` | `src/postprocessing/Visualization.jl` | 150–200 |
 | **Complete pipeline (repair + solve + plot)** | `ex_obj_rcs_pipeline.jl` | `examples/` | full script (`full`, `repair`, `plot` subcommands) |
 | **Plotting-only mode** | `ex_obj_rcs_pipeline.jl plot ...` | `examples/` | same script, plot subcommand |
 
@@ -330,7 +330,7 @@ Before applying the pipeline to your own CAD models, ensure you can:
 ## Further Reading
 
 - **Paper Section 6.2** – Complex‑platform workflow and coarsening strategy.
-- **`src/Mesh.jl`** – Implementation of mesh repair and coarsening algorithms.
-- **`src/Visualization.jl`** – Mesh preview and wireframe plotting utilities.
+- **`src/geometry/Mesh.jl`** – Implementation of mesh repair and coarsening algorithms.
+- **`src/postprocessing/Visualization.jl`** – Mesh preview and wireframe plotting utilities.
 - **Tutorial 6: OBJ Repair Workflow** – Deep dive into mesh repair and quality metrics.
 - **Advanced Workflows, Chapter 2: Large‑Problem Strategy** – Scaling beyond dense‑matrix limits.

@@ -434,8 +434,8 @@ All excitations are compatible with the adjoint gradient computation. The excita
 
 | File | Contents |
 |------|----------|
-| `src/Excitation.jl` | All excitation types and assembly methods |
-| `src/Quadrature.jl` | Quadrature rules used for integration |
+| `src/assembly/Excitation.jl` | All excitation types and assembly methods |
+| `src/basis/Quadrature.jl` | Quadrature rules used for integration |
 | `examples/ex_radiationpatterns_adapter.jl` | Pattern import from CSV via RadiationPatterns.jl |
 | `examples/ex_horn_pattern_import_demo.jl` | End-to-end horn pattern feed demo |
 

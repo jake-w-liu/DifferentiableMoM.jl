@@ -514,10 +514,10 @@ which is a generalized eigenvalue problem. The gradient‑based approach iterati
 
 ## 9. Code Mapping
 
-- **`src/Optimize.jl`** – Ratio optimizer `optimize_directivity`.
-- **`src/Adjoint.jl`** – Adjoint solves `solve_adjoint` and gradient assembly utilities.
-- **`src/QMatrix.jl`** – Construction of $\mathbf{Q}_t$ and $\mathbf{Q}_{\mathrm{tot}}$ matrices (`build_Q`, masks via `cap_mask` or custom logical masks).
-- **`src/Solve.jl`** – Forward solve and conditioned system preparation.
+- **`src/optimization/Optimize.jl`** – Ratio optimizer `optimize_directivity`.
+- **`src/optimization/Adjoint.jl`** – Adjoint solves `solve_adjoint` and gradient assembly utilities.
+- **`src/optimization/QMatrix.jl`** – Construction of $\mathbf{Q}_t$ and $\mathbf{Q}_{\mathrm{tot}}$ matrices (`build_Q`, masks via `cap_mask` or custom logical masks).
+- **`src/solver/Solve.jl`** – Forward solve and conditioned system preparation.
 - **`examples/04_beam_steering.jl`** – Complete beam‑steering example.
 - **`test/runtests.jl`** – Verification script for ratio‑objective gradients.
 

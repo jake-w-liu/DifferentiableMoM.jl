@@ -36,7 +36,7 @@ A mesh preview often reveals these issues faster than matrix diagnostics.
 
 ### 2.1 Core Functions
 
-The visualization module (`src/Visualization.jl`) provides three main user‑facing functions:
+The visualization module (`src/postprocessing/Visualization.jl`) provides three main user‑facing functions:
 
 - **`plot_mesh_wireframe(mesh; kwargs...)`** – 3D wireframe plot of a single mesh with consistent axis scaling and physical units (meters).
 - **`plot_mesh_comparison(mesh_a, mesh_b; kwargs...)`** – Side‑by‑side wireframe plots with **shared axis limits** and **equal aspect ratio** for reliable visual comparison.
@@ -44,7 +44,7 @@ The visualization module (`src/Visualization.jl`) provides three main user‑fac
 
 ### 2.2 Underlying Algorithms
 
-**Wireframe segment extraction (`mesh_wireframe_segments` in `src/Mesh.jl`):** For each interior edge (shared by two triangles) and each boundary edge (belonging to one triangle), the function creates a line segment between the two edge vertices. Segments are concatenated with `NaN` separators to produce a single continuous path for efficient plotting with `PlotlySupply`. The wireframe draws ALL unique edges regardless of manifold status.
+**Wireframe segment extraction (`mesh_wireframe_segments` in `src/geometry/Mesh.jl`):** For each interior edge (shared by two triangles) and each boundary edge (belonging to one triangle), the function creates a line segment between the two edge vertices. Segments are concatenated with `NaN` separators to produce a single continuous path for efficient plotting with `PlotlySupply`. The wireframe draws ALL unique edges regardless of manifold status.
 
 **Shared axis limits (`_realistic_axis_limits`):** To prevent visual distortion when comparing two meshes, the function computes a common cubic bounding box:
 
@@ -244,8 +244,8 @@ Pkg.add("PlotlyKaleido")
 
 ## 5) Code Mapping
 
-- Plot implementations: `src/Visualization.jl`
-- Wireframe segment generation: `src/Mesh.jl`
+- Plot implementations: `src/postprocessing/Visualization.jl`
+- Wireframe segment generation: `src/geometry/Mesh.jl`
 - End-to-end examples:
   - `examples/ex_visualize_simulation_mesh.jl`
   - `examples/06_aircraft_rcs.jl`

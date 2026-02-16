@@ -322,12 +322,12 @@ When comparing PO and MoM RCS patterns, the specular peak should agree within 1-
 
 | File | Role |
 |------|------|
-| `src/PhysicalOptics.jl` | PO solver: `solve_po`, `POResult` struct |
-| `src/Mesh.jl` | Triangle mesh I/O: `read_obj_mesh`, `triangle_normal`, `triangle_area`, `triangle_center` |
-| `src/Quadrature.jl` | Triangle quadrature: `tri_quad_rule`, `tri_quad_points` |
-| `src/Excitation.jl` | Plane wave construction: `make_plane_wave`, `PlaneWaveExcitation` |
-| `src/FarField.jl` | Far-field utilities: `compute_farfield`, `radiation_vectors`, `SphGrid`, `make_sph_grid` |
-| `src/Diagnostics.jl` | RCS utilities: `bistatic_rcs` |
+| `src/postprocessing/PhysicalOptics.jl` | PO solver: `solve_po`, `POResult` struct |
+| `src/geometry/Mesh.jl` | Triangle mesh I/O: `read_obj_mesh`, `triangle_normal`, `triangle_area`, `triangle_center` |
+| `src/basis/Quadrature.jl` | Triangle quadrature: `tri_quad_rule`, `tri_quad_points` |
+| `src/assembly/Excitation.jl` | Plane wave construction: `make_plane_wave`, `PlaneWaveExcitation` |
+| `src/postprocessing/FarField.jl` | Far-field utilities: `compute_farfield`, `radiation_vectors`, `SphGrid`, `make_sph_grid` |
+| `src/postprocessing/Diagnostics.jl` | RCS utilities: `bistatic_rcs` |
 | `src/Types.jl` | Vector types: `Vec3`, `CVec3` |
 
 ### 7.2 Key Data Flow

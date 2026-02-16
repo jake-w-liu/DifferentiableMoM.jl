@@ -142,8 +142,8 @@ println("  f_1 at T+ centroid = ", f_val)
 
 | File | Contents |
 |------|----------|
-| `src/RWG.jl` | `build_rwg`, `eval_rwg`, `div_rwg`, `basis_triangles` |
-| `src/Mesh.jl` | Geometry helpers used internally (`triangle_area`, `triangle_center`, etc.) |
+| `src/basis/RWG.jl` | `build_rwg`, `eval_rwg`, `div_rwg`, `basis_triangles` |
+| `src/geometry/Mesh.jl` | Geometry helpers used internally (`triangle_area`, `triangle_center`, etc.) |
 
 ---
 

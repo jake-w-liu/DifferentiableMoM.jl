@@ -289,15 +289,15 @@ If any condition fails, `assert_mesh_quality` throws an informative error. This 
 
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
-| **OBJ reading** | `read_obj_mesh` | `src/Mesh.jl` | 100–120 |
-| **Quality report** | `mesh_quality_report` | `src/Mesh.jl` | 250–280 |
-| **Mesh repair** | `repair_mesh_for_simulation` | `src/Mesh.jl` | 300–350 |
-| **OBJ repair script** | `repair_obj_mesh` | `src/Mesh.jl` | 360–400 |
-| **Coarsening** | `coarsen_mesh_to_target_rwg` | `src/Mesh.jl` | 400–450 |
-| **Memory estimate** | `estimate_dense_matrix_gib` | `src/Mesh.jl` | 200–220 |
-| **Wireframe segments** | `mesh_wireframe_segments` | `src/Mesh.jl` | 500–520 |
-| **Mesh preview** | `save_mesh_preview` | `src/Visualization.jl` | 150–200 |
-| **Quality assertion** | `assert_mesh_quality` | `src/Mesh.jl` | 280–300 |
+| **OBJ reading** | `read_obj_mesh` | `src/geometry/Mesh.jl` | 100–120 |
+| **Quality report** | `mesh_quality_report` | `src/geometry/Mesh.jl` | 250–280 |
+| **Mesh repair** | `repair_mesh_for_simulation` | `src/geometry/Mesh.jl` | 300–350 |
+| **OBJ repair script** | `repair_obj_mesh` | `src/geometry/Mesh.jl` | 360–400 |
+| **Coarsening** | `coarsen_mesh_to_target_rwg` | `src/geometry/Mesh.jl` | 400–450 |
+| **Memory estimate** | `estimate_dense_matrix_gib` | `src/geometry/Mesh.jl` | 200–220 |
+| **Wireframe segments** | `mesh_wireframe_segments` | `src/geometry/Mesh.jl` | 500–520 |
+| **Mesh preview** | `save_mesh_preview` | `src/postprocessing/Visualization.jl` | 150–200 |
+| **Quality assertion** | `assert_mesh_quality` | `src/geometry/Mesh.jl` | 280–300 |
 
 **Scripts:**
 
@@ -344,7 +344,7 @@ Before feeding any imported mesh into MoM simulation, ensure you have:
 ## Further Reading
 
 - **Paper Appendix A** – Mesh preparation pipeline and defect classification.
-- **`src/Mesh.jl`** – Full implementation of repair, coarsening, and quality checks.
-- **`src/Visualization.jl`** – Wireframe plotting and mesh preview utilities.
+- **`src/geometry/Mesh.jl`** – Full implementation of repair, coarsening, and quality checks.
+- **`src/postprocessing/Visualization.jl`** – Wireframe plotting and mesh preview utilities.
 - **Tutorial 5: Airplane RCS** – Application of the repair workflow to a realistic scattering problem.
 - **Advanced Workflows, Chapter 1: Complex OBJ Platforms** – Strategies for handling pathological CAD exports.

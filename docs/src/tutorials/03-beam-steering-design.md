@@ -49,7 +49,7 @@ The gradient of this ratio requires **two adjoint solves** (paper Eq. 30):
 \nabla J = \frac{P_\text{total} \nabla P_\text{target} - P_\text{target} \nabla P_\text{total}}{P_\text{total}^2}.
 \]
 
-Both $\nabla P_\text{target}$ and $\nabla P_\text{total}$ are computed via the standard adjoint formula (paper Eq. 25). The function `optimize_directivity` (`src/Optimize.jl`) implements this ratio‑gradient efficiently.
+Both $\nabla P_\text{target}$ and $\nabla P_\text{total}$ are computed via the standard adjoint formula (paper Eq. 25). The function `optimize_directivity` (`src/optimization/Optimize.jl`) implements this ratio‑gradient efficiently.
 
 ### Reactive Impedance for Beam Steering
 
@@ -373,14 +373,14 @@ If verification passes at random `theta0` but fails at `theta_opt`:
 
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
-| **Directivity‑ratio optimizer** | `optimize_directivity` | `src/Optimize.jl` | 50–150 |
-| **Q‑matrix construction** | `build_Q` | `src/QMatrix.jl` | 60–90 |
-| **Spherical grid** | `make_sph_grid` | `src/FarField.jl` | 30–50 |
-| **Radiation vectors** | `radiation_vectors` | `src/FarField.jl` | 120–150 |
-| **Polarization matrix** | `pol_linear_x` | `src/QMatrix.jl` | 130–150 |
-| **Far‑field computation** | `compute_farfield` | `src/FarField.jl` | 200–220 |
-| **Convergence tracing** | `Vector{NamedTuple{(:iter, :J, :gnorm)}}` | `src/Optimize.jl` | 20–30 |
-| **Gradient verification** | `verify_gradient` | `src/Verification.jl` | 42–86 |
+| **Directivity‑ratio optimizer** | `optimize_directivity` | `src/optimization/Optimize.jl` | 50–150 |
+| **Q‑matrix construction** | `build_Q` | `src/optimization/QMatrix.jl` | 60–90 |
+| **Spherical grid** | `make_sph_grid` | `src/postprocessing/FarField.jl` | 30–50 |
+| **Radiation vectors** | `radiation_vectors` | `src/postprocessing/FarField.jl` | 120–150 |
+| **Polarization matrix** | `pol_linear_x` | `src/optimization/QMatrix.jl` | 130–150 |
+| **Far‑field computation** | `compute_farfield` | `src/postprocessing/FarField.jl` | 200–220 |
+| **Convergence tracing** | `Vector{NamedTuple{(:iter, :J, :gnorm)}}` | `src/optimization/Optimize.jl` | 20–30 |
+| **Gradient verification** | `verify_gradient` | `src/optimization/Verification.jl` | 42–86 |
 
 **Complete example:** `examples/ex_beam_steer.jl` (297 lines) – includes all steps above plus CSV output and plotting.
 
@@ -425,7 +425,7 @@ Before moving to more complex inverse‑design problems, ensure you have:
 
 - **Paper Section 4.2** – Beam‑steering case study with reactive impedance.
 - **Paper Eq. 30** – Gradient of ratio objectives (two adjoint solves).
-- **`src/Optimize.jl`** – Implementation of `optimize_directivity` with projected L‑BFGS.
-- **`src/QMatrix.jl`** – Construction of $Q$ matrices for arbitrary angular masks.
+- **`src/optimization/Optimize.jl`** – Implementation of `optimize_directivity` with projected L‑BFGS.
+- **`src/optimization/QMatrix.jl`** – Construction of $Q$ matrices for arbitrary angular masks.
 - **Tutorial 4: Sphere‑Mie RCS** – Validation against analytical Mie series.
 - **Tutorial 5: Airplane RCS** – Applying differentiable MoM to complex platforms.

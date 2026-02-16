@@ -302,15 +302,15 @@ end
 |---------|------------|---------------------|
 | High-level workflow | `src/Workflow.jl` | `solve_scattering` |
 | Result container | `src/Types.jl` | `ScatteringResult` |
-| Mesh resolution check | `src/Mesh.jl` | `mesh_resolution_report` |
-| Dense memory estimate | `src/Mesh.jl` | `estimate_dense_matrix_gib` |
-| RWG construction | `src/RWG.jl` | `build_rwg` |
-| Dense EFIE assembly | `src/EFIE.jl` | `assemble_Z_efie` |
-| ACA H-matrix assembly | `src/ACA.jl` | `build_aca_operator` |
-| NF preconditioner (from Z) | `src/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner(Z, mesh, rwg, cutoff)` |
-| NF preconditioner (geometry) | `src/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner(mesh, rwg, k, cutoff)` |
-| GMRES solve | `src/IterativeSolve.jl` | `solve_gmres` |
-| Excitation assembly | `src/Excitation.jl` | `assemble_excitation` |
+| Mesh resolution check | `src/geometry/Mesh.jl` | `mesh_resolution_report` |
+| Dense memory estimate | `src/geometry/Mesh.jl` | `estimate_dense_matrix_gib` |
+| RWG construction | `src/basis/RWG.jl` | `build_rwg` |
+| Dense EFIE assembly | `src/assembly/EFIE.jl` | `assemble_Z_efie` |
+| ACA H-matrix assembly | `src/fast/ACA.jl` | `build_aca_operator` |
+| NF preconditioner (from Z) | `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner(Z, mesh, rwg, cutoff)` |
+| NF preconditioner (geometry) | `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner(mesh, rwg, k, cutoff)` |
+| GMRES solve | `src/solver/IterativeSolve.jl` | `solve_gmres` |
+| Excitation assembly | `src/assembly/Excitation.jl` | `assemble_excitation` |
 
 ---
 
