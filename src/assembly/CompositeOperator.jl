@@ -33,9 +33,8 @@ end
 
 function ImpedanceLoadedOperator(Z_base::AbstractMatrix{ComplexF64},
                                   Mp::Vector{<:AbstractMatrix},
-                                  theta::Vector{Float64},
-                                  reactive::Bool=false)
-    return ImpedanceLoadedOperator{typeof(Z_base), eltype(Mp)}(Z_base, Mp, theta, reactive)
+                                  theta::Vector{Float64})
+    return ImpedanceLoadedOperator{typeof(Z_base), eltype(Mp)}(Z_base, Mp, theta, false)
 end
 
 struct ImpedanceLoadedAdjointOperator{T<:AbstractMatrix{ComplexF64},
