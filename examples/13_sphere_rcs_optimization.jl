@@ -235,8 +235,8 @@ relayout!(p1,
               tickfont=attr(size=20), range=[0, 180], dtick=30),
     yaxis=attr(title=attr(text="Bistatic RCS (dBsm)", font=attr(size=24)),
               tickfont=attr(size=20)),
-    legend=attr(x=0.55, y=0.95, font=attr(size=20)),
     margin=attr(l=80, r=30, t=20, b=70))
+set_legend!(p1; position=:topright)
 fig1_path = joinpath(figdir, "13_sphere_mom_vs_mie.pdf")
 PlotlyKaleido.savefig(p1, fig1_path; width=1200, height=700)
 println("  Saved: $fig1_path")
@@ -430,8 +430,8 @@ relayout!(p2,
               tickfont=attr(size=20), range=[0, 180], dtick=30),
     yaxis=attr(title=attr(text="Bistatic RCS (dBsm)", font=attr(size=24)),
               tickfont=attr(size=20)),
-    legend=attr(x=0.55, y=0.95, font=attr(size=20)),
     margin=attr(l=80, r=30, t=20, b=70))
+set_legend!(p2; position=:topright)
 fig2_path = joinpath(figdir, "13_sphere_rcs_optimization.pdf")
 PlotlyKaleido.savefig(p2, fig2_path; width=1200, height=700)
 println("  Saved: $fig2_path")
@@ -532,7 +532,6 @@ relayout!(p4,
               tickfont=attr(size=20), range=[-180, 180], dtick=30),
     yaxis=attr(title=attr(text="Bistatic RCS (dBsm)", font=attr(size=24)),
               tickfont=attr(size=20)),
-    legend=attr(x=0.55, y=0.98, font=attr(size=18)),
     margin=attr(l=80, r=30, t=20, b=70),
     shapes=[
         attr(type="line", x0=bs_signed_deg[1], x1=bs_signed_deg[1],
@@ -548,6 +547,7 @@ relayout!(p4,
         attr(x=bs_signed_deg[2]-3, y=1.02, yref="paper", text="BS₂",
              showarrow=false, font=attr(color="#ff7f0e", size=18)),
     ])
+set_legend!(p4; position=:bottomright)
 fig4_path = joinpath(figdir, "13_sphere_multiangle_rcs.pdf")
 PlotlyKaleido.savefig(p4, fig4_path; width=1200, height=700)
 println("  Saved: $fig4_path")
@@ -580,8 +580,8 @@ relayout!(p3,
               tickfont=attr(size=20), dtick=5),
     yaxis=attr(title=attr(text="10 log₁₀(J) (dB)", font=attr(size=24)),
               tickfont=attr(size=20)),
-    legend=attr(x=0.60, y=0.05, font=attr(size=20)),
     margin=attr(l=80, r=30, t=20, b=70))
+set_legend!(p3; position=:topright)
 fig3_path = joinpath(figdir, "13_sphere_convergence.pdf")
 PlotlyKaleido.savefig(p3, fig3_path; width=1200, height=700)
 println("  Saved: $fig3_path")

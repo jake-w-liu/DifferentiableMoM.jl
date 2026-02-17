@@ -24,7 +24,7 @@ IncompleteLU = "0.2.1"
 JSON = "1"
 Krylov = "0.9"
 PlotlyKaleido = "2.3.1"
-PlotlySupply = "1.4.0"
+PlotlySupply = "1.6.0"
 StaticArrays = "1"
 julia = "1.10"
 

@@ -145,7 +145,7 @@ uuid = "8bb1440f-4735-579b-a4ab-409b98df4dab"
 version = "1.9.1"
 
 [[deps.DifferentiableMoM]]
-deps = ["CSV", "DataFrames", "JSON", "Krylov", "LinearAlgebra", "PlotlyKaleido", "PlotlySupply", "Random", "SparseArrays", "StaticArrays"]
+deps = ["CSV", "DataFrames", "IncompleteLU", "JSON", "Krylov", "LinearAlgebra", "PlotlyKaleido", "PlotlySupply", "Random", "SparseArrays", "StaticArrays"]
 path = "."
 uuid = "23e8cd96-b521-4dc5-8732-25c09bc9e688"
 version = "0.1.0"
@@ -552,11 +552,11 @@ version = "2.3.1"
 
 [[deps.PlotlySupply]]
 deps = ["BatchAssign", "ElectronCall", "Infiltrator", "MeshGrid", "PlotlyBase", "Reexport"]
-git-tree-sha1 = "cbcb61f2472684f360ebac2cf93d193770f01d0e"
-repo-rev = "v1.4.0"
+git-tree-sha1 = "81ded5a001446657e3cefd19276b7bac6fe6fa20"
+repo-rev = "v1.6.0"
 repo-url = "https://github.com/jake-w-liu/PlotlySupply.jl"
 uuid = "a389b534-8bca-4fe3-8ff2-14829cd8824f"
-version = "1.4.0"
+version = "1.6.0"
 
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]
