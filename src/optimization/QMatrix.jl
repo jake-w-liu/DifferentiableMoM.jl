@@ -3,7 +3,7 @@
 # Q_mn = Σ_q w_q (p†·g_m)* (p†·g_n)
 # J(θ) = I† Q I  (radiated power in selected direction/polarization)
 
-export build_Q, apply_Q, pol_linear_x, cap_mask
+export build_Q, apply_Q, pol_linear_x, cap_mask, direction_mask
 
 """
     build_Q(G_mat, grid, pol; mask=nothing)
@@ -122,4 +122,21 @@ around the z-axis (broadside).
 """
 function cap_mask(grid::SphGrid; theta_max=π/18)
     return grid.theta .<= theta_max
+end
+
+"""
+    direction_mask(grid, direction; half_angle=π/18)
+
+Create a mask selecting directions within a cone of `half_angle` (radians)
+around an arbitrary `direction` vector. Generalizes `cap_mask` to any direction.
+
+# Example: backscatter mask for incidence from +z
+```julia
+mask = direction_mask(grid, Vec3(0,0,-1); half_angle=10*π/180)
+```
+"""
+function direction_mask(grid::SphGrid, direction::Vec3; half_angle::Float64=π/18)
+    d = direction / norm(direction)
+    NΩ = length(grid.w)
+    return BitVector([dot(Vec3(grid.rhat[:, q]), d) >= cos(half_angle) for q in 1:NΩ])
 end

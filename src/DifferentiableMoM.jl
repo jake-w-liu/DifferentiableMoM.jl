@@ -22,6 +22,8 @@ include("assembly/SingularIntegrals.jl")
 include("assembly/EFIE.jl")
 include("assembly/Impedance.jl")
 include("assembly/Excitation.jl")
+include("assembly/CompositeOperator.jl")
+include("assembly/SpatialPatches.jl")
 
 # Fast methods
 include("fast/ClusterTree.jl")
@@ -44,6 +46,7 @@ include("solver/IterativeSolve.jl")
 include("optimization/Adjoint.jl")
 include("optimization/Verification.jl")
 include("optimization/Optimize.jl")
+include("optimization/MultiAngleRCS.jl")
 
 # Workflow
 include("Workflow.jl")

@@ -116,6 +116,40 @@ Create a boolean mask selecting directions within a cone of half-angle `theta_ma
 
 ---
 
+### `direction_mask(grid, direction; half_angle=pi/18)`
+
+Create a boolean mask selecting directions within a cone of `half_angle` (radians) around an arbitrary `direction` vector. This generalizes `cap_mask` (which is fixed to the +z axis) to any direction, enabling backscatter masks for arbitrary incidence angles in multi-angle RCS optimization.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `grid` | `SphGrid` | -- | Spherical grid. |
+| `direction` | `Vec3` | -- | Center direction of the cone (automatically normalized). |
+| `half_angle` | `Float64` | `pi/18` (~10 deg) | Half-angle of the selection cone in radians. |
+
+**Returns:** `BitVector` of length `N_omega` with `true` for directions where `dot(rhat_q, direction/|direction|) >= cos(half_angle)`.
+
+**Relationship to `cap_mask`:**
+
+- `cap_mask(grid; theta_max=alpha)` selects directions near +z: equivalent to `direction_mask(grid, Vec3(0,0,1); half_angle=alpha)`.
+- `direction_mask` is needed for multi-angle RCS optimization where backscatter masks must be centered on `-k_hat` for each incidence direction.
+
+**Example:**
+
+```julia
+grid = make_sph_grid(90, 36)
+
+# Backscatter mask for incidence from (theta=30deg, phi=0)
+k_hat = Vec3(sin(pi/6), 0.0, cos(pi/6))
+mask = direction_mask(grid, -k_hat; half_angle=10*pi/180)
+
+# Use with build_Q for backscatter objective
+Q_back = build_Q(G_mat, grid, pol; mask=mask)
+```
+
+---
+
 ### `build_Q(G_mat, grid, pol; mask=nothing)`
 
 Build the Hermitian positive-semidefinite matrix `Q` for the quadratic far-field objective `J = Re(I' Q I)`.
@@ -361,7 +395,7 @@ rel_error = abs.(rcs_mom .- rcs_mie) ./ max.(rcs_mie, 1e-30)
 | File | Contents |
 |------|----------|
 | `src/postprocessing/FarField.jl` | `make_sph_grid`, `radiation_vectors`, `compute_farfield` |
-| `src/optimization/QMatrix.jl` | `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask` |
+| `src/optimization/QMatrix.jl` | `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`, `direction_mask` |
 | `src/postprocessing/Diagnostics.jl` | `radiated_power`, `projected_power`, `input_power`, `energy_ratio`, `condition_diagnostics` |
 | `src/assembly/Excitation.jl` | `assemble_v_plane_wave` |
 | `src/postprocessing/Mie.jl` | `mie_s1s2_pec`, `mie_bistatic_rcs_pec` |

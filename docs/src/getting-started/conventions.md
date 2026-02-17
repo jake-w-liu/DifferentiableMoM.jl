@@ -97,7 +97,43 @@ $w_q=\sin\theta_q\,\Delta\theta\,\Delta\phi$.
 
 ---
 
-## 7) Cross-Validation Conventions
+## 7) Plane-Wave Propagation Convention
+
+For a plane-wave excitation the wave vector `k_vec` is the
+**propagation direction** — the direction the wave *travels*, **not** the
+direction it comes from.
+
+```math
+\mathbf E^{\mathrm{inc}}(\mathbf r)
+= \mathbf p \, E_0 \, e^{-i\,\mathbf k_{\mathrm{vec}}\cdot\mathbf r},
+\qquad
+\mathbf k_{\mathrm{vec}} = k\,\hat{\mathbf k}.
+```
+
+Under the $e^{+i\omega t}$ convention, the full phase is
+$\phi(\mathbf r,t) = -\mathbf k_{\mathrm{vec}}\cdot\mathbf r + \omega t$,
+which advances in the direction of $\hat{\mathbf k}$.
+
+| `k_vec`                | Propagation direction | Backscatter direction ($-\hat{\mathbf k}$) |
+|------------------------|-----------------------|---------------------------------------------|
+| `Vec3(0, 0, -k)`      | $-z$ (downward)       | $+z$ ($\theta=0$)                           |
+| `Vec3(0, 0, +k)`      | $+z$ (upward)         | $-z$ ($\theta=\pi$)                         |
+| `Vec3(k, 0, 0)`       | $+x$                  | $-x$                                        |
+
+```julia
+# Wave propagating downward (-z), x-polarized
+k_vec = Vec3(0.0, 0.0, -k)
+pw    = make_plane_wave(k_vec, 1.0, Vec3(1.0, 0.0, 0.0))
+```
+
+!!! warning "Common pitfall"
+    `theta_inc = 0` in spherical coordinates gives $\hat{\mathbf k}=(0,0,1)=+z$,
+    so the wave travels *upward*.  For a wave coming from above (travelling
+    downward) use `theta_inc = π`.
+
+---
+
+## 8) Cross-Validation Conventions
 
 When comparing with external solvers:
 
@@ -112,6 +148,7 @@ When comparing with external solvers:
 ## Code Mapping
 
 - Green kernel and convention: `src/basis/Greens.jl`
+- Plane-wave excitation: `src/assembly/Excitation.jl`
 - Spherical grid definition: `src/postprocessing/FarField.jl`
 - Objective/adjoint implementation: `src/optimization/Adjoint.jl`, `src/optimization/Optimize.jl`
 - Units in diagnostics/RCS: `src/postprocessing/Diagnostics.jl`

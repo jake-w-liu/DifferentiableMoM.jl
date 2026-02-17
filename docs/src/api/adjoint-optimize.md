@@ -62,6 +62,50 @@ where `Z'` is the conjugate transpose of the system matrix. The adjoint variable
 
 ---
 
+### `solve_adjoint_rhs(Z, rhs; solver=:direct, preconditioner=nothing, gmres_tol=1e-8, gmres_maxiter=200)`
+
+Solve the adjoint system with a pre-computed right-hand side:
+
+```
+Z' * lambda = rhs
+```
+
+Unlike `solve_adjoint(Z, Q, I)` which internally computes `rhs = Q * I`, this function accepts the RHS directly. This is useful when:
+- Using `apply_Q` for matrix-free Q application (avoids forming the dense N x N Q matrix).
+- Computing the adjoint RHS from multiple sources (e.g., multi-angle objectives).
+- Working with `ImpedanceLoadedOperator` where Q*I is computed per-angle in the outer loop.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `Z` | `AbstractMatrix{<:Number}` | -- | System matrix (same Z used in the forward solve). |
+| `rhs` | `AbstractVector{<:Number}` | -- | Pre-computed right-hand side vector (e.g., `Q * I` or output of `apply_Q`). |
+| `solver` | `Symbol` | `:direct` | `:direct` for LU factorization, `:gmres` for GMRES. |
+| `preconditioner` | `Nothing` or `AbstractPreconditionerData` | `nothing` | Near-field preconditioner for GMRES. |
+| `gmres_tol` | `Float64` | `1e-8` | GMRES relative tolerance. |
+| `gmres_maxiter` | `Int` | `200` | Maximum GMRES iterations. |
+
+**Returns:** `Vector{ComplexF64}` adjoint variable `lambda`.
+
+**Example:**
+
+```julia
+# Standard usage: equivalent to solve_adjoint(Z, Q, I)
+rhs = Q * I
+lambda = solve_adjoint_rhs(Z, rhs)
+
+# Matrix-free Q application (large N)
+rhs = apply_Q(G_mat, grid, pol, I; mask=mask)
+lambda = solve_adjoint_rhs(Z, rhs; solver=:gmres, preconditioner=P_nf)
+
+# With ImpedanceLoadedOperator
+Z_op = ImpedanceLoadedOperator(Z_base, Mp, theta)
+lambda = solve_adjoint_rhs(Z_op, rhs; solver=:gmres, preconditioner=P_nf)
+```
+
+---
+
 ### `gradient_impedance(Mp, I, lambda; reactive=false)`
 
 Compute the adjoint gradient of the objective with respect to impedance parameters:
@@ -189,6 +233,49 @@ Q_total  = build_Q(G_mat, grid, pol)               # total radiated power
 
 ---
 
+### `optimize_multiangle_rcs(Z_base, Mp, configs, theta0; kwargs...)`
+
+Minimize total weighted backscatter RCS over multiple incidence angles using projected L-BFGS. This optimizer supports any `AbstractMatrix{ComplexF64}` as the base operator (MLFMA, ACA, dense) via `ImpedanceLoadedOperator`.
+
+**Required parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `Z_base` | `AbstractMatrix{ComplexF64}` | Base EFIE operator (MLFMAOperator, ACAOperator, or dense Matrix). |
+| `Mp` | `Vector{<:AbstractMatrix}` | Patch mass matrices from `precompute_patch_mass`. |
+| `configs` | `Vector{AngleConfig}` | Per-angle configurations from `build_multiangle_configs`. |
+| `theta0` | `Vector{Float64}` | Initial parameter vector (length P). |
+
+**Keyword arguments:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `maxiter` | `Int` | `100` | Maximum L-BFGS iterations. |
+| `tol` | `Float64` | `1e-6` | Gradient-norm convergence tolerance. |
+| `m_lbfgs` | `Int` | `10` | L-BFGS memory length. |
+| `alpha0` | `Float64` | `0.01` | Initial inverse-Hessian scaling. |
+| `verbose` | `Bool` | `true` | Print iteration progress. |
+| `reactive` | `Bool` | `false` | Impedance mode: `false` = resistive, `true` = reactive. |
+| `lb` | `Vector` or `nothing` | `nothing` | Lower bounds on theta. |
+| `ub` | `Vector` or `nothing` | `nothing` | Upper bounds on theta. |
+| `preconditioner` | `AbstractPreconditionerData` or `nothing` | `nothing` | GMRES preconditioner (strongly recommended). |
+| `gmres_tol` | `Float64` | `1e-6` | GMRES relative tolerance. |
+| `gmres_maxiter` | `Int` | `300` | Maximum GMRES iterations per solve. |
+
+**Returns:** Tuple `(theta_opt, trace)` where:
+- `theta_opt::Vector{Float64}`: Optimized parameter vector.
+- `trace::Vector{NamedTuple}`: Iteration records with fields `(iter, J, gnorm)`.
+
+**Per-iteration cost:** M forward solves + M adjoint solves + line-search forward solves (M per trial step). Always uses GMRES internally (the composite `ImpedanceLoadedOperator` is matrix-free).
+
+**Objective:** `J(theta) = sum_a w_a * Re(I_a' Q_a I_a)` where `I_a = Z(theta)^{-1} v_a`.
+
+**Gradient:** `g[p] = sum_a w_a * gradient_impedance(Mp, I_a, lambda_a)` where `Z(theta)' lambda_a = Q_a I_a`.
+
+See the [Multi-Angle RCS chapter](../differentiable-design/05-multiangle-rcs.md) for a detailed walkthrough and examples.
+
+---
+
 ## Solver and Conditioning Options
 
 Both optimizers support two independent preconditioning mechanisms:
@@ -260,8 +347,10 @@ println("Final gradient norm: ", trace[end].gnorm)
 
 | File | Contents |
 |------|----------|
-| `src/optimization/Adjoint.jl` | `compute_objective`, `solve_adjoint`, `gradient_impedance` |
+| `src/optimization/Adjoint.jl` | `compute_objective`, `solve_adjoint`, `solve_adjoint_rhs`, `gradient_impedance` |
 | `src/optimization/Optimize.jl` | `optimize_lbfgs`, `optimize_directivity` |
+| `src/optimization/MultiAngleRCS.jl` | `AngleConfig`, `build_multiangle_configs`, `optimize_multiangle_rcs` |
+| `src/assembly/CompositeOperator.jl` | `ImpedanceLoadedOperator` (composite operator for fast-operator optimization) |
 | `src/solver/Solve.jl` | Conditioning helpers used by optimizers |
 
 ---

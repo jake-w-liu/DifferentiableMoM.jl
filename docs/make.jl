@@ -41,6 +41,7 @@ makedocs(
             "Impedance Sensitivities" => "differentiable-design/02-impedance-sensitivities.md",
             "Ratio Objectives" => "differentiable-design/03-ratio-objectives.md",
             "Optimization Workflow" => "differentiable-design/04-optimization-workflow.md",
+            "Multi-Angle RCS" => "differentiable-design/05-multiangle-rcs.md",
         ],
         "Part IV — Validation" => [
             "Internal Consistency" => "validation/01-internal-consistency.md",
@@ -70,6 +71,8 @@ makedocs(
             "Excitation" => "api/excitation.md",
             "Assembly and Solve" => "api/assembly-solve.md",
             "Far-Field and RCS" => "api/farfield-rcs.md",
+            "Composite Operators" => "api/composite-operators.md",
+            "Spatial Patches" => "api/spatial-patches.md",
             "Adjoint and Optimization" => "api/adjoint-optimize.md",
             "Verification" => "api/verification.md",
             "Visualization" => "api/visualization.md",
