@@ -76,6 +76,12 @@ Construct RWG basis functions on the mesh, then assemble the EFIE system matrix 
 - **Impedance loading:** `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_dZ_dtheta`, `assemble_full_Z`
   Add surface impedance loading for design optimization. See [assembly-solve.md](assembly-solve.md).
 
+- **Composite operator:** `ImpedanceLoadedOperator`
+  Matrix-free operator wrapping any `AbstractMatrix{ComplexF64}` base (MLFMA, ACA, dense) with sparse impedance perturbation `Z(theta) = Z_base - Sigma_p theta_p M_p`. Enables GMRES-based optimization with fast operators. See [composite-operators.md](composite-operators.md).
+
+- **Spatial patch assignment:** `assign_patches_grid`, `assign_patches_by_region`, `assign_patches_uniform`, `region_halfspace`, `region_sphere`, `region_box`
+  Automatic spatial partitioning of mesh triangles into impedance design patches. See [spatial-patches.md](spatial-patches.md).
+
 ### 3) Excitation, Solve, and Far Field
 
 Apply an incident field, solve for currents, and compute far-field radiation or scattering patterns.
@@ -99,8 +105,8 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
 - **Far-field computation:** `make_sph_grid`, `radiation_vectors`, `compute_farfield`
   Sample the far-field radiation pattern on a spherical grid.
 
-- **Objective (Q-matrix) helpers:** `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`
-  Build Hermitian PSD matrices for quadratic far-field objectives used in optimization.
+- **Objective (Q-matrix) helpers:** `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`, `direction_mask`
+  Build Hermitian PSD matrices for quadratic far-field objectives used in optimization. `direction_mask` generalizes `cap_mask` to arbitrary directions for multi-angle RCS optimization.
 
 ### 3b) ACA H-Matrix and High-Level Workflow
 
@@ -142,11 +148,14 @@ High-frequency approximate solver for electrically large problems where full MoM
 
 Compute gradients via the adjoint method and run impedance optimization.
 
-- **Adjoint primitives:** `compute_objective`, `solve_adjoint`, `gradient_impedance`
-  The building blocks: evaluate the quadratic objective, solve the adjoint system, and compute the impedance gradient. See [adjoint-optimize.md](adjoint-optimize.md).
+- **Adjoint primitives:** `compute_objective`, `solve_adjoint`, `solve_adjoint_rhs`, `gradient_impedance`
+  The building blocks: evaluate the quadratic objective, solve the adjoint system, and compute the impedance gradient. `solve_adjoint_rhs` accepts a pre-computed RHS for matrix-free Q application or multi-angle objectives. See [adjoint-optimize.md](adjoint-optimize.md).
 
-- **Optimizers:** `optimize_lbfgs`, `optimize_directivity`
+- **Single-objective optimizers:** `optimize_lbfgs`, `optimize_directivity`
   Projected L-BFGS with box constraints. `optimize_lbfgs` minimizes/maximizes a single quadratic objective; `optimize_directivity` maximizes the ratio of two quadratic objectives (directivity).
+
+- **Multi-angle optimizer:** `optimize_multiangle_rcs`, `build_multiangle_configs`, `AngleConfig`
+  Minimize weighted backscatter RCS over multiple incidence angles simultaneously. Supports MLFMA, ACA, and dense base operators via `ImpedanceLoadedOperator`. See [adjoint-optimize.md](adjoint-optimize.md) and the [Multi-Angle RCS chapter](../differentiable-design/05-multiangle-rcs.md).
 
 - **Conditioning helpers:** `make_mass_regularizer`, `make_left_preconditioner`, `select_preconditioner`, `transform_patch_matrices`, `prepare_conditioned_system`
   Advanced: mass-based preconditioning and regularization for ill-conditioned optimization problems.
@@ -171,8 +180,10 @@ For a first read-through of the API documentation, follow this order:
 2. **[mesh.md](mesh.md)** and **[rwg.md](rwg.md)** — Geometry creation, mesh quality, resolution diagnostics, refinement, and RWG basis construction
 3. **[assembly-solve.md](assembly-solve.md)** — EFIE assembly (dense and matrix-free), impedance loading, direct/GMRES solvers, and near-field preconditioning
 4. **[aca-workflow.md](aca-workflow.md)** — ACA H-matrix compression, cluster trees, and the `solve_scattering` high-level workflow
-5. **[farfield-rcs.md](farfield-rcs.md)** — Far-field patterns, Q-matrices, RCS, and Mie validation
-6. **[adjoint-optimize.md](adjoint-optimize.md)** — Adjoint gradients and L-BFGS optimization
+5. **[farfield-rcs.md](farfield-rcs.md)** — Far-field patterns, Q-matrices, `direction_mask`, RCS, and Mie validation
+6. **[composite-operators.md](composite-operators.md)** — `ImpedanceLoadedOperator` for fast-operator optimization
+7. **[spatial-patches.md](spatial-patches.md)** — Automatic spatial patch assignment
+8. **[adjoint-optimize.md](adjoint-optimize.md)** — Adjoint gradients, L-BFGS optimization, and multi-angle RCS
 7. **[verification.md](verification.md)** — Gradient correctness checks
 8. **[excitation.md](excitation.md)** — Extended excitation system (plane waves, ports, dipoles, imported fields, pattern feeds)
 

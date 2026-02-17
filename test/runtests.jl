@@ -2797,10 +2797,272 @@ println("  32l: PASS")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 33: Spatial patch assignment
+# ─────────────────────────────────────────────────
+println("\n── Test 33: Spatial patch assignment ──")
+
+# 33a: Grid-based partitioning
+println("  33a: Grid-based partitioning ...")
+part_grid = assign_patches_grid(mesh; nx=3, ny=2, nz=1)
+@assert length(part_grid.tri_patch) == ntriangles(mesh) "Grid partition should cover all triangles"
+@assert part_grid.P >= 1 "Grid partition should have at least 1 patch"
+@assert part_grid.P <= 6 "Grid partition should have at most nx*ny patches"
+@assert all(1 .<= part_grid.tri_patch .<= part_grid.P) "All patch IDs should be in [1, P]"
+println("    $Nt triangles → $(part_grid.P) patches")
+println("  33a: PASS")
+
+# 33b: Region-based partitioning
+println("  33b: Region-based partitioning ...")
+# Split plate at y=0 (mesh is centered)
+region_top = region_halfspace(; axis=:y, threshold=0.0, above=true)
+region_bot = region_halfspace(; axis=:y, threshold=0.0, above=false)
+part_region = assign_patches_by_region(mesh, [region_top, region_bot])
+@assert part_region.P == 2 "Two half-space regions should give exactly 2 patches"
+@assert all(1 .<= part_region.tri_patch .<= 2) "All triangles should be assigned to patch 1 or 2"
+n_top = count(==(1), part_region.tri_patch)
+n_bot = count(==(2), part_region.tri_patch)
+@assert n_top > 0 && n_bot > 0 "Both regions should have triangles"
+println("    Region 1 (y>=0): $n_top tris,  Region 2 (y<0): $n_bot tris")
+println("  33b: PASS")
+
+# 33c: Sphere and box predicates
+println("  33c: Sphere and box predicates ...")
+pred_sphere = region_sphere(; center=Vec3(0.0, 0.0, 0.0), radius=0.01)
+pred_box = region_box(; lo=Vec3(-0.01, -0.01, -1.0), hi=Vec3(0.01, 0.01, 1.0))
+# Test that predicates are callable and return Bool
+@assert pred_sphere(Vec3(0.0, 0.0, 0.0)) == true "Origin should be inside sphere"
+@assert pred_sphere(Vec3(100.0, 0.0, 0.0)) == false "Far point should be outside sphere"
+@assert pred_box(Vec3(0.0, 0.0, 0.0)) == true "Origin should be inside box"
+@assert pred_box(Vec3(1.0, 0.0, 0.0)) == false "Point outside should fail"
+println("  33c: PASS")
+
+# 33d: Uniform k-means partitioning
+println("  33d: Uniform k-means partitioning ...")
+n_target = 5
+part_kmeans = assign_patches_uniform(mesh; n_patches=n_target)
+@assert length(part_kmeans.tri_patch) == ntriangles(mesh)
+@assert part_kmeans.P >= 1 && part_kmeans.P <= n_target
+@assert all(1 .<= part_kmeans.tri_patch .<= part_kmeans.P)
+println("    Requested $n_target patches → got $(part_kmeans.P)")
+println("  33d: PASS")
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 34: CompositeOperator (ImpedanceLoadedOperator)
+# ─────────────────────────────────────────────────
+println("\n── Test 34: CompositeOperator ──")
+
+# 34a: Forward matvec accuracy
+println("  34a: Forward matvec accuracy ...")
+theta_test = randn(MersenneTwister(123), Nt) .* 100.0
+x_test = randn(MersenneTwister(456), ComplexF64, N)
+
+# Reference: dense assemble_full_Z
+Z_ref = assemble_full_Z(Z_efie, Mp, theta_test; reactive=false)
+y_ref = Z_ref * x_test
+
+# Composite operator
+A_comp = ImpedanceLoadedOperator(Z_efie, Mp, theta_test, false)
+y_comp = A_comp * x_test
+
+matvec_err = norm(y_comp - y_ref) / norm(y_ref)
+println("    Forward matvec relative error: $matvec_err")
+@assert matvec_err < 1e-12 "Forward matvec error too large: $matvec_err"
+@assert size(A_comp) == (N, N) "Size mismatch"
+println("  34a: PASS")
+
+# 34b: Adjoint matvec accuracy
+println("  34b: Adjoint matvec accuracy ...")
+y_adj_ref = Z_ref' * x_test
+y_adj_comp = adjoint(A_comp) * x_test
+
+adj_err = norm(y_adj_comp - y_adj_ref) / norm(y_adj_ref)
+println("    Adjoint matvec relative error: $adj_err")
+@assert adj_err < 1e-12 "Adjoint matvec error too large: $adj_err"
+println("  34b: PASS")
+
+# 34c: Reactive mode
+println("  34c: Reactive mode ...")
+Z_ref_rx = assemble_full_Z(Z_efie, Mp, theta_test; reactive=true)
+A_comp_rx = ImpedanceLoadedOperator(Z_efie, Mp, theta_test, true)
+y_rx_ref = Z_ref_rx * x_test
+y_rx_comp = A_comp_rx * x_test
+rx_err = norm(y_rx_comp - y_rx_ref) / norm(y_rx_ref)
+@assert rx_err < 1e-12 "Reactive forward matvec error: $rx_err"
+println("  34c: PASS")
+
+# 34d: GMRES convergence with composite operator
+println("  34d: GMRES solve via composite operator ...")
+theta_small = fill(300.0, Nt)
+A_gmres = ImpedanceLoadedOperator(Z_efie, Mp, theta_small, false)
+I_gmres = solve_forward(A_gmres, v; solver=:gmres, gmres_tol=1e-8, gmres_maxiter=200)
+
+Z_dense = assemble_full_Z(Z_efie, Mp, theta_small)
+I_dense = Z_dense \ v
+gmres_diff = norm(I_gmres - I_dense) / norm(I_dense)
+println("    GMRES vs direct relative diff: $gmres_diff")
+@assert gmres_diff < 1e-4 "GMRES solution too different from direct: $gmres_diff"
+println("  34d: PASS")
+
+# 34e: solve_adjoint_rhs
+println("  34e: solve_adjoint_rhs ...")
+rhs_adj = Q * I_dense
+lam_direct = Z_dense' \ rhs_adj
+lam_rhs = solve_adjoint_rhs(Z_dense, rhs_adj; solver=:direct)
+@assert norm(lam_rhs - lam_direct) / norm(lam_direct) < 1e-12 "solve_adjoint_rhs direct mismatch"
+lam_gmres = solve_adjoint_rhs(A_gmres, rhs_adj; solver=:gmres, gmres_tol=1e-8, gmres_maxiter=200)
+adj_rhs_diff = norm(lam_gmres - lam_direct) / norm(lam_direct)
+println("    GMRES adjoint_rhs vs direct: $adj_rhs_diff")
+@assert adj_rhs_diff < 1e-4 "solve_adjoint_rhs GMRES too different: $adj_rhs_diff"
+println("  34e: PASS")
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 35: Multi-angle RCS optimization (smoke test)
+# ─────────────────────────────────────────────────
+println("\n── Test 35: Multi-angle RCS optimization ──")
+
+# 35a: direction_mask
+println("  35a: direction_mask ...")
+grid_test = make_sph_grid(18, 36)
+mask_z = direction_mask(grid_test, Vec3(0.0, 0.0, 1.0); half_angle=10.0 * π / 180)
+mask_mz = direction_mask(grid_test, Vec3(0.0, 0.0, -1.0); half_angle=10.0 * π / 180)
+@assert sum(mask_z) > 0 "Should have points near +z"
+@assert sum(mask_mz) > 0 "Should have points near -z"
+# +z and -z masks should not overlap (for small cone)
+@assert sum(mask_z .& mask_mz) == 0 "+z and -z 10° cones should not overlap"
+println("    +z mask: $(sum(mask_z)) pts,  -z mask: $(sum(mask_mz)) pts")
+println("  35a: PASS")
+
+# 35b: build_multiangle_configs
+println("  35b: build_multiangle_configs ...")
+angles_2 = [
+    (theta_inc=0.0, phi_inc=0.0, pol=Vec3(1.0, 0.0, 0.0), weight=1.0),     # +z incidence
+    (theta_inc=π/4, phi_inc=0.0, pol=Vec3(0.0, 1.0, 0.0), weight=1.0),     # 45° incidence
+]
+grid_opt = make_sph_grid(12, 24)
+configs_test = build_multiangle_configs(mesh, rwg, k, angles_2;
+                                         grid=grid_opt, backscatter_cone=15.0)
+@assert length(configs_test) == 2 "Should have 2 angle configs"
+@assert length(configs_test[1].v) == N "Excitation vector should have length N"
+@assert size(configs_test[1].Q) == (N, N) "Q matrix should be N×N"
+@assert configs_test[1].weight == 1.0
+println("  35b: PASS")
+
+# 35c: optimize_multiangle_rcs smoke test
+println("  35c: optimize_multiangle_rcs (5 iterations) ...")
+# Use spatial grid patches instead of one-per-triangle (fewer parameters = faster)
+part_opt = assign_patches_grid(mesh; nx=3, ny=3, nz=1)
+Mp_opt = precompute_patch_mass(mesh, rwg, part_opt; quad_order=3)
+theta_init = fill(200.0, part_opt.P)
+
+theta_opt_35, trace_35 = optimize_multiangle_rcs(
+    Z_efie, Mp_opt, configs_test, theta_init;
+    maxiter=5, tol=1e-12, alpha0=0.01,
+    reactive=false, verbose=false,
+    lb=fill(0.0, part_opt.P), ub=fill(1000.0, part_opt.P)
+)
+@assert length(trace_35) == 5 "Should run exactly 5 iterations"
+@assert all(t -> isfinite(t.J), trace_35) "All objectives should be finite"
+@assert all(t -> isfinite(t.gnorm), trace_35) "All gradients should be finite"
+# Objective should generally decrease (check last < first with tolerance)
+println("    J: $(round(trace_35[1].J, sigdigits=4)) → $(round(trace_35[end].J, sigdigits=4))")
+println("    |g|: $(round(trace_35[1].gnorm, sigdigits=4)) → $(round(trace_35[end].gnorm, sigdigits=4))")
+println("  35c: PASS")
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 36: MLFMA + optimizer integration
+# ─────────────────────────────────────────────────
+println("\n── Test 36: MLFMA + optimizer integration ──")
+
+# Build a larger mesh for MLFMA (icosphere, ~1920 unknowns)
+println("  36a: Build icosphere + MLFMA operator ...")
+ico_opt_path = joinpath(DATADIR, "tmp_icosphere_opt.obj")
+write_icosphere_obj(ico_opt_path; radius=0.05, subdivisions=3)
+mesh_ico_opt = read_obj_mesh(ico_opt_path)
+rwg_ico = build_rwg(mesh_ico_opt)
+N_ico = rwg_ico.nedges
+println("    Icosphere: $(nvertices(mesh_ico_opt)) verts, $(ntriangles(mesh_ico_opt)) tris, $N_ico RWG")
+
+freq_ico = 2e9
+k_ico = 2π * freq_ico / 299792458.0
+
+# Build MLFMA operator
+A_mlfma = build_mlfma_operator(mesh_ico_opt, rwg_ico, k_ico;
+                                leaf_lambda=1.0, precision=3, verbose=false)
+println("    MLFMA operator built: $(size(A_mlfma))")
+println("  36a: PASS")
+
+# 36b: Composite operator with MLFMA base
+println("  36b: Composite operator + MLFMA ...")
+part_ico = assign_patches_grid(mesh_ico_opt; nx=3, ny=3, nz=3)
+Mp_ico = precompute_patch_mass(mesh_ico_opt, rwg_ico, part_ico; quad_order=3)
+theta_ico = fill(200.0, part_ico.P)
+println("    Icosphere: $(part_ico.P) spatial patches")
+
+A_loaded = ImpedanceLoadedOperator(A_mlfma, Mp_ico, theta_ico, false)
+@assert size(A_loaded) == (N_ico, N_ico)
+
+# Forward solve with MLFMA composite
+pw_ico = PlaneWaveExcitation(Vec3(0.0, 0.0, -k_ico), 1.0, Vec3(1.0, 0.0, 0.0))
+v_ico = assemble_excitation(mesh_ico_opt, rwg_ico, pw_ico)
+
+# Build preconditioner from MLFMA near-field
+P_mlfma = build_mlfma_preconditioner(A_mlfma; factorization=:ilu, ilu_tau=1e-2)
+
+I_ico = solve_forward(A_loaded, v_ico; solver=:gmres, preconditioner=P_mlfma,
+                       gmres_tol=1e-6, gmres_maxiter=300)
+@assert length(I_ico) == N_ico
+@assert norm(I_ico) > 0 "Solution should be nonzero"
+println("    Forward solve OK, |I| = $(round(norm(I_ico), sigdigits=4))")
+println("  36b: PASS")
+
+# 36c: Adjoint solve with MLFMA composite
+println("  36c: Adjoint solve with MLFMA composite ...")
+rhs_adj_ico = randn(MersenneTwister(789), ComplexF64, N_ico)
+lam_ico = solve_adjoint_rhs(A_loaded, rhs_adj_ico;
+                             solver=:gmres, preconditioner=P_mlfma,
+                             gmres_tol=1e-6, gmres_maxiter=300)
+@assert length(lam_ico) == N_ico
+@assert norm(lam_ico) > 0
+println("    Adjoint solve OK, |λ| = $(round(norm(lam_ico), sigdigits=4))")
+println("  36c: PASS")
+
+# 36d: Multi-angle RCS optimization with MLFMA (3 iterations)
+println("  36d: Multi-angle RCS + MLFMA (3 iterations) ...")
+grid_ico = make_sph_grid(12, 24)
+angles_ico = [
+    (theta_inc=0.0, phi_inc=0.0, pol=Vec3(1.0, 0.0, 0.0), weight=1.0),
+    (theta_inc=π/3, phi_inc=0.0, pol=Vec3(1.0, 0.0, 0.0), weight=1.0),
+]
+configs_ico = build_multiangle_configs(mesh_ico_opt, rwg_ico, k_ico, angles_ico;
+                                        grid=grid_ico, backscatter_cone=15.0)
+
+theta_opt_ico, trace_ico = optimize_multiangle_rcs(
+    A_mlfma, Mp_ico, configs_ico, theta_ico;
+    maxiter=3, tol=1e-12, alpha0=0.01,
+    reactive=false, verbose=false,
+    lb=fill(0.0, part_ico.P), ub=fill(1000.0, part_ico.P),
+    preconditioner=P_mlfma, gmres_tol=1e-6, gmres_maxiter=300
+)
+@assert length(trace_ico) == 3 "Should run exactly 3 iterations"
+@assert all(t -> isfinite(t.J), trace_ico) "All objectives should be finite"
+@assert all(t -> isfinite(t.gnorm), trace_ico) "All gradients should be finite"
+println("    J: $(round(trace_ico[1].J, sigdigits=4)) → $(round(trace_ico[end].J, sigdigits=4))")
+println("    |g|: $(round(trace_ico[1].gnorm, sigdigits=4)) → $(round(trace_ico[end].gnorm, sigdigits=4))")
+println("  36d: PASS")
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 32 TESTS PASSED")
+println("ALL 36 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)

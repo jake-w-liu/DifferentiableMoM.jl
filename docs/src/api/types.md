@@ -366,6 +366,83 @@ end
 
 ---
 
+## `ImpedanceLoadedOperator` -- Composite Impedance Operator
+
+A matrix-free operator that wraps any `AbstractMatrix{ComplexF64}` base operator (MLFMA, ACA, dense, matrix-free EFIE) with sparse impedance loading. This enables GMRES-based optimization with fast operators without forming the full dense impedance-loaded system.
+
+```julia
+struct ImpedanceLoadedOperator{T<:AbstractMatrix{ComplexF64},
+                                S<:AbstractMatrix} <: AbstractMatrix{ComplexF64}
+    Z_base::T
+    Mp::Vector{S}
+    theta::Vector{Float64}
+    reactive::Bool
+end
+```
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `Z_base` | `AbstractMatrix{ComplexF64}` | Base EFIE operator (MLFMAOperator, ACAOperator, MatrixFreeEFIEOperator, or dense Matrix). |
+| `Mp` | `Vector{<:AbstractMatrix}` | Sparse patch mass matrices from `precompute_patch_mass`. |
+| `theta` | `Vector{Float64}` | Current impedance parameter vector (length P). |
+| `reactive` | `Bool` | `false` = resistive (`Z_s = theta`), `true` = reactive (`Z_s = i*theta`). |
+
+**Constructor:**
+
+```julia
+Z_op = ImpedanceLoadedOperator(Z_base, Mp, theta)           # resistive
+Z_op = ImpedanceLoadedOperator(Z_base, Mp, theta, true)     # reactive
+```
+
+**Supported operations:** `size`, `eltype`, `mul!`, `*`, `adjoint`. The adjoint returns an `ImpedanceLoadedAdjointOperator` for adjoint sensitivity solves. See [composite-operators.md](composite-operators.md) for full API details.
+
+**When to use:**
+
+| Scenario | Base operator | Use `ImpedanceLoadedOperator`? |
+|----------|---------------|-------------------------------|
+| Small problem, dense Z | `Matrix{ComplexF64}` | Optional (can use `assemble_full_Z` instead) |
+| ACA-compressed | `ACAOperator` | Yes |
+| MLFMA fast multipole | `MLFMAOperator` | Yes |
+| Multi-angle RCS optimization | Any | Yes (used internally by `optimize_multiangle_rcs`) |
+
+---
+
+## `AngleConfig` -- Multi-Angle RCS Configuration
+
+Configuration for one incidence angle in a multi-angle RCS optimization. Created by `build_multiangle_configs` and consumed by `optimize_multiangle_rcs`.
+
+```julia
+struct AngleConfig
+    k_vec::Vec3
+    pol::Vec3
+    v::Vector{ComplexF64}
+    Q::Matrix{ComplexF64}
+    weight::Float64
+end
+```
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `k_vec` | `Vec3` | Incidence wave vector `k * k_hat` (rad/m). |
+| `pol` | `Vec3` | Polarization unit vector (perpendicular to `k_vec`). |
+| `v` | `Vector{ComplexF64}` | Pre-assembled excitation vector for this angle. |
+| `Q` | `Matrix{ComplexF64}` | Backscatter Q-matrix targeting direction `-k_hat` with the specified cone angle. |
+| `weight` | `Float64` | Weight `w_a` in the composite objective `J = sum_a w_a (I_a' Q_a I_a)`. |
+
+**Constructor:**
+
+```julia
+configs = build_multiangle_configs(mesh, rwg, k, angles; grid=grid, backscatter_cone=10.0)
+```
+
+See [adjoint-optimize.md](adjoint-optimize.md) and the [Multi-Angle RCS chapter](../differentiable-design/05-multiangle-rcs.md) for usage details.
+
+---
+
 ## Matrix-Free EFIE Operators
 
 These types wrap the EFIE kernel evaluation as `AbstractMatrix` subtypes, enabling matrix-vector products without allocating a dense N x N matrix. They are used internally by the ACA H-matrix builder and can be used directly with Krylov.jl for pure matrix-free GMRES solves.
@@ -471,6 +548,8 @@ cv = CVec3(1.0 + 2.0im, 0.0, 0.0)   # complex electric field phasor
 | `NearFieldOperator`, `NearFieldAdjointOperator` | `src/solver/NearFieldPreconditioner.jl` | `src/solver/IterativeSolve.jl` (internal) |
 | `ClusterNode`, `ClusterTree` | `src/fast/ClusterTree.jl` | `src/fast/ACA.jl` |
 | `ACAOperator`, `ACAAdjointOperator` | `src/fast/ACA.jl` | `src/Workflow.jl`, `src/solver/IterativeSolve.jl` |
+| `ImpedanceLoadedOperator`, `ImpedanceLoadedAdjointOperator` | `src/assembly/CompositeOperator.jl` | `src/optimization/MultiAngleRCS.jl` |
+| `AngleConfig` | `src/optimization/MultiAngleRCS.jl` | `optimize_multiangle_rcs` |
 | Vector aliases (`Vec3`, `CVec3`) | `src/Types.jl` | `src/geometry/Mesh.jl`, `src/basis/Greens.jl`, `src/postprocessing/FarField.jl`, `src/assembly/Excitation.jl` |
 
 ---
