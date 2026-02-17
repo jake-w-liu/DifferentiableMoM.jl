@@ -222,7 +222,7 @@ theta_fine_deg = rad2deg.(theta_fine)
 
 # ── Plot 1: MoM vs Mie validation ──────────────────────
 println("\nGenerating Plot 1: MoM vs Mie validation...")
-sf1 = subplots(1, 1; sync=false, width=1200, height=700)
+sf1 = subplots(1, 1; sync=false, width=700, height=400)
 addtraces!(sf1, scatter(x=theta_fine_deg, y=dB_fine_mie, mode="lines",
            name="Mie (analytical)", line=attr(color="blue", width=3)); row=1, col=1)
 addtraces!(sf1, scatter(x=theta_fine_deg, y=dB_fine_mom, mode="lines",
@@ -236,9 +236,9 @@ relayout!(p1,
     yaxis=attr(title=attr(text="Bistatic RCS (dBsm)", font=attr(size=24)),
               tickfont=attr(size=20)),
     margin=attr(l=80, r=30, t=20, b=70))
-set_legend!(p1; position=:topright)
+set_legend!(p1; position=:bottomright)
 fig1_path = joinpath(figdir, "13_sphere_mom_vs_mie.pdf")
-PlotlyKaleido.savefig(p1, fig1_path; width=1200, height=700)
+PlotlyKaleido.savefig(p1, fig1_path; width=700, height=400)
 println("  Saved: $fig1_path")
 
 
@@ -413,7 +413,7 @@ E_ff_fine_multi = compute_farfield(G_fine, Vector{ComplexF64}(I_opt_bs), Ntheta_
 sigma_fine_multi = bistatic_rcs(E_ff_fine_multi; E0=E0)
 dB_fine_multi = 10 .* log10.(max.(sigma_fine_multi, 1e-30))
 
-sf2 = subplots(1, 1; sync=false, width=1200, height=700)
+sf2 = subplots(1, 1; sync=false, width=700, height=400)
 addtraces!(sf2, scatter(x=theta_fine_deg, y=dB_fine_mom, mode="lines",
            name="PEC (baseline)", line=attr(color="black", width=3)); row=1, col=1)
 addtraces!(sf2, scatter(x=theta_fine_deg, y=dB_fine_single, mode="lines",
@@ -433,7 +433,7 @@ relayout!(p2,
     margin=attr(l=80, r=30, t=20, b=70))
 set_legend!(p2; position=:topright)
 fig2_path = joinpath(figdir, "13_sphere_rcs_optimization.pdf")
-PlotlyKaleido.savefig(p2, fig2_path; width=1200, height=700)
+PlotlyKaleido.savefig(p2, fig2_path; width=700, height=400)
 println("  Saved: $fig2_path")
 
 # ── B11. Plot 4: Multi-angle — signed-θ xz-plane cut (both angles, one plot) ──
@@ -509,7 +509,7 @@ for (a_idx, ang) in enumerate(angles)
     opt_sc_dB[a_idx] = 10 .* log10.(max.(bistatic_rcs(E_opt_sc; E0=E0), 1e-30))
 end
 
-sf4 = subplots(1, 1; sync=false, width=1200, height=700)
+sf4 = subplots(1, 1; sync=false, width=700, height=400)
 
 # Angle 1: broadside (-z incidence)
 addtraces!(sf4, scatter(x=theta_signed_deg, y=pec_sc_dB[1], mode="lines",
@@ -549,7 +549,7 @@ relayout!(p4,
     ])
 set_legend!(p4; position=:bottomright)
 fig4_path = joinpath(figdir, "13_sphere_multiangle_rcs.pdf")
-PlotlyKaleido.savefig(p4, fig4_path; width=1200, height=700)
+PlotlyKaleido.savefig(p4, fig4_path; width=700, height=400)
 println("  Saved: $fig4_path")
 
 # ── B12. Plot 3: Convergence history ──────────────────
@@ -565,7 +565,7 @@ iters_m = [t.iter for t in trace_multi]
 J_m = [t.J for t in trace_multi]
 J_m_dB = 10 .* log10.(max.(J_m, 1e-30))
 
-sf3 = subplots(1, 1; sync=false, width=1200, height=700)
+sf3 = subplots(1, 1; sync=false, width=700, height=400)
 addtraces!(sf3, scatter(x=iters_s, y=J_s_dB, mode="lines+markers",
            name="Single-angle", line=attr(color="#2ca02c", width=2),
            marker=attr(size=8)); row=1, col=1)
@@ -583,7 +583,7 @@ relayout!(p3,
     margin=attr(l=80, r=30, t=20, b=70))
 set_legend!(p3; position=:topright)
 fig3_path = joinpath(figdir, "13_sphere_convergence.pdf")
-PlotlyKaleido.savefig(p3, fig3_path; width=1200, height=700)
+PlotlyKaleido.savefig(p3, fig3_path; width=700, height=400)
 println("  Saved: $fig3_path")
 
 # ── B13. Plot 5: Mesh + patch partition (3D) ─────────────
