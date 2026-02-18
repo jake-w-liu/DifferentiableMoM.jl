@@ -483,7 +483,9 @@ Build the preconditioner directly from mesh, basis, and wavenumber — without r
 | PEC, N=736 | 0.5 lambda | 28--45 | ~5.5x |
 | PEC, N=736, unpreconditioned | -- | ~194 | (baseline) |
 
-**Key insight:** The iteration count with NF preconditioning is approximately independent of N for impedance-loaded problems. This means GMRES+NF scales as O(N^2) per solve (matrix-vector products), vs O(N^3) for direct LU.
+**Key insight:** In tested impedance-loaded cases, NF preconditioning keeps
+iteration growth weak as N increases. This keeps GMRES+NF close to O(N^2) per
+solve for dense-matvec workflows, versus O(N^3) for direct LU.
 
 ---
 

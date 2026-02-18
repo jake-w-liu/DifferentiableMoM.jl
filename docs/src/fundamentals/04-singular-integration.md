@@ -569,7 +569,7 @@ Implementing singular integration correctly requires careful validation. This se
 
 ### 7.1 Energy Conservation Test
 
-The most telling test for singular integration is **energy conservation** for a lossless PEC scatterer. The script `examples/ex_convergence.jl` performs this test by:
+The most telling test for singular integration is **energy conservation** for a lossless PEC scatterer. The script `examples/01_pec_plate_basics.jl` performs this test by:
 
 1. Meshing a simple scatterer (e.g., a plate or sphere) with increasing refinement.
 2. Solving the EFIE for a plane‑wave excitation.
@@ -579,7 +579,7 @@ The most telling test for singular integration is **energy conservation** for a 
 **Run the test**:
 ```bash
 cd /path/to/DifferentiableMoM.jl
-julia --project=. examples/ex_convergence.jl
+julia --project=. examples/01_pec_plate_basics.jl
 ```
 
 **Expected output**: The script prints a table showing mesh size, number of unknowns, and the energy ratio. A correct implementation yields ratios between 0.999 and 1.001 across all refinements. Deviations larger than 0.01 indicate problems with singular integration.
@@ -840,7 +840,7 @@ The following exercises reinforce the key concepts of singular integration, rang
 
 12. **Validating `analytical_integral_1overR`**: Create a test that computes $S(\mathbf{P})$ for a given triangle and observation point using both `analytical_integral_1overR` and high‑order Gaussian quadrature (e.g., `tri_quad_rule(7)`). Since the integrand $1/R$ is singular when $\mathbf{P}$ lies on the triangle, place $\mathbf{P}$ slightly above the triangle (e.g., offset by $10^{-6}$ in the normal direction) to make the integral regular. Compare the results for several triangle shapes and point locations.
 
-13. **Energy conservation test**: Modify `examples/ex_convergence.jl` to also compute the energy ratio $P_{\mathrm{rad}}/P_{\mathrm{in}}$ when singular integration is **disabled** (modify `self_cell_contribution` to use standard quadrature for the singular part). Run the test for a simple plate mesh and compare the energy ratios with and without singular treatment.
+13. **Energy conservation test**: Modify `examples/01_pec_plate_basics.jl` to also compute the energy ratio $P_{\mathrm{rad}}/P_{\mathrm{in}}$ when singular integration is **disabled** (modify `self_cell_contribution` to use standard quadrature for the singular part). Run the test for a simple plate mesh and compare the energy ratios with and without singular treatment.
 
 14. **Gradient consistency**: Write a script that uses automatic differentiation (Zygote.jl or ForwardDiff.jl) to compute the derivative $\partial Z_{mm}/\partial k$ for a self‑interaction term. Compare with a finite‑difference approximation using central differences. Verify that the relative error is below $10^{-8}$ for a range of $k$ values.
 

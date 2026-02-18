@@ -697,7 +697,7 @@ end
 
 1. **PEC as a limiting case**: Show that the impedance boundary condition $\mathbf{E}_t^{\mathrm{tot}} = Z_s\mathbf{J}$ reduces to the PEC condition $\mathbf{E}_t^{\mathrm{tot}} = \mathbf{0}$ when $Z_s \to 0$, provided the current remains finite. What happens if $Z_s \to \infty$?
 
-2. **Energy interpretation**: For a resistive sheet with $Z_s = R_s > 0$, the power absorbed per unit area is $\frac{1}{2}R_s|\mathbf{J}|^2$ (time‑average). Starting from the Poynting vector, show that this absorption appears as a negative imaginary part in the impedance matrix eigenvalue spectrum.
+2. **Energy interpretation**: For a resistive sheet with $Z_s = R_s > 0$, the power absorbed per unit area is $\frac{1}{2}R_s|\mathbf{J}|^2$ (time‑average). Starting from the Poynting vector, show how this absorption corresponds to a dissipative (positive-real) contribution in the system operator under the chosen sign convention.
 
 ## 10. Summary and Key Insights
 

@@ -410,8 +410,8 @@ v_pat = assemble_excitation(mesh, rwg, pat; quad_order=3)
 ### Pattern Feed from External CSV
 ```julia
 # See example scripts for full workflow:
-#   julia --project=. examples/ex_radiationpatterns_adapter.jl
-#   julia --project=. examples/ex_horn_pattern_import_demo.jl
+#   julia --project=. examples/07_pattern_feed.jl
+#   julia --project=. examples/07_pattern_feed.jl
 ```
 
 ### Combined Excitation
@@ -436,8 +436,8 @@ All excitations are compatible with the adjoint gradient computation. The excita
 |------|----------|
 | `src/assembly/Excitation.jl` | All excitation types and assembly methods |
 | `src/basis/Quadrature.jl` | Quadrature rules used for integration |
-| `examples/ex_radiationpatterns_adapter.jl` | Pattern import from CSV via RadiationPatterns.jl |
-| `examples/ex_horn_pattern_import_demo.jl` | End-to-end horn pattern feed demo |
+| `examples/07_pattern_feed.jl` | Pattern import from CSV via RadiationPatterns.jl |
+| `examples/07_pattern_feed.jl` | End-to-end horn pattern feed demo |
 
 ---
 

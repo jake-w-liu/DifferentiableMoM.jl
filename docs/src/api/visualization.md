@@ -155,7 +155,7 @@ The `camera` parameter is `(azimuth, elevation)` in degrees:
 | `src/postprocessing/Visualization.jl` | `plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview` |
 | `src/geometry/Mesh.jl` | `mesh_wireframe_segments` (extracts edge segments from `TriMesh`) |
 
-**Example scripts:** `examples/ex_visualize_simulation_mesh.jl`, `examples/ex_obj_rcs_pipeline.jl`
+**Example scripts:** `examples/06_aircraft_rcs.jl`, `examples/12_plate_rcs_stl_roundtrip.jl`
 
 ---
 

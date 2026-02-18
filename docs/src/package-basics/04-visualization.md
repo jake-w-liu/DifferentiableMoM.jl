@@ -247,8 +247,8 @@ Pkg.add("PlotlyKaleido")
 - Plot implementations: `src/postprocessing/Visualization.jl`
 - Wireframe segment generation: `src/geometry/Mesh.jl`
 - End-to-end examples:
-  - `examples/ex_visualize_simulation_mesh.jl`
   - `examples/06_aircraft_rcs.jl`
+  - `examples/12_plate_rcs_stl_roundtrip.jl`
 
 ---
 
@@ -280,4 +280,4 @@ Before relying on visualization for mesh validation, ensure you can:
 - **PlotlySupply / PlotlyKaleido:** The plotting backend used by the package for 3D visualization and file export (PNG/PDF/SVG).
 - **Mesh processing for EM:** Shepard, *Mesh Generation and Quality Criteria for Computational Electromagnetics* (2002).
 - **Visual debugging in scientific computing:** Johansson & Forssén, *Visualization as a Tool for Debugging Numerical Software* (2016).
-- **Package examples:** `examples/ex_visualize_simulation_mesh.jl` and `examples/06_aircraft_rcs.jl` demonstrate end‑to‑end workflows.
+- **Package examples:** `examples/06_aircraft_rcs.jl` and `examples/12_plate_rcs_stl_roundtrip.jl` demonstrate end‑to‑end workflows.

@@ -20,10 +20,10 @@ After this tutorial, you should be able to:
 
 1. **Prepare imported meshes** using `read_obj_mesh`, `repair_mesh_for_simulation`, and `coarsen_mesh_to_target_rwg`.
 2. **Estimate memory requirements** with `estimate_dense_matrix_gib(N)` and choose a feasible target RWG count.
-3. **Run the automated airplane RCS pipeline** with custom frequency, scaling, and coarsening parameters.
-4. **Interpret the output CSVs and plots** to extract monostatic RCS and bistatic pattern trends.
+3. **Run the automated airplane RCS pipeline** and adapt frequency/coarsening settings by editing script parameters.
+4. **Interpret reported RCS diagnostics** (bistatic statistics and monostatic backscatter).
 5. **Trade off accuracy vs speed** by adjusting the target RWG count and understanding coarsening artifacts.
-6. **Generate mesh preview images** that compare original and coarsened geometry.
+6. **Generate mesh preview images** in a custom post-processing step when needed.
 
 ---
 
@@ -32,12 +32,11 @@ After this tutorial, you should be able to:
 The airplane RCS demo follows a defensive pipeline designed to handle real‑world CAD imperfections:
 
 ```
-OBJ import → scale to meters → repair defects → coarsen to target RWG →
-EFIE assembly → forward solve → far‑field → RCS cut + monostatic sample →
-CSV outputs + mesh preview + plotting script
+OBJ import → repair defects → optional coarsening → EFIE assembly →
+forward solve → far‑field → bistatic + monostatic RCS diagnostics
 ```
 
-Each step is logged, and intermediate meshes are saved as OBJ files for inspection.
+Each step is logged for auditability.
 
 ---
 
@@ -45,98 +44,67 @@ Each step is logged, and intermediate meshes are saved as OBJ files for inspecti
 
 ### 1) Obtain an Airplane OBJ File
 
-The example expects an OBJ file named `Airplane.obj` in the parent directory. You can use any closed‑surface triangulated mesh (e.g., from Blender, CAD export, or online repositories). For a quick test, you can create a simple placeholder sphere OBJ using the built‑in icosphere generator (see Tutorial 4).
+The bundled script loads `examples/demo_aircraft.obj` by default. For a quick
+run, no extra file setup is needed.
+If you want to use your own OBJ, copy the script and replace `obj_path`
+with your mesh path.
 
 ### 2) Run the Pipeline with Default Parameters
 
 From the project root:
 
 ```bash
-julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl
 ```
 
-**Arguments:**
-
-| Position | Default | Meaning |
-|----------|---------|---------|
-| 1 | `../Airplane.obj` | Path to input OBJ file |
-| 2 | `3.0` | Frequency in GHz |
-| 3 | `0.001` | Scaling factor to convert OBJ units to meters (multiplies vertex coordinates) |
-| 4 | `300` | Target number of RWG basis functions after coarsening |
-
-**Outputs** are written to `data/` and `figs/` directories (created automatically).
+This example script currently takes no CLI arguments. It runs a fixed demo
+workflow (repair + optional coarsening + solve + RCS diagnostics) and prints
+results to the console.
 
 ### 3) Understand the Console Output
 
-The script prints a detailed log:
+The script prints a log like:
 
 ```
-────────────────────────────────────
-Airplane PEC RCS Demo
-────────────────────────────────────
-Input OBJ   : ../Airplane.obj
-Frequency   : 3.0 GHz
-Scale to m  : 0.001
-Target RWG  : 300
+============================================================
+Example 06: Aircraft RCS Pipeline
+============================================================
 
-── Imported mesh ──
-  Vertices: 12345 -> 12000 (scaled/repaired)
-  Triangles: 24684 -> 24000
-  RWG (before coarsen): 36000
-  Dense matrix size estimate: 9.7 GiB
-  Repaired winding flips: 12
+Loading: .../examples/demo_aircraft.obj
+  Raw mesh: ... vertices, ... triangles
 
-── Coarsening mesh for dense solve feasibility ──
-  Coarsened vertices : 800
-  Coarsened triangles: 1600
-  RWG after coarsen  : 280
-  Dense matrix estimate: 0.6 GiB
-  Coarsening iterations: 4, target gap: 20
+Repairing mesh...
+  Removed invalid: ...
+  Removed degenerate: ...
+  Removed non-manifold: ...
 
 ── Solving PEC scattering ──
-  λ0 = 0.09993 m
-  Unknowns = 280
-  Assembly time: 2.34 s
-  Solve time: 0.12 s
-  Relative residual: 3.2e-14
-  Far-field time: 1.56 s
+  Unknowns = ...
+  Assembly: ... s
+  Solve: ... s, residual = ...
 
-── Outputs ──
-  Repaired mesh: data/airplane_repaired.obj
-  Coarsened mesh: data/airplane_coarse.obj
-  Mesh preview PNG: figs/airplane_mesh_preview.png
-  Mesh preview PDF: figs/airplane_mesh_preview.pdf
-  Bistatic φ≈0° cut: data/airplane_bistatic_rcs_phi0.csv
-  Monostatic backscatter: data/airplane_monostatic_rcs.csv
-  Run summary: data/airplane_rcs_summary.csv
-  Monostatic σ = 0.042 m² (‑13.8 dBsm)
+── Bistatic RCS statistics ──
+  Min: ... dBsm
+  Max: ... dBsm
+  Backscatter (nose-on): ... dBsm
+  P_rad/P_in = ...
 ```
 
 **Key metrics:**
 
-- **Dense matrix estimate**: If > available RAM, coarsening is essential.
-- **Coarsening gap**: Difference between target and achieved RWG count (small is good).
+- **Unknown count**: Reported after RWG build; controls dense-memory feasibility.
 - **Relative residual**: Should be < 1e‑10 for a well‑conditioned solve.
 - **Monostatic RCS**: Reported in both m² and dBsm (dB relative to 1 m²).
 
-### 4) Inspect Generated Meshes
+### 4) Inspect Repaired/Coarsened Geometry
 
-Open the saved OBJ files in a mesh viewer (e.g., MeshLab, Blender) to verify repair and coarsening quality. The preview PNG shows side‑by‑side wireframes.
+Use `mesh_repaired` and `mesh_coarse` in a custom script if you want to export
+OBJ files or save side-by-side preview figures with `save_mesh_preview`.
 
-### 5) Plot RCS Results
+### 5) Post-Process RCS
 
-A separate plotting script reads the CSV files and creates a two‑panel figure:
-
-```bash
-julia --project=. examples/ex_obj_rcs_pipeline.jl
-```
-
-This produces `figs/airplane_rcs_heuristic.{png,pdf}` with:
-
-- **Top panel**: Bistatic RCS cut (φ ≈ 0°) in dB scale, with monostatic sample highlighted.
-- **Bottom panel**: Same cut in linear scale.
-
-The plot is labeled as “heuristic” because coarsening and limited angular resolution affect accuracy; nevertheless, it reveals scattering trends (specular lobes, nulls) characteristic of the platform.
+The demo computes `σ` and `σ_dB` in memory. To create publication plots or CSV
+exports, add a short post-processing block that writes these arrays.
 
 ---
 
@@ -188,17 +156,12 @@ Standard MoM workflow with default quadrature order 3. The forward solve uses di
 
 A spherical grid with 121 θ points (1.5° resolution) and 36 φ points (10° resolution) is used for performance. The bistatic RCS is computed for all directions; a φ ≈ 0° cut is extracted for plotting. Monostatic RCS is sampled at the backscatter direction (θ = 180°, φ = 0°).
 
-### CSV Outputs
+### Optional Exports
 
-Three CSV files are created:
-
-1. `airplane_bistatic_rcs_phi0.csv` – θ, σ(m²), σ(dBsm) for the φ ≈ 0° cut.
-2. `airplane_monostatic_rcs.csv` – backscatter σ with angular error (difference between sampled direction and exact backscatter).
-3. `airplane_rcs_summary.csv` – run parameters, timings, and key metrics for archival.
-
-### Mesh Preview
-
-`save_mesh_preview` generates a side‑by‑side wireframe image comparing repaired and coarsened meshes, with camera angles chosen to show overall shape.
+The current script reports results to stdout. If you need persistent artifacts
+(CSV/OBJ/preview images), add explicit write steps with:
+`write_obj_mesh`, `DelimitedFiles.writedlm` (or CSV.jl), and
+`save_mesh_preview`.
 
 ---
 
@@ -248,15 +211,15 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 - Reduce `area_tol_rel` to allow more aggressive collapses.
 - Manually simplify mesh in external tool (e.g., MeshLab’s quadratic edge collapse).
 
-### Warning: “Mesh preview generation failed”
+### Warning: “Mesh preview generation failed” (custom scripts)
 
-**Cause:** Visualization backend (GLMakie) not installed or OpenGL issues.
+**Cause:** Plotly export backend not available.
 
 **Solutions:**
 
-- Ignore – preview is optional.
-- Install GLMakie: `] add GLMakie` and rerun.
-- Use `plot_mesh_wireframe` separately to generate plots.
+- Ignore if preview is optional.
+- Install `PlotlySupply` and `PlotlyKaleido`.
+- Generate only numerical diagnostics when running headless.
 
 ### Poor Residual (> 1e‑10)
 
@@ -288,8 +251,8 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 | **RWG building** | `build_rwg` | `src/basis/RWG.jl` | 50–80 |
 | **Memory estimate** | `estimate_dense_matrix_gib` | `src/geometry/Mesh.jl` | 200–220 |
 | **Mesh preview** | `save_mesh_preview` | `src/postprocessing/Visualization.jl` | 150–200 |
-| **Complete pipeline (repair + solve + plot)** | `ex_obj_rcs_pipeline.jl` | `examples/` | full script (`full`, `repair`, `plot` subcommands) |
-| **Plotting-only mode** | `ex_obj_rcs_pipeline.jl plot ...` | `examples/` | same script, plot subcommand |
+| **Complete pipeline (repair + solve + diagnostics)** | `06_aircraft_rcs.jl` | `examples/` | full script |
+| **Plotting helpers** | `save_mesh_preview`, `plot_mesh_wireframe` | `src/postprocessing/Visualization.jl` | use in custom scripts |
 
 ---
 
@@ -299,13 +262,13 @@ The reported monostatic value is a **single sample** on the angular grid. The `a
 
 1. **Run the pipeline** with a simple sphere OBJ (generate with `write_obj_mesh`). Compare monostatic RCS with the Mie solution (Tutorial 4). How does coarsening affect accuracy?
 2. **Vary target RWG** (200, 400, 600) and plot monostatic RCS vs unknown count. Is there convergence?
-3. **Inspect coarsening artifacts**: Load the generated `<tag>_coarse.obj` (for the default run: `data/demo_aircraft_coarse.obj`) in a mesh viewer and identify regions where triangle density is disproportionately reduced.
+3. **Inspect coarsening artifacts**: Export `mesh` after coarsening with `write_obj_mesh`, load it in a mesh viewer, and identify regions where triangle density is disproportionately reduced.
 
 ### Practical (90 minutes)
 
 1. **Import a real CAD model** (e.g., vehicle, drone). Adjust `scale_to_m` to achieve plausible physical size (e.g., 5 m wingspan). Run the pipeline and discuss plausible vs unphysical RCS features.
 2. **Implement adaptive coarsening**: Modify the script to coarsen until memory estimate ≤ 2 GiB (instead of fixed RWG target). Use `estimate_dense_matrix_gib` in the loop.
-3. **Add incidence‑angle sweep**: Modify `ex_obj_rcs_pipeline.jl` (`run_full`) to compute monostatic RCS for 5 incidence directions (θ = 0°, 45°, 90°, 135°, 180°). Plot RCS vs incidence angle.
+3. **Add incidence‑angle sweep**: Modify `examples/06_aircraft_rcs.jl` to compute monostatic RCS for 5 incidence directions (θ = 0°, 45°, 90°, 135°, 180°). Plot RCS vs incidence angle.
 
 ### Advanced (2 hours)
 

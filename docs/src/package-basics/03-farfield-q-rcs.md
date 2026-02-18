@@ -501,21 +501,23 @@ Output CSV files are saved to `data/` for further analysis.
 
 ### 3.6 Airplane RCS Demonstration
 
-The script `examples/06_aircraft_rcs.jl` demonstrates RCS computation for a complex CAD geometry (an airplane model). It includes automatic mesh repair, coarsening to a target RWG count, and far‑field analysis.
+The script `examples/06_aircraft_rcs.jl` demonstrates RCS computation for a complex CAD geometry (an airplane model). It includes automatic mesh repair, optional coarsening, and far‑field analysis.
 
 **Key features:**
 - **Mesh repair:** Automatically fixes orientation, removes degenerate triangles, and ensures manifold edges.
-- **Coarsening:** Reduces mesh density to a user‑specified target RWG count while preserving shape.
+- **Coarsening:** Reduces mesh density to a practical RWG count while preserving shape.
 - **Far‑field and RCS:** Computes bistatic and monostatic RCS on a spherical grid.
-- **Visualization:** Generates wireframe previews of the original and coarsened meshes.
+- **Visualization hooks:** Can be extended with `save_mesh_preview` in custom scripts.
 
 **Typical usage:**
 ```bash
-julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl
 ```
-Arguments: OBJ path, frequency (GHz), scale factor (to meters), target RWG count.
+This demo script currently takes no CLI arguments; edit the script variables if
+you need custom geometry or frequency.
 
-**Outputs:** CSV files with RCS cuts, backscatter value, and a summary table; OBJ files of repaired/coarsened meshes; PNG/PDF previews.
+**Outputs:** The current script prints solver and RCS diagnostics to stdout.
+You can add CSV/OBJ/plot exports in a short post-processing block.
 
 This example illustrates the end‑to‑end pipeline for realistic platform scattering analysis.
 

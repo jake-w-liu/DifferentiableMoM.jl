@@ -57,29 +57,22 @@ where $\Delta\text{dB}_i = 10\log_{10}(\sigma_{\text{MoM},i}) - 10\log_{10}(\sig
 ### 2.1 Running the Benchmark
 
 ```bash
-# Basic run with fallback icosphere mesh
 julia --project=. examples/02_pec_sphere_mie.jl
-
-# With custom OBJ sphere mesh
-julia --project=. examples/02_pec_sphere_mie.jl path/to/sphere.obj
-
-# With custom mesh and frequency
-julia --project=. examples/02_pec_sphere_mie.jl path/to/sphere.obj 3.0
 ```
 
-### 2.2 Generated Artifacts
+This example script currently runs with built-in parameters (icosphere geometry,
+radius, frequency). For custom sweeps, edit `a`, `freq`, and `subdivisions`
+inside `examples/02_pec_sphere_mie.jl`.
 
-- **`data/sphere_mie_benchmark_phi_cut.csv`**: Detailed angular comparison
-  - `theta_global_deg`, `gamma_deg`: Angular coordinates
-  - `sigma_mom_m2`, `sigma_mie_m2`: RCS in linear units (m²)
-  - `sigma_mom_dBsm`, `sigma_mie_dBsm`: RCS in dB scale
-  - `delta_dB`: Difference in dB
+### 2.2 Reported Outputs
 
-- **`data/sphere_mie_benchmark_summary.csv`**: Aggregate metrics
-  - `mae_db`, `rmse_db`, `max_abs_db`, `backscatter_delta_db`
-  - `radius_est_m`, `radius_std_m`: Estimated sphere radius
+The script prints benchmark metrics to stdout:
+- MAE, RMSE, max-absolute dB error on the selected $\phi$-cut
+- Backscatter mismatch in dB
+- Sample rows of $\gamma$, $\sigma_{\mathrm{MoM}}$, $\sigma_{\mathrm{Mie}}$, and $\Delta$
 
-- **`data/sphere_mie_benchmark_phi_cut.png`**: Visual comparison plot
+If you need CSV/figure artifacts, add a post-processing block that writes
+`γ`, `σ_mom_cut`, `σ_mie`, and `ΔdB`.
 
 ### 2.3 Example Output
 

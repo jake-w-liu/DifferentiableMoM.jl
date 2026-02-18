@@ -293,7 +293,7 @@ Complex‑step requires the objective to be holomorphic. If $J(\theta)$ involves
 | **Forward solve** | `solve_forward(Z, v)` | `src/solver/Solve.jl` | 13–15 |
 | **Patch mass matrices** | `precompute_patch_mass(mesh, rwg, partition)` | `src/assembly/Impedance.jl` | 15–64 |
 
-**Example from the beam‑steering tutorial** (`examples/ex_beam_steer.jl:210‑226`):
+**Example from the beam‑steering tutorial** (`examples/04_beam_steering.jl:210‑226`):
 
 ```julia
 function J_of_theta_reactive(theta_vec)
