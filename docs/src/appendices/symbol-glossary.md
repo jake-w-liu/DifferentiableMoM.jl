@@ -42,7 +42,7 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 | $\mathbf P_t$ | Tangential projection | $\mathbf P_t=\mathbf I-\hat{\mathbf n}\hat{\mathbf n}^T$ | - |
 | $\theta$ | Polar angle | From +z axis, $\theta\in[0,\pi]$ | rad |
 | $\phi$ | Azimuthal angle | In x-y plane, $\phi\in[0,2\pi)$ | rad |
-| $R$ | Distance | $R=|\mathbf r-\mathbf r'|$ | m |
+| $R$ | Distance | $R=\lvert\mathbf r-\mathbf r'\rvert$ | m |
 
 ---
 
@@ -110,7 +110,7 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 
 | Symbol | Meaning | Formula | Units |
 |--------|---------|---------|-------|
-| $\sigma$ | Radar Cross Section | $\sigma=4\pi r^2|\mathbf E^{\mathrm{sca}}|^2/|\mathbf E^{\mathrm{inc}}|^2$ | m² |
+| $\sigma$ | Radar Cross Section | $\sigma=4\pi r^2\lvert\mathbf E^{\mathrm{sca}}\rvert^2/\lvert\mathbf E^{\mathrm{inc}}\rvert^2$ | m² |
 | $\hat{\mathbf r}$ | Observation direction | Unit vector $(\theta,\phi)$ | - |
 | $\Delta\theta,\Delta\phi$ | Angular grid spacing | Discretization steps | rad |
 | $w_q$ | Quadrature weight | $w_q=\sin\theta_q\Delta\theta\Delta\phi$ | sr |
@@ -140,11 +140,11 @@ Quick reference for mathematical symbols used throughout `DifferentiableMoM.jl` 
 | Symbol | Meaning | Description |
 |--------|---------|-------------|
 | $\kappa(\mathbf Z)$ | Condition number | $\|\mathbf Z\|\cdot\|\mathbf Z^{-1}\|$ |
-| $P_{\mathrm{rad}}$ | Radiated power | $P_{\mathrm{rad}}=\frac{1}{2\eta_0}\int |\mathbf E^\infty|^2\,d\Omega$ | W |
+| $P_{\mathrm{rad}}$ | Radiated power | $P_{\mathrm{rad}}=\frac{1}{2\eta_0}\int \lvert\mathbf E^\infty\rvert^2\,d\Omega$ | W |
 | $P_{\mathrm{in}}$ | Input power | $P_{\mathrm{in}}=-\frac{1}{2}\text{Re}\{\mathbf I^\dagger\mathbf v\}$ | W |
 | FD | Finite Difference | Numerical gradient approximation |
 | CS | Complex Step | Exact gradient via complex perturbation |
-| RMSE | Root Mean Square Error | $\sqrt{\frac{1}{N}\sum_i|y_i-\hat{y}_i|^2}$ |
+| RMSE | Root Mean Square Error | $\sqrt{\frac{1}{N}\sum_i\lvert y_i-\hat{y}_i\rvert^2}$ |
 | SLL | Sidelobe Level | Ratio of main lobe to highest sidelobe | dB |
 
 ---

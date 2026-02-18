@@ -258,7 +258,7 @@ The cutoff is specified in meters. It is typically expressed in wavelengths for 
 | `2.0 * lambda0` | Denser | ~8 | 10--15 | Aggressive convergence, smaller problems |
 
 Key properties:
-- Impedance-loaded EFIE: ~10 iterations with 1.0-lambda cutoff, **independent of N** (tested N = 96 to 736).
+- Impedance-loaded EFIE: ~10 iterations with 1.0-lambda cutoff in tested cases, with weak growth over N = 96 to 736.
 - PEC EFIE: 28--45 iterations with 0.5-lambda cutoff (vs ~194 unpreconditioned at N = 736).
 - The preconditioner is built once and reused across all GMRES solves (forward, adjoint, line search in optimization).
 

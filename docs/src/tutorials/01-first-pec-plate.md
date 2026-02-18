@@ -36,7 +36,7 @@ The fastest way to see a working simulation is to execute the packaged convergen
 study. From the repository root:
 
 ```bash
-julia --project=. examples/ex_convergence.jl
+julia --project=. examples/01_pec_plate_basics.jl
 ```
 
 This script performs a mesh‑refinement sweep on a PEC plate, solving at each
@@ -175,7 +175,7 @@ precision).
 ### Complete Script
 
 Combine all steps into a single script (also available as
-`examples/ex_convergence.jl`):
+`examples/01_pec_plate_basics.jl`):
 
 ```julia
 using DifferentiableMoM
@@ -331,7 +331,7 @@ systematic diagnostic order.
 | Linear solve | `src/solver/Solve.jl` | `solve_forward` |
 | Far‑field computation | `src/postprocessing/FarField.jl` | `radiation_vectors`, `compute_farfield` |
 | Energy balance check | `src/postprocessing/Diagnostics.jl` | `energy_ratio` |
-| Example script | `examples/ex_convergence.jl` | Complete convergence study |
+| Example script | `examples/01_pec_plate_basics.jl` | Complete convergence study |
 
 ---
 
@@ -369,7 +369,7 @@ systematic diagnostic order.
 8. **Memory estimation**: Write a function that, given a target maximum memory
    (e.g., 2 GiB), returns the maximum `N` allowed. Test it with the plate mesh
    by increasing `Nx`, `Ny` until the estimate exceeds your limit.
- 9. **Convergence study script**: Extend `examples/ex_convergence.jl` to also
+ 9. **Convergence study script**: Extend `examples/01_pec_plate_basics.jl` to also
     record the far‑field directivity at broadside (θ = 0°). Plot directivity vs.
     mesh refinement and observe convergence.
 
@@ -379,7 +379,7 @@ systematic diagnostic order.
 
 Before moving to the next tutorial, verify you can:
 
-- [ ] Run the packaged convergence study (`examples/ex_convergence.jl`) and interpret its output.
+- [ ] Run the packaged convergence study (`examples/01_pec_plate_basics.jl`) and interpret its output.
 - [ ] Write a minimal script that assembles and solves the EFIE for a PEC plate.
 - [ ] Compute the relative residual and energy ratio, and know acceptable ranges.
 - [ ] Diagnose common failures (memory, conditioning, unit mistakes) using the troubleshooting guide.

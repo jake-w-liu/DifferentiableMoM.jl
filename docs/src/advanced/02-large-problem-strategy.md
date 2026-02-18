@@ -219,12 +219,12 @@ Coarsening reduces geometric detail, which affects:
 The script `examples/06_aircraft_rcs.jl` demonstrates the complete workflow:
 
 ```bash
-julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl
 ```
 
-This loads an OBJ, scales it to meters, repairs, coarsens to ≈300 RWG unknowns,
-and computes monostatic RCS at 3 GHz. The output includes mesh previews,
-CSV data, and a summary table.
+This runs the bundled aircraft demo mesh through repair, optional coarsening,
+and a PEC RCS solve. It prints solve diagnostics and bistatic/monostatic
+statistics to the console.
 
 ---
 
@@ -405,7 +405,8 @@ then use the package's built-in accelerated methods:
 - **GMRES iterative solver**: `solve_gmres` (via Krylov.jl) with left or right
   preconditioning.
 - **Near-field preconditioner**: `build_nearfield_preconditioner(Z, mesh, rwg, cutoff)`
-  provides N-independent iteration counts.
+  substantially reduces iteration counts and often shows weak growth with N in
+  tested ranges.
 - **Automatic method selection**: `solve_scattering` picks dense direct ($N \le 2000$),
   dense GMRES ($N \le 10000$), or ACA GMRES ($N > 10000$) automatically.
 
@@ -428,16 +429,11 @@ next algorithmic step.
 ### For Complex OBJ Platforms
 
 ```bash
-# Step 1: Repair the input mesh (optional, but recommended)
-julia --project=. examples/06_aircraft_rcs.jl repair ../Airplane.obj ../Airplane_repaired.obj
-
-# Step 2: Run RCS with automatic coarsening
-julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl
 ```
 
-The second command scales the OBJ by 0.001 (mm to m), repairs, coarsens to ≈300
-RWG unknowns, solves at 3 GHz, and outputs bistatic/monostatic RCS data plus
-mesh previews.
+This command runs the bundled demo pipeline end-to-end: load OBJ, repair,
+coarsen if needed, solve, and report RCS statistics.
 
 ### For Preconditioning Tuning
 

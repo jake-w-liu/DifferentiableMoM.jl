@@ -209,16 +209,19 @@ The cutoff distance $d_{\mathrm{cut}}$ controls the trade-off between preconditi
 
 The sweet spot is typically $d_{\mathrm{cut}} \approx 1\lambda$, where the preconditioner captures the dominant local interactions while remaining genuinely sparse. The `solve_scattering` high-level API defaults to `nf_cutoff_lambda=1.0`.
 
-### 3.5 Why Iteration Counts Are $N$-Independent
+### 3.5 Why Iteration Growth Is Often Weak
 
-The key property of the near-field preconditioner is that GMRES iteration counts remain **bounded independently of $N$** when the cutoff is held fixed in wavelengths. The physical reason is clear:
+In tested regimes, near-field preconditioning substantially reduces GMRES
+iterations and often yields only weak growth with $N$ when the cutoff is held
+fixed in wavelengths. The physical reason is:
 
 1. The preconditioner $\mathbf{M} = \mathbf{Z}_{\mathrm{nf}}$ captures all interactions within $d_{\mathrm{cut}}$.
 2. The residual matrix $\mathbf{M}^{-1}\mathbf{Z} - \mathbf{I}$ has entries that are only nonzero for basis-function pairs separated by more than $d_{\mathrm{cut}}$.
 3. These far-field entries are small (order $1/(kd_{\mathrm{cut}})$ relative to the diagonal), so the eigenvalues of $\mathbf{M}^{-1}\mathbf{Z}$ cluster tightly around 1.
-4. As $N$ increases (finer mesh, same geometry), the number of local neighbors within $d_{\mathrm{cut}}$ stays constant, and the far-field interaction strengths do not change. The eigenvalue distribution---and hence the iteration count---remains the same.
+4. As $N$ increases (finer mesh, same geometry), the number of local neighbors within $d_{\mathrm{cut}}$ stays nearly constant, while long-range interactions remain weaker after preconditioning.
 
-This is the hallmark of a **physics-based preconditioner**: it exploits the spatial structure of the underlying PDE to achieve mesh-independent convergence.
+This is the hallmark of a **physics-based preconditioner**: it exploits spatial
+structure to mitigate iteration growth.
 
 ### 3.6 Spatial Hashing for Efficient Neighbor Search
 

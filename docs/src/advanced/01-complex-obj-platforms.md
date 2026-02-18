@@ -223,7 +223,7 @@ Plot `backscatter_db` vs. `targets` to identify the “knee” where further ref
 ### 5.2 Example Scripts
 
 - **`examples/06_aircraft_rcs.jl`** – complete workflow for a complex platform: import, repair, coarsening, solve, far‑field and RCS extraction. This script is the reference implementation for this chapter.
-<!-- ex_visualize_simulation_mesh.jl -- no equivalent script exists; use plot_mesh_wireframe / plot_mesh_comparison from src/postprocessing/Visualization.jl directly -->
+- **Visualization helpers** – `plot_mesh_wireframe` and `plot_mesh_comparison` in `src/postprocessing/Visualization.jl`.
 
 ### 5.3 Supporting Utilities
 

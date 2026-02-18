@@ -623,25 +623,24 @@ or environment mismatch.
 
 ### Mesh Repair Sanity Check
 
-If you have a problematic OBJ file, repair it and inspect the changes:
+Run the built-in repair/coarsen workflow and inspect the reported changes:
 
 ```bash
-julia --project=. examples/ex_obj_rcs_pipeline.jl repair input.obj repaired.obj
+julia --project=. examples/06_aircraft_rcs.jl
 ```
 
-The script prints a mesh‑quality report before and after repair, and saves the
-repaired mesh for later use.
+The script prints repair counters and the final mesh size used for solving.
 
 ### Large OBJ Smoke Run
 
 Test the complete workflow (repair, coarsen, solve, RCS) on a complex platform:
 
 ```bash
-julia --project=. examples/ex_obj_rcs_pipeline.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl
 ```
 
-This command scales the OBJ by 0.001 (mm to m), repairs, coarsens to ≈300 RWG
-unknowns, solves at 3 GHz, and outputs bistatic/monostatic RCS data.
+This command runs the bundled aircraft demo end-to-end (repair, coarsening,
+solve, RCS diagnostics).
 
 ### Quick Preflight Check
 
@@ -674,7 +673,7 @@ and `fd_grad` (see Exercise 8).
 To identify performance bottlenecks, run with Julia’s built‑in profiler:
 
 ```bash
-julia --project=. --track-allocation=user examples/ex_obj_rcs_pipeline.jl ...
+julia --project=. --track-allocation=user examples/06_aircraft_rcs.jl
 ```
 
 Or use `@time` inside your script to time assembly, solve, and far‑field steps.

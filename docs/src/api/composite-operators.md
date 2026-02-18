@@ -199,7 +199,8 @@ The impedance perturbation cost is typically negligible: each `M_p` is sparse wi
 | File | Contents |
 |------|----------|
 | `src/assembly/CompositeOperator.jl` | `ImpedanceLoadedOperator`, `ImpedanceLoadedAdjointOperator`, `mul!`, `adjoint` |
-| `src/assembly/Impedance.jl` | `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_full_Z` (dense alternative) |
+| `src/assembly/Impedance.jl` | `precompute_patch_mass`, `assemble_Z_impedance` |
+| `src/solver/Solve.jl` | `assemble_full_Z` (dense alternative) |
 | `src/optimization/MultiAngleRCS.jl` | Primary consumer: `optimize_multiangle_rcs` |
 
 ---

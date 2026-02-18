@@ -90,7 +90,7 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
   - Types: `AbstractExcitation`, `PlaneWaveExcitation`, `PortExcitation`, `DeltaGapExcitation`, `DipoleExcitation`, `LoopExcitation`, `ImportedExcitation`, `PatternFeedExcitation`, `MultiExcitation`
   - Constructors: `make_plane_wave`, `make_delta_gap`, `make_dipole`, `make_loop`, `make_imported_excitation`, `make_pattern_feed`, `make_analytic_dipole_pattern_feed`, `make_multi_excitation`
   - Assembly: `plane_wave_field`, `pattern_feed_field`, `assemble_v_plane_wave`, `assemble_excitation`, `assemble_multiple_excitations`
-  - Example scripts: `examples/ex_radiationpatterns_adapter.jl`, `examples/ex_horn_pattern_import_demo.jl`
+  - Example scripts: `examples/07_pattern_feed.jl`, `examples/07_pattern_feed.jl`
 
 - **Linear solves (direct):** `solve_forward`, `solve_system`
   Solve the MoM system `Z I = v` using LU factorization (default) or GMRES.
@@ -198,5 +198,5 @@ For a first read-through of the API documentation, follow this order:
 
 ## Exercises
 
-- **Basic:** Trace one example script (e.g., `examples/ex_plate_rwg.jl`) and classify every called function into one of the workflow groups above.
+- **Basic:** Trace one example script (e.g., `examples/01_pec_plate_basics.jl`) and classify every called function into one of the workflow groups above.
 - **Challenge:** Replace a manual matrix solve (`Z \ v`) in a script with `prepare_conditioned_system` + `solve_system` while preserving the output.

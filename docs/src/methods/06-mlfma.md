@@ -18,7 +18,7 @@ After this chapter, you should be able to:
 4. Explain aggregation (upward pass), translation (interaction), and disaggregation (downward pass).
 5. Describe the per-$m$ spectral filter implementation and why separated filters fail for $m \neq 0$ modes.
 6. Use `build_mlfma_operator` and `solve_scattering` with MLFMA in practice.
-7. Apply accuracy guidelines: `leaf_lambda >= 1.0` for production (<1% error).
+7. Choose `leaf_lambda` with an accuracy-cost sweep (default in code: `leaf_lambda=0.25`).
 8. Configure reordered-ILU preconditioning for fast convergence.
 
 ---
@@ -167,7 +167,9 @@ This correctly handles all $m$ modes and improves accuracy by 5-12× over separa
 | **1.0** | **5** | **0.15%** | **Acceptable ✓ RECOMMENDED** |
 | 0.75 | 6 | 11% | Unstable ✗ |
 
-**Production Guideline**: **Use `leaf_lambda >= 1.0` for <1% error.**
+In practice, accuracy depends on geometry, frequency, and tolerance settings.
+Treat `leaf_lambda` as a tunable parameter and validate against a trusted
+reference (dense or ACA) on a smaller test case.
 
 ### 6.2 Why 6+ Levels Fail
 
@@ -176,7 +178,9 @@ At 6 levels (`leaf_lambda=0.75`), the truncation order $L$ exceeds $kr_{\min}$ (
 - Spherical Hankel $h_l^{(2)}(kr)$ grows exponentially for $l > kr$ (evanescent region)
 - Translation sum requires exact cancellation of large terms → numerical instability
 
-This is **fundamental physics**, not a bug. Solution: keep $L \leq kr$ at all levels (i.e., `leaf_lambda >= 1.0`).
+This behavior is a numerical-stability issue in deep trees with aggressive
+sampling/truncation choices. A practical fix is to increase leaf size, adjust
+precision/truncation settings, and validate matvec error against a reference.
 
 ### 6.3 Octree Completeness
 
@@ -230,7 +234,7 @@ k = 2π * freq / 299792458.0
 
 # Build MLFMA operator
 A = build_mlfma_operator(mesh, rwg, k;
-                          leaf_lambda=1.0,  # IMPORTANT: >= 1.0 for accuracy
+                          leaf_lambda=0.25,
                           verbose=true)
 
 # Build reordered-ILU preconditioner
@@ -266,7 +270,7 @@ result = solve_scattering(mesh, freq, pw;
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `leaf_lambda` | 0.25 | Leaf box edge in wavelengths (**use ≥1.0 for production**) |
+| `leaf_lambda` | 0.25 | Leaf box edge in wavelengths; tune by accuracy/time sweep for your problem. |
 | `precision` | 3 | Precision parameter $p$ in truncation formula |
 | `quad_order` | 3 | Quadrature order for near-field and radiation patterns |
 | `verbose` | false | Print build progress information |
@@ -320,11 +324,13 @@ Fits comfortably on 24 GB RAM (tested on Mac M3).
 
 ## 12. Common Pitfalls
 
-### 12.1 Using `leaf_lambda < 1.0`
+### 12.1 Using overly small `leaf_lambda`
 
-**Problem**: Accuracy degrades rapidly at 6+ octree levels due to translation operator instability.
+**Problem**: Overly small `leaf_lambda` can create deep trees and unstable/slow
+translations for some geometries.
 
-**Solution**: Always use `leaf_lambda >= 1.0` for production. Test with `leaf_lambda=1.5` or `2.0` for safety.
+**Solution**: Sweep `leaf_lambda` (for example `0.25, 0.5, 1.0`) and check
+matvec or RCS error against a trusted baseline before production runs.
 
 ### 12.2 Natural-Order ILU
 
@@ -382,7 +388,7 @@ Implement a frequency sweep (0.1--1.0 GHz) with MLFMA. At each frequency, rebuil
 - [ ] Build an octree and inspect neighbor/interaction lists at each level.
 - [ ] Describe aggregation, translation, and disaggregation in the multi-level algorithm.
 - [ ] Understand per-$m$ spectral filters and why separated filters fail.
-- [ ] Apply the production guideline: `leaf_lambda >= 1.0` for <1% accuracy.
+- [ ] Calibrate `leaf_lambda` for your geometry with a documented error/cost sweep.
 - [ ] Use `build_mlfma_operator` and reordered-ILU preconditioning.
 - [ ] Integrate MLFMA into `solve_scattering` with auto-selection or forced method.
 - [ ] Recognize translation operator instability at deep octree levels.
@@ -394,7 +400,6 @@ Implement a frequency sweep (0.1--1.0 GHz) with MLFMA. At each frequency, rebuil
 - **Chew, W. C. et al.** *Fast and Efficient Algorithms in Computational Electromagnetics* (2001) -- Ch. 5-7: MLFMA theory, aggregation/disaggregation, and translation operators.
 - **Ergül, Ö. & Gürel, L.** *The Multilevel Fast Multipole Algorithm (MLFMA) for Solving Large-Scale Computational Electromagnetics Problems* (2014) -- Comprehensive MLFMA reference with implementation details.
 - **DifferentiableMoM.jl source**: `src/fast/MLFMA.jl` for per-$m$ filter implementation; `src/fast/Octree.jl` for tree construction algorithms.
-- **Memory documentation**: `MEMORY.md` in the project root for latest accuracy benchmarks and troubleshooting notes.
 
 ---
 

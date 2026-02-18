@@ -90,7 +90,7 @@ This is the same `Q`-matrix objective form used by adjoint optimization.
 ```bash
 julia --project=. examples/04_beam_steering.jl
 julia --project=. examples/02_pec_sphere_mie.jl
-julia --project=. examples/06_aircraft_rcs.jl ../Airplane.obj 3.0 0.001 300
+julia --project=. examples/06_aircraft_rcs.jl
 ```
 
 ---

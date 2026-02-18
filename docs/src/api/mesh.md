@@ -649,8 +649,8 @@ rep = repair_mesh_for_simulation(mesh)
 |------|----------|
 | `src/geometry/Mesh.jl` | Mesh creation, geometry, quality, repair, coarsening, refinement |
 | `src/geometry/MeshIO.jl` | Multi-format I/O: STL, Gmsh MSH, unified dispatcher, CAD conversion |
-| `examples/ex_obj_rcs_pipeline.jl` | End-to-end OBJ import -> repair -> coarsen -> RCS workflow |
-| `examples/ex_visualize_simulation_mesh.jl` | Mesh visualization after repair and coarsening |
+| `examples/06_aircraft_rcs.jl` | End-to-end OBJ import -> repair -> coarsen -> RCS workflow |
+| `examples/12_plate_rcs_stl_roundtrip.jl` | Mesh import/export and visualization checks |
 | `examples/convert_aircraft_mat_to_obj.py` | MAT-to-OBJ conversion helper (SciPy) |
 
 ---

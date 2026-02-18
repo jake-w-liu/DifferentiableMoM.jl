@@ -773,10 +773,10 @@ end
 
 Several example scripts demonstrate excitation usage:
 
-- **`examples/ex_dipole_loop_farfield_pattern.jl`**: Compares far‑field patterns of electric dipoles and loops, illustrating polarization differences.
-- **`examples/ex_pattern_feed_dipole_validation.jl`**: Validates pattern‑feed generation against analytic dipole patterns.
-- **`examples/ex_horn_pattern_import_demo.jl`**: Shows how to import measured/simulated horn patterns and use them as incident fields.
-- **`examples/ex_radiationpatterns_adapter.jl`**: Utilities for converting radiation‑pattern data into the format required by `PatternFeedExcitation`.
+- **`examples/07_pattern_feed.jl`**: Compares far‑field patterns of electric dipoles and loops, illustrating polarization differences.
+- **`examples/07_pattern_feed.jl`**: Validates pattern‑feed generation against analytic dipole patterns.
+- **`examples/07_pattern_feed.jl`**: Shows how to import measured/simulated horn patterns and use them as incident fields.
+- **`examples/07_pattern_feed.jl`**: Utilities for converting radiation‑pattern data into the format required by `PatternFeedExcitation`.
 
 These examples serve as both tutorials and templates for your own excitation workflows.
 
