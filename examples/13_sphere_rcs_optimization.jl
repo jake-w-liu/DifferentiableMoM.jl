@@ -10,9 +10,7 @@
 #
 # Run: julia --project=. examples/13_sphere_rcs_optimization.jl
 
-push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
-include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
-using .DifferentiableMoM
+using DifferentiableMoM
 using LinearAlgebra
 using Statistics
 using PlotlySupply

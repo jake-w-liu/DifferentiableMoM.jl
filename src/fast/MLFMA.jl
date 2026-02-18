@@ -48,8 +48,8 @@ end
     truncation_order(box_edge, k; precision=3)
 
 Compute the MLFMA truncation order L for a box with given edge length.
-Uses the empirical formula: L = floor(k*d + 2.16 * p^(2/3) * (k*d)^(1/3))
-where d = √3 * edge (box diagonal).
+Uses the empirical formula: L = floor(k*d + 2.16 * p^(2/3) * (k*e)^(1/3))
+where d = √3 * e (box diagonal), e = box edge length.
 """
 function truncation_order(box_edge::Float64, k::Float64; precision::Int=3)
     d = sqrt(3.0) * box_edge    # box diagonal
