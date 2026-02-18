@@ -87,11 +87,13 @@ Returns the piecewise-constant surface divergence of basis function `n` on trian
 - On T+ (`t == rwg.tplus[n]`): `div f_n = +l_n / A+`
 - On T- (`t == rwg.tminus[n]`): `div f_n = -l_n / A-`
 
-**Role in EFIE:** The divergence appears in the scalar (charge) part of the EFIE kernel:
+**Role in EFIE:** The divergence appears in the scalar (charge) part of the EFIE kernel. The full EFIE entry is:
 
 ```
-Z_mn^scalar = (1/ik) * integral{ (div f_m)(div f_n) G(r,r') dS dS' }
+Z_mn = -j*omega*mu0 * [ integral{ f_m . f_n G dS dS' } - (1/k^2) * integral{ (div f_m)(div f_n) G dS dS' } ]
 ```
+
+where `G = exp(-jkR)/(4*pi*R)` and `omega*mu0 = k*eta0`.
 
 The opposite signs on T+ and T- ensure charge conservation: the net charge produced by basis `n` sums to zero (current flows in on one triangle, out on the other).
 

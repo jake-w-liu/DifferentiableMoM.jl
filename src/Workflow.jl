@@ -1,8 +1,8 @@
 # Workflow.jl — High-level scattering solve with automatic method selection
 #
 # Provides `solve_scattering` which validates mesh resolution, selects the
-# appropriate solver method (dense direct / dense GMRES / ACA GMRES) based
-# on problem size, and handles preconditioner setup automatically.
+# appropriate solver method (dense direct / dense GMRES / ACA GMRES / MLFMA)
+# based on problem size, and handles preconditioner setup automatically.
 
 export solve_scattering
 
@@ -16,7 +16,8 @@ based on problem size:
 
 - **N <= dense_direct_limit** (default 2000): Dense EFIE assembly + LU direct solve
 - **dense_direct_limit < N <= dense_gmres_limit** (default 10000): Dense + NF-preconditioned GMRES
-- **N > dense_gmres_limit**: ACA H-matrix + NF-preconditioned GMRES
+- **dense_gmres_limit < N <= mlfma_threshold** (default 50000): ACA H-matrix + NF-preconditioned GMRES
+- **N > mlfma_threshold**: MLFMA O(N log N) + NF-preconditioned GMRES
 
 Mesh resolution is validated against the frequency. Under-resolved meshes
 produce a warning (or error if `error_on_underresolved=true`).

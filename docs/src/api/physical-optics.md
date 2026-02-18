@@ -41,7 +41,7 @@ end
 ```julia
 result = solve_po(mesh, freq_hz, excitation)
 # Bistatic RCS at each observation angle
-rcs_vals = bistatic_rcs(result.E_ff, result.grid, freq_hz)
+rcs_vals = bistatic_rcs(result.E_ff)
 ```
 
 ---
@@ -79,7 +79,9 @@ The analytical phase integral handles all special cases (small phase differences
 ```julia
 mesh = read_obj_mesh("sphere.obj")
 freq_hz = 3e9
-excitation = make_plane_wave(freq_hz; theta_inc=0.0, phi_inc=0.0)
+k = 2π * freq_hz / 299792458.0
+k_vec = Vec3(0.0, 0.0, -k)                       # +z-propagating wave
+excitation = make_plane_wave(k_vec, 1.0, Vec3(1.0, 0.0, 0.0))  # x-polarized
 grid = make_sph_grid(90, 36)
 
 result = solve_po(mesh, freq_hz, excitation; grid=grid)

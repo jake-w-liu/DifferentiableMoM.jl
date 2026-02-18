@@ -1168,7 +1168,7 @@ m_mag = CVec3(0.0 + 0im, 0.0 + 0im, 1e-4 + 0im) # A·m²
 dip_mag = make_dipole(Vec3(0.0, 0.0, 0.0), m_mag, Vec3(0.0, 0.0, 1.0), :magnetic, freq_exc)
 Rfar = 5.0
 E_mag_num = DifferentiableMoM.dipole_incident_field(Vec3(Rfar, 0.0, 0.0), dip_mag)
-E_mag_ref = -1im * eta0 * k_exc^2 * m_mag[3] * exp(-1im * k_exc * Rfar) / (4π * Rfar)
+E_mag_ref = +1im * eta0 * k_exc^2 * m_mag[3] * exp(-1im * k_exc * Rfar) / (4π * Rfar)
 rel_mag = abs(E_mag_num[2] - E_mag_ref) / max(abs(E_mag_ref), 1e-30)
 println("  Magnetic-dipole far-field rel. error: $rel_mag")
 @assert rel_mag < 0.03

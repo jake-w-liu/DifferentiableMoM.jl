@@ -82,7 +82,7 @@ Electric or magnetic dipole source. The incident field from the dipole is comput
 
 **Constructor:**
 ```julia
-dip = make_dipole(position, moment, orientation, type, frequency)
+dip = make_dipole(position, moment, orientation, type, frequency=1e9)
 ```
 
 **Placement:** The dipole must not be placed on the mesh surface itself (the field is singular at the source). Place it at least a fraction of a wavelength away from the scatterer.
@@ -102,7 +102,7 @@ Circular current loop source. Models a small magnetic source.
 
 **Constructor:**
 ```julia
-lp = make_loop(center, normal, radius, current, frequency)
+lp = make_loop(center, normal, radius, current, frequency=1e9)
 ```
 
 ---
@@ -123,7 +123,7 @@ A general imported or distributed source model. You provide a function `source(r
 ```julia
 # Recommended
 exc = make_imported_excitation(source_func; kind=:electric_field,
-                               eta_equiv=376.73+0im, min_quad_order=3)
+                               eta_equiv=376.730313668+0im, min_quad_order=3)
 
 # Direct constructor
 exc = ImportedExcitation(source_func; kind=:electric_field, ...)
@@ -327,17 +327,17 @@ where `R = |r - r_0|` and `R_hat = (r - r_0) / R`. This is the full near-field +
 **Magnetic dipole** (moment `m`, position `r_0`):
 
 ```
-E(r) = (eta0 / 4*pi) * (k/R^2 + ik^2/R) * exp(-ikR) * (R_hat x m)
+E(r) = (eta0 / 4*pi) * (k/R^2 + ik^2/R) * exp(-ikR) * (m x R_hat)
 ```
 
-This follows from Balanis's small circular loop result (Ch. 5): `E_phi = -(eta*k^2*m*sin(theta))/(4*pi*r) * (i + 1/(kr)) * exp(-ikr)`, generalized to 3D vector form. It includes both the 1/R^2 induction term and the 1/R radiation (far-field) term. The quasi-static 1/R^3 term for the magnetic dipole is in H, not E.
+This follows from Balanis's small circular loop result (Ch. 5): `E_phi = +(eta*k^2*m*sin(theta))/(4*pi*r) * (i + 1/(kr)) * exp(-ikr)`, generalized to 3D vector form. It includes both the 1/R^2 induction term and the 1/R radiation (far-field) term. The quasi-static 1/R^3 term for the magnetic dipole is in H, not E.
 
 **Loop excitation** maps to a magnetic dipole with moment `m = I * pi * a^2 * n_hat`, where `I` is the loop current, `a` is the loop radius, and `n_hat` is the loop normal.
 
 **Far-field pattern coefficients** (used by `make_analytic_dipole_pattern_feed`):
 
 - Electric: `F(r_hat) = k^2 / (4*pi*eps0) * (r_hat x (p x r_hat))`
-- Magnetic: `F(r_hat) = i * eta0 * k^2 / (4*pi) * (r_hat x m)`
+- Magnetic: `F(r_hat) = i * eta0 * k^2 / (4*pi) * (m x r_hat)`
 
 ### Imported/Distributed source (`ImportedExcitation`)
 The same quadrature integral is used, with the source function evaluated at each quadrature point. For `kind=:electric_field`, `E_inc = source(r)` directly. For `kind=:surface_current_density`, `E_inc = eta_equiv * source(r)`.

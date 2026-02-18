@@ -91,12 +91,13 @@ end
 **Constructor:**
 
 ```julia
-rwg = build_rwg(mesh; precheck=true, allow_boundary=true, require_closed=false)
+rwg = build_rwg(mesh; precheck=true, allow_boundary=true, require_closed=false, area_tol_rel=1e-12)
 ```
 
 - `precheck=true`: Run mesh quality checks before building. Recommended for imported meshes.
 - `allow_boundary=true`: Allow boundary edges (edges with only one triangle). Set to `false` for closed surfaces where every edge must be interior.
 - `require_closed=false`: If `true`, throw an error if any boundary edges exist.
+- `area_tol_rel=1e-12`: Relative tolerance for degenerate triangle detection.
 
 **Example:**
 

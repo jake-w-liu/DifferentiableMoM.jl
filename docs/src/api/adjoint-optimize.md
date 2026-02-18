@@ -52,7 +52,7 @@ where `Z'` is the conjugate transpose of the system matrix. The adjoint variable
 | `Q` | `Matrix{<:Number}` | -- | Objective matrix. |
 | `I` | `Vector{<:Number}` | -- | Current coefficients from the forward solve. |
 | `solver` | `Symbol` | `:direct` | `:direct` for LU factorization, `:gmres` for GMRES. Same choice as the forward solve. |
-| `preconditioner` | `Nothing` or `NearFieldPreconditionerData` | `nothing` | Near-field preconditioner for GMRES. When provided, the **adjoint** preconditioner `Z_nf^{-H}` is automatically applied. |
+| `preconditioner` | `Nothing` or `AbstractPreconditionerData` | `nothing` | Near-field preconditioner for GMRES. When provided, the **adjoint** preconditioner `Z_nf^{-H}` is automatically applied. |
 | `gmres_tol` | `Float64` | `1e-8` | GMRES relative tolerance. |
 | `gmres_maxiter` | `Int` | `200` | Maximum GMRES iterations. |
 

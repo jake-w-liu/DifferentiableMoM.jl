@@ -320,7 +320,7 @@ Solve the MoM system `Z * I = v` for the surface current coefficients `I`. This 
 | `Z` | `Matrix{<:Number}` | -- | System matrix (N x N). Typically from `assemble_full_Z` or `assemble_Z_efie`. |
 | `v` | `Vector{<:Number}` | -- | Excitation vector (length N). From `assemble_excitation` or `assemble_v_plane_wave`. |
 | `solver` | `Symbol` | `:direct` | **`:direct`**: LU factorization (`Z \ v`). Exact, O(N^3). Best for N < ~2000. **`:gmres`**: Iterative GMRES. O(N^2 * n_iter). Best for large N with a good preconditioner. |
-| `preconditioner` | `Nothing` or `NearFieldPreconditionerData` | `nothing` | Near-field preconditioner for GMRES. Ignored when `solver=:direct`. Build with `build_nearfield_preconditioner`. |
+| `preconditioner` | `Nothing` or `AbstractPreconditionerData` | `nothing` | Near-field preconditioner for GMRES. Ignored when `solver=:direct`. Build with `build_nearfield_preconditioner`. |
 | `gmres_tol` | `Float64` | `1e-8` | Relative convergence tolerance for GMRES. Smaller = more accurate but more iterations. `1e-8` is conservative; `1e-6` is often sufficient. |
 | `gmres_maxiter` | `Int` | `200` | Maximum GMRES iterations. With a good preconditioner, convergence typically occurs in 10--50 iterations. Set higher (300--500) for difficult problems or tight tolerances. |
 | `verbose_gmres` | `Bool` | `false` | Print GMRES convergence information (iteration count, residual). |
@@ -349,7 +349,7 @@ General linear solve `Z * x = rhs` with the same solver dispatch as `solve_forwa
 
 These are the low-level GMRES interfaces using Krylov.jl. Most users should use `solve_forward(...; solver=:gmres)` instead, which wraps these.
 
-### `solve_gmres(Z, rhs; preconditioner=nothing, precond_side=:left, tol=1e-8, maxiter=200, verbose=false)`
+### `solve_gmres(Z, rhs; preconditioner=nothing, precond_side=:left, tol=1e-8, maxiter=200, memory=20, verbose=false)`
 
 Solve `Z * x = rhs` using GMRES from Krylov.jl, with optional near-field preconditioning.
 
@@ -363,6 +363,7 @@ Solve `Z * x = rhs` using GMRES from Krylov.jl, with optional near-field precond
 | `precond_side` | `Symbol` | `:left` | `:left` or `:right` preconditioning. Both give the same iteration count for EFIE matrices. Left is the default. |
 | `tol` | `Float64` | `1e-8` | Relative convergence tolerance. |
 | `maxiter` | `Int` | `200` | Maximum GMRES iterations. |
+| `memory` | `Int` | `20` | GMRES restart length (number of Krylov vectors stored). Larger values may improve convergence for difficult problems at the cost of O(N * memory) storage. |
 | `verbose` | `Bool` | `false` | Print convergence info. |
 
 **Returns:** Tuple `(x, stats)` where `x` is the solution and `stats` is the Krylov.jl convergence info. Access iteration count with `stats.niter`.
@@ -373,7 +374,7 @@ Solve `Z * x = rhs` using GMRES from Krylov.jl, with optional near-field precond
 
 Solve the adjoint system `Z' * x = rhs` using GMRES with the adjoint preconditioner `Z_nf^{-H}` (inverse conjugate transpose of the near-field matrix). Used internally by `solve_adjoint` for sensitivity analysis.
 
-**Parameters:** Same as `solve_gmres`.
+**Parameters:** Same as `solve_gmres` except `memory` (GMRES restart length) is not exposed; the Krylov.jl default is used for adjoint solves.
 
 **Returns:** Tuple `(x, stats)`.
 
@@ -390,7 +391,7 @@ Multiple overloads of `build_nearfield_preconditioner` are available, depending 
 ### Overload 1: From a dense matrix
 
 ```julia
-build_nearfield_preconditioner(Z::Matrix, mesh, rwg, cutoff; neighbor_search=:spatial, factorization=:lu)
+build_nearfield_preconditioner(Z::Matrix, mesh, rwg, cutoff; neighbor_search=:spatial, factorization=:lu, ilu_tau=1e-3)
 ```
 
 Build a preconditioner by extracting near-field entries from a pre-assembled dense N x N matrix `Z`.
@@ -404,16 +405,17 @@ Build a preconditioner by extracting near-field entries from a pre-assembled den
 | `rwg` | `RWGData` | -- | RWG basis data. |
 | `cutoff` | `Float64` | -- | Distance cutoff in meters. Typical: `0.5 * lambda` to `2.0 * lambda`. |
 | `neighbor_search` | `Symbol` | `:spatial` | **`:spatial`** (default): O(N) spatial hashing for neighbor finding. **`:bruteforce`**: O(N^2) all-pairs reference mode. Use `:bruteforce` only for testing/validation. |
-| `factorization` | `Symbol` | `:lu` | **`:lu`** (default): Sparse LU factorization. Returns `NearFieldPreconditionerData`. **`:diag`**: Jacobi/diagonal preconditioner (only retains `Z[i,i]`). Returns `DiagonalPreconditionerData`. |
+| `factorization` | `Symbol` | `:lu` | **`:lu`** (default): Sparse LU factorization. Returns `NearFieldPreconditionerData`. **`:ilu`**: Incomplete LU with drop tolerance `ilu_tau`. Returns `ILUPreconditionerData`. **`:diag`**: Jacobi/diagonal preconditioner (only retains `Z[i,i]`). Returns `DiagonalPreconditionerData`. |
+| `ilu_tau` | `Float64` | `1e-3` | Drop tolerance for ILU factorization (only used when `factorization=:ilu`). |
 
-**Returns:** `NearFieldPreconditionerData` (for `:lu`) or `DiagonalPreconditionerData` (for `:diag`).
+**Returns:** `NearFieldPreconditionerData` (for `:lu`), `ILUPreconditionerData` (for `:ilu`), or `DiagonalPreconditionerData` (for `:diag`).
 
 ---
 
 ### Overload 2: From an abstract matrix or operator
 
 ```julia
-build_nearfield_preconditioner(A::AbstractMatrix, mesh, rwg, cutoff; neighbor_search=:spatial, factorization=:lu)
+build_nearfield_preconditioner(A::AbstractMatrix, mesh, rwg, cutoff; neighbor_search=:spatial, factorization=:lu, ilu_tau=1e-3)
 ```
 
 Same as Overload 1, but accepts any `AbstractMatrix{<:Number}` including custom matrix types. Entries are accessed via `A[m, n]`.
@@ -423,7 +425,7 @@ Same as Overload 1, but accepts any `AbstractMatrix{<:Number}` including custom 
 ### Overload 3: From a `MatrixFreeEFIEOperator`
 
 ```julia
-build_nearfield_preconditioner(A::MatrixFreeEFIEOperator, cutoff; neighbor_search=:spatial, factorization=:lu)
+build_nearfield_preconditioner(A::MatrixFreeEFIEOperator, cutoff; neighbor_search=:spatial, factorization=:lu, ilu_tau=1e-3)
 ```
 
 Build the preconditioner directly from a matrix-free EFIE operator without allocating a full dense matrix. The mesh and RWG data are extracted from the operator's internal cache. This is the most memory-efficient path for large problems.

@@ -149,7 +149,7 @@ The algorithm iteratively selects rows and columns to build a rank-k factorizati
 | `cache` | `EFIEApplyCache` | -- | Precomputed EFIE data (Green's function, basis evaluations, etc.). Created internally by `build_aca_operator`. |
 | `row_indices` | `Vector{Int}` | -- | Original (unpermuted) row basis function indices. |
 | `col_indices` | `Vector{Int}` | -- | Original (unpermuted) column basis function indices. |
-| `tol` | `Float64` | `1e-6` | Convergence tolerance. ACA stops when the Frobenius norm of the latest rank-1 update falls below `tol * ||first update||`. |
+| `tol` | `Float64` | `1e-6` | Convergence tolerance. ACA stops when the Frobenius norm of the latest rank-1 update falls below `tol * ||accumulated approximation||_F`. |
 | `max_rank` | `Int` | `50` | Maximum rank. ACA stops after `max_rank` iterations even if tolerance is not met. |
 
 **Returns:** Tuple `(U, V)` where:
