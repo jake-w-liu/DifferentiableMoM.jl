@@ -7,7 +7,7 @@
 # This enables GMRES-based optimization with fast operators without forming
 # the full dense matrix.
 
-export ImpedanceLoadedOperator
+export ImpedanceLoadedOperator, ImpedanceLoadedAdjointOperator
 
 """
     ImpedanceLoadedOperator(Z_base, Mp, theta, reactive=false)

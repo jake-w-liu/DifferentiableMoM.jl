@@ -6,8 +6,8 @@ export assemble_v_plane_wave, assemble_excitation, assemble_multiple_excitations
 export PlaneWaveExcitation, PortExcitation, DeltaGapExcitation, DipoleExcitation,
        LoopExcitation, ImportedExcitation, PatternFeedExcitation, MultiExcitation
 export make_plane_wave, make_delta_gap, make_dipole, make_loop, make_multi_excitation,
-       make_pattern_feed, pattern_feed_field, make_analytic_dipole_pattern_feed,
-       make_imported_excitation
+       make_pattern_feed, pattern_feed_field, plane_wave_field,
+       make_analytic_dipole_pattern_feed, make_imported_excitation
 
 using LinearAlgebra
 using SparseArrays
