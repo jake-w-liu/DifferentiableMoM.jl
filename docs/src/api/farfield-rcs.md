@@ -57,7 +57,7 @@ Compute the per-basis radiation vectors `g_n(r_hat_q)` for all N basis functions
 **Formula:**
 
 ```
-g_n(r_hat) = (i*k*eta0 / 4*pi) * r_hat x [r_hat x integral{ f_n(r') exp(ik r_hat . r') dS' }]
+g_n(r_hat) = (i*k*eta0) / (4*pi) * r_hat x [r_hat x integral{ f_n(r') exp(ik r_hat . r') dS' }]
 ```
 
 The double cross product extracts the transverse (radiating) component of the far field.

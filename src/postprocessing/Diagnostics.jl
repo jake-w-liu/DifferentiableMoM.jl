@@ -78,7 +78,7 @@ end
 """
     condition_diagnostics(Z)
 
-Return condition number and eigenvalue extremes of the MoM matrix.
+Return condition number and singular value extremes of the MoM matrix.
 """
 function condition_diagnostics(Z::Matrix{<:Number})
     svs = svdvals(Z)
