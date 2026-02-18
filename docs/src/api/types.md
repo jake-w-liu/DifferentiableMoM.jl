@@ -213,7 +213,10 @@ The common supertype for all preconditioner data. Functions that accept precondi
 | Type | Strategy | When to use |
 |------|----------|-------------|
 | `NearFieldPreconditionerData` | Sparse LU of near-field entries | Default choice. Best convergence, moderate memory. |
+| `ILUPreconditionerData` | Incomplete LU (ILU) of near-field entries | Large N with moderate nnz%. Less fill than full LU, slightly more GMRES iters. |
 | `DiagonalPreconditionerData` | Jacobi (inverse diagonal) | Minimal memory and setup cost. Weaker convergence. |
+| `BlockDiagPrecondData` | Block-Jacobi from MLFMA leaf boxes | Fast to build, good for MLFMA. Each leaf box LU-factorized independently. |
+| `PermutedPrecondData` | Wrapped preconditioner with reordered BFs | MLFMA: reorder Z_near to block-banded form before ILU for better quality. |
 
 ---
 
@@ -294,14 +297,117 @@ P_diag = build_nearfield_preconditioner(Z_efie, mesh, rwg, 0.0; factorization=:d
 
 ---
 
-### Usage (all preconditioner types)
+### `ILUPreconditionerData` -- Incomplete LU Preconditioner
 
-Both `NearFieldPreconditionerData` and `DiagonalPreconditionerData` work interchangeably wherever a preconditioner is accepted:
+Stores an incomplete LU (ILU) factorization of the near-field sparse matrix, using IncompleteLU.jl's Crout ILU with drop tolerance `tau`. Compared to full sparse LU (`NearFieldPreconditionerData`), ILU has much less fill-in and is feasible for large N, at the cost of slightly more GMRES iterations.
 
 ```julia
-# Build either type
+struct ILUPreconditionerData <: AbstractPreconditionerData
+    ilu_fac::IncompleteLU.ILUFactorization{ComplexF64, Int64}
+    cutoff::Float64
+    nnz_ratio::Float64
+    tau::Float64
+end
+```
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ilu_fac` | `ILUFactorization{ComplexF64, Int64}` | Incomplete LU factorization. Applying the preconditioner solves the approximate system via forward/back substitution. |
+| `cutoff` | `Float64` | Distance cutoff in meters (or `Inf` when built from a pre-assembled sparse matrix). |
+| `nnz_ratio` | `Float64` | Fraction of nonzeros retained in the sparse near-field matrix. |
+| `tau` | `Float64` | Drop tolerance for ILU. Smaller `tau` = more fill = better preconditioner. |
+
+**Constructor:**
+
+```julia
+P_ilu = build_nearfield_preconditioner(Z_efie, mesh, rwg, cutoff; factorization=:ilu, ilu_tau=1e-3)
+# Or from pre-assembled sparse matrix (e.g., MLFMA Z_near):
+P_ilu = build_nearfield_preconditioner(Z_near_sparse; factorization=:ilu, ilu_tau=1e-3)
+```
+
+**When to use:** ILU is the recommended factorization for MLFMA-scale problems (N > 10k) where full sparse LU is too slow or memory-intensive. The drop tolerance `tau` controls the memory/quality trade-off (typical: `1e-3` for distance-based, `1e-2` for MLFMA-reordered).
+
+---
+
+### `BlockDiagPrecondData` -- Block-Diagonal Preconditioner
+
+Block-diagonal (block-Jacobi) preconditioner built from MLFMA leaf boxes. Each leaf box contributes a small dense diagonal block from `Z_near`, which is LU-factorized independently. Very fast to build and memory-efficient.
+
+```julia
+struct BlockDiagPrecondData <: AbstractPreconditionerData
+    lu_blocks::Vector{LinearAlgebra.LU{ComplexF64, Matrix{ComplexF64}, Vector{Int64}}}
+    box_bf_indices::Vector{Vector{Int}}
+    N::Int
+    nnz_ratio::Float64
+end
+```
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `lu_blocks` | `Vector{LU{...}}` | Independent LU factorizations of diagonal blocks, one per leaf box. |
+| `box_bf_indices` | `Vector{Vector{Int}}` | Original BF indices belonging to each leaf box. |
+| `N` | `Int` | Total number of basis functions. |
+| `nnz_ratio` | `Float64` | Fraction of nonzeros retained (`sum(block_size^2) / N^2`). |
+
+**Constructor:**
+
+```julia
+P_bd = build_block_diag_preconditioner(A_mlfma)
+```
+
+**When to use:** When full ILU factorization of `Z_near` is too slow or memory-intensive. Block-diagonal builds in `O(n_boxes * n_bf^3)` where `n_bf` is the average BFs per leaf box (typically 100--500). Weaker than ILU but much faster to construct.
+
+---
+
+### `PermutedPrecondData` -- Permuted Preconditioner Wrapper
+
+Wraps an inner preconditioner (ILU or LU) that operates in a permuted BF ordering. On application: permute input to reordered space, apply inner preconditioner, unpermute output. Used for MLFMA where reordering `Z_near` to block-banded form before ILU dramatically improves factorization speed and quality.
+
+```julia
+struct PermutedPrecondData{T<:AbstractPreconditionerData} <: AbstractPreconditionerData
+    inner::T
+    perm::Vector{Int}     # perm[new] = old (original → permuted)
+    iperm::Vector{Int}    # iperm[old] = new (permuted → original)
+    N::Int
+    nnz_ratio::Float64
+end
+```
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `inner` | `AbstractPreconditionerData` | The inner preconditioner operating in permuted ordering. |
+| `perm` | `Vector{Int}` | Forward permutation: `perm[new_index] = old_index`. |
+| `iperm` | `Vector{Int}` | Inverse permutation: `iperm[old_index] = new_index`. |
+| `N` | `Int` | Total number of basis functions. |
+| `nnz_ratio` | `Float64` | Fraction of nonzeros (from the inner preconditioner). |
+
+**Constructor:**
+
+```julia
+P_mlfma = build_mlfma_preconditioner(A_mlfma; factorization=:ilu, ilu_tau=1e-2)
+```
+
+**When to use:** This is the recommended preconditioner for MLFMA. `build_mlfma_preconditioner` handles the reordering automatically; you do not need to construct `PermutedPrecondData` directly.
+
+---
+
+### Usage (all preconditioner types)
+
+All preconditioner subtypes work interchangeably wherever a preconditioner is accepted:
+
+```julia
+# Build any type
 P_nf   = build_nearfield_preconditioner(Z_efie, mesh, rwg, 1.0 * lambda0)
+P_ilu  = build_nearfield_preconditioner(Z_efie, mesh, rwg, 1.0 * lambda0; factorization=:ilu)
 P_diag = build_nearfield_preconditioner(Z_efie, mesh, rwg, 0.0; factorization=:diag)
+P_bd   = build_block_diag_preconditioner(A_mlfma)       # MLFMA block-diagonal
+P_mlfma = build_mlfma_preconditioner(A_mlfma)            # MLFMA reordered ILU
 
 # Use with solve_gmres directly
 I, stats = solve_gmres(Z_efie, v; preconditioner=P_nf)
@@ -342,7 +448,7 @@ end
 | Field | Type | Description |
 |-------|------|-------------|
 | `I_coeffs` | `Vector{ComplexF64}` | Surface current coefficients (length N). Pass to `compute_farfield`, `bistatic_rcs`, etc. |
-| `method` | `Symbol` | Solver method used: `:dense_direct`, `:dense_gmres`, or `:aca_gmres`. |
+| `method` | `Symbol` | Solver method used: `:dense_direct`, `:dense_gmres`, `:aca_gmres`, or `:mlfma`. |
 | `N` | `Int` | Number of RWG unknowns (= system matrix dimension). |
 | `assembly_time_s` | `Float64` | Wall-clock time for impedance matrix assembly (seconds). |
 | `solve_time_s` | `Float64` | Wall-clock time for the linear solve (seconds). |
@@ -544,7 +650,7 @@ cv = CVec3(1.0 + 2.0im, 0.0, 0.0)   # complex electric field phasor
 |------|-------------|---------------|
 | `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid`, `ScatteringResult` | `src/Types.jl` | All assembly, solve, and post-processing modules |
 | `MatrixFreeEFIEOperator`, `MatrixFreeEFIEAdjointOperator` | `src/assembly/EFIE.jl` | `src/fast/ACA.jl`, `src/solver/NearFieldPreconditioner.jl`, `src/Workflow.jl` |
-| `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `DiagonalPreconditionerData` | `src/solver/NearFieldPreconditioner.jl` | `src/solver/IterativeSolve.jl`, `src/solver/Solve.jl`, `src/optimization/Optimize.jl` |
+| `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `ILUPreconditionerData`, `DiagonalPreconditionerData`, `BlockDiagPrecondData`, `PermutedPrecondData` | `src/solver/NearFieldPreconditioner.jl` | `src/solver/IterativeSolve.jl`, `src/solver/Solve.jl`, `src/optimization/Optimize.jl` |
 | `NearFieldOperator`, `NearFieldAdjointOperator` | `src/solver/NearFieldPreconditioner.jl` | `src/solver/IterativeSolve.jl` (internal) |
 | `ClusterNode`, `ClusterTree` | `src/fast/ClusterTree.jl` | `src/fast/ACA.jl` |
 | `ACAOperator`, `ACAAdjointOperator` | `src/fast/ACA.jl` | `src/Workflow.jl`, `src/solver/IterativeSolve.jl` |

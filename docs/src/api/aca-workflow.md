@@ -267,14 +267,16 @@ One-call scattering solve that automatically selects the solver method, validate
 
 | Keyword | Type | Default | Description |
 |---------|------|---------|-------------|
-| `method` | `Symbol` | `:auto` | `:auto`, `:dense_direct`, `:dense_gmres`, or `:aca_gmres`. |
+| `method` | `Symbol` | `:auto` | `:auto`, `:dense_direct`, `:dense_gmres`, `:aca_gmres`, or `:mlfma`. |
 | `dense_direct_limit` | `Int` | `2000` | N threshold for dense direct (auto mode). |
 | `dense_gmres_limit` | `Int` | `10000` | N threshold for dense GMRES vs ACA (auto mode). |
+| `mlfma_threshold` | `Int` | `50000` | N threshold for ACA GMRES vs MLFMA (auto mode). |
 
 **Auto method selection logic:**
 - `N <= 2000`: Dense EFIE assembly + LU direct solve.
 - `2000 < N <= 10000`: Dense EFIE + NF-preconditioned GMRES.
-- `N > 10000`: ACA H-matrix + NF-preconditioned GMRES.
+- `10000 < N <= 50000`: ACA H-matrix + NF-preconditioned GMRES.
+- `N > 50000`: MLFMA + NF-preconditioned GMRES. See [mlfma.md](mlfma.md).
 
 **Mesh validation keywords:**
 
@@ -349,7 +351,7 @@ Result type returned by `solve_scattering`. See [types.md](types.md) for full fi
 ```julia
 result = solve_scattering(mesh, freq, pw)
 I = result.I_coeffs            # current coefficients
-method = result.method          # :dense_direct, :dense_gmres, or :aca_gmres
+method = result.method          # :dense_direct, :dense_gmres, :aca_gmres, or :mlfma
 N = result.N                    # number of unknowns
 ```
 

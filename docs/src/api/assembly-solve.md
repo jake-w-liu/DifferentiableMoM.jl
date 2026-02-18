@@ -473,7 +473,8 @@ Build the preconditioner directly from mesh, basis, and wavenumber — without r
 | Keyword | Values | Description |
 |---------|--------|-------------|
 | `neighbor_search` | `:spatial` (default), `:bruteforce` | **`:spatial`**: Uses spatial hashing (cell size = cutoff) for O(N) neighbor finding. Each basis function is hashed into a 3D grid cell, and only the 27 neighboring cells are searched. **`:bruteforce`**: O(N^2) all-pairs distance check. Gives identical results; use only for validation. |
-| `factorization` | `:lu` (default), `:diag` | **`:lu`**: Sparse LU factorization of the near-field matrix. Gives the best GMRES convergence. **`:diag`**: Jacobi preconditioner using only diagonal entries. Cheapest to build and apply, but weaker convergence. |
+| `factorization` | `:lu` (default), `:ilu`, `:diag` | **`:lu`**: Sparse LU factorization of the near-field matrix. Best GMRES convergence. **`:ilu`**: Incomplete LU with drop tolerance `ilu_tau`. Less fill than full LU, feasible for large N. **`:diag`**: Jacobi preconditioner using only diagonal entries. Cheapest to build and apply, but weaker convergence. |
+| `ilu_tau` | `Float64`, default `1e-3` | Drop tolerance for ILU factorization (only used when `factorization=:ilu`). Smaller values = more fill = better preconditioner. |
 
 ### Performance benchmarks
 
@@ -496,6 +497,54 @@ Compute the center point of each RWG basis function, defined as the average of t
 **Parameters:** `mesh::TriMesh`, `rwg::RWGData`.
 
 **Returns:** `Vector{Vec3}` of length `N`.
+
+---
+
+### `build_block_diag_preconditioner(A_mlfma)`
+
+Build a block-diagonal (block-Jacobi) preconditioner from MLFMA leaf boxes. Each leaf box's diagonal block in `Z_near` is LU-factorized independently. Much faster than ILU for large N.
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `A_mlfma` | `MLFMAOperator` | The MLFMA operator (must have an octree and Z_near). |
+
+**Returns:** `BlockDiagPrecondData`. See [types.md](types.md) for field details.
+
+**Complexity:** `O(n_boxes * n_bf^3)` where `n_bf` is the average BFs per leaf box (typically 100--500). Memory: `n_boxes * n_bf^2 * 16` bytes (typically < 100 MB).
+
+**Example:**
+
+```julia
+A_mlfma = build_mlfma_operator(mesh, rwg, k; leaf_lambda=1.0)
+P_bd = build_block_diag_preconditioner(A_mlfma)
+I, stats = solve_gmres(A_mlfma, v; preconditioner=P_bd)
+```
+
+---
+
+### `build_mlfma_preconditioner(A_mlfma; factorization=:ilu, ilu_tau=1e-2)`
+
+Build a preconditioner for MLFMA by reordering `Z_near` to MLFMA BF ordering (block-banded structure) before factorization. The block-banded structure makes ILU dramatically faster and more effective than operating on the original scattered BF ordering. The resulting `PermutedPrecondData` handles the permutation automatically on each preconditioner application.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `A_mlfma` | `MLFMAOperator` | -- | The MLFMA operator. |
+| `factorization` | `Symbol` | `:ilu` | `:ilu` for incomplete LU (recommended), `:lu` for full sparse LU. |
+| `ilu_tau` | `Float64` | `1e-2` | Drop tolerance for ILU. |
+
+**Returns:** `PermutedPrecondData` wrapping an `ILUPreconditionerData` (or `NearFieldPreconditionerData` for `:lu`). See [types.md](types.md) for field details.
+
+**Example:**
+
+```julia
+A_mlfma = build_mlfma_operator(mesh, rwg, k; leaf_lambda=1.0)
+P_mlfma = build_mlfma_preconditioner(A_mlfma; ilu_tau=1e-2)
+I, stats = solve_gmres(A_mlfma, v; preconditioner=P_mlfma)
+```
 
 ---
 
@@ -623,7 +672,7 @@ I, stats = solve_gmres(A, v; preconditioner=P_nf)
 | `src/assembly/EFIE.jl` | Dense assembly (`assemble_Z_efie`), matrix-free operators (`MatrixFreeEFIEOperator`, `matrixfree_efie_operator`, `efie_entry`) |
 | `src/assembly/Impedance.jl` | Impedance blocks (`precompute_patch_mass`, `assemble_Z_impedance`) |
 | `src/solver/Solve.jl` | `solve_forward`, `solve_system`, `assemble_full_Z`, conditioning helpers |
-| `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner`, `rwg_centers`, operator wrappers |
+| `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner`, `build_block_diag_preconditioner`, `build_mlfma_preconditioner`, `rwg_centers`, operator wrappers |
 | `src/solver/IterativeSolve.jl` | `solve_gmres`, `solve_gmres_adjoint` |
 
 ---

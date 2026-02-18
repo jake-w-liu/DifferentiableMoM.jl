@@ -24,7 +24,7 @@ The typical simulation pipeline follows these stages in order. Each stage builds
 
 Define or import the scatterer geometry and ensure the mesh is suitable for MoM simulation.
 
-- **Types:** `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid`, `ScatteringResult`, `Vec3`, `CVec3`, `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `DiagonalPreconditionerData`
+- **Types:** `TriMesh`, `RWGData`, `PatchPartition`, `SphGrid`, `ScatteringResult`, `Vec3`, `CVec3`, `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `ILUPreconditionerData`, `DiagonalPreconditionerData`, `BlockDiagPrecondData`, `PermutedPrecondData`
   Core data structures used throughout the package. See [types.md](types.md) for field-level documentation.
 
 - **Helpers:** `nvertices`, `ntriangles`
@@ -89,8 +89,8 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
 - **Excitation sources:** See [excitation.md](excitation.md) for the full excitation system.
   - Types: `AbstractExcitation`, `PlaneWaveExcitation`, `PortExcitation`, `DeltaGapExcitation`, `DipoleExcitation`, `LoopExcitation`, `ImportedExcitation`, `PatternFeedExcitation`, `MultiExcitation`
   - Constructors: `make_plane_wave`, `make_delta_gap`, `make_dipole`, `make_loop`, `make_imported_excitation`, `make_pattern_feed`, `make_analytic_dipole_pattern_feed`, `make_multi_excitation`
-  - Assembly: `plane_wave_field`, `pattern_feed_field`, `assemble_v_plane_wave`, `assemble_excitation`, `assemble_multiple_excitations`
-  - Example scripts: `examples/07_pattern_feed.jl`, `examples/07_pattern_feed.jl`
+  - Assembly: `pattern_feed_field`, `assemble_v_plane_wave`, `assemble_excitation`, `assemble_multiple_excitations`
+  - Example scripts: `examples/07_pattern_feed.jl`
 
 - **Linear solves (direct):** `solve_forward`, `solve_system`
   Solve the MoM system `Z I = v` using LU factorization (default) or GMRES.
@@ -98,9 +98,9 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
 - **Iterative solves (GMRES):** `solve_gmres`, `solve_gmres_adjoint`
   GMRES via Krylov.jl with optional near-field preconditioning. Use these for large problems where direct LU is too slow or memory-intensive.
 
-- **Near-field preconditioner:** `build_nearfield_preconditioner`, `rwg_centers`
-  Build a sparse near-field preconditioner that dramatically reduces GMRES iteration counts. Multiple overloads: from dense matrix, abstract matrix, matrix-free operator, or geometry/physics inputs directly. Supports sparse LU (`:lu`) or Jacobi diagonal (`:diag`) factorization. See [assembly-solve.md](assembly-solve.md) for details and performance data.
-  - Types: `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `DiagonalPreconditionerData`, `NearFieldOperator`, `NearFieldAdjointOperator`
+- **Near-field preconditioner:** `build_nearfield_preconditioner`, `build_block_diag_preconditioner`, `build_mlfma_preconditioner`, `rwg_centers`
+  Build sparse near-field preconditioners that dramatically reduce GMRES iteration counts. `build_nearfield_preconditioner` has multiple overloads (dense matrix, abstract matrix, matrix-free operator, geometry/physics, or pre-assembled sparse). Supports sparse LU (`:lu`), incomplete LU (`:ilu`), or Jacobi diagonal (`:diag`) factorization. `build_block_diag_preconditioner` and `build_mlfma_preconditioner` are specialized for MLFMA operators. See [assembly-solve.md](assembly-solve.md) for details and performance data.
+  - Types: `AbstractPreconditionerData`, `NearFieldPreconditionerData`, `ILUPreconditionerData`, `DiagonalPreconditionerData`, `BlockDiagPrecondData`, `PermutedPrecondData`, `NearFieldOperator`, `NearFieldAdjointOperator`
 
 - **Far-field computation:** `make_sph_grid`, `radiation_vectors`, `compute_farfield`
   Sample the far-field radiation pattern on a spherical grid.
@@ -108,9 +108,9 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
 - **Objective (Q-matrix) helpers:** `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`, `direction_mask`
   Build Hermitian PSD matrices for quadratic far-field objectives used in optimization. `direction_mask` generalizes `cap_mask` to arbitrary directions for multi-angle RCS optimization.
 
-### 3b) ACA H-Matrix and High-Level Workflow
+### 3b) Fast Methods and High-Level Workflow
 
-For large problems (N > ~2000), ACA compression and the `solve_scattering` workflow automate method selection and preconditioner construction.
+For large problems, ACA compression, MLFMA, and the `solve_scattering` workflow automate method selection and preconditioner construction.
 
 - **Cluster tree:** `build_cluster_tree`, `cluster_diameter`, `cluster_distance`, `is_admissible`, `is_leaf`, `leaf_nodes`
   Binary space-partitioning tree for H-matrix block structure. Types: `ClusterNode`, `ClusterTree`. See [aca-workflow.md](aca-workflow.md).
@@ -118,8 +118,14 @@ For large problems (N > ~2000), ACA compression and the `solve_scattering` workf
 - **ACA low-rank approximation:** `aca_lowrank`, `build_aca_operator`
   Partially-pivoted ACA for far-field block compression. Types: `ACAOperator`, `ACAAdjointOperator`, `DenseBlock` (internal), `LowRankBlock` (internal). See [aca-workflow.md](aca-workflow.md).
 
+- **Octree:** `build_octree`
+  Spatial octree decomposition for MLFMA. Types: `Octree`, `OctreeBox`, `OctreeLevel`. See [octree.md](octree.md).
+
+- **MLFMA:** `build_mlfma_operator`, `assemble_mlfma_nearfield`
+  Multi-level fast multipole algorithm for O(N log N) matvec. Types: `MLFMAOperator`, `MLFMAAdjointOperator`, `SphereSampling`. See [mlfma.md](mlfma.md).
+
 - **High-level workflow:** `solve_scattering`
-  One-call scattering solve with automatic method selection (dense direct, dense GMRES, or ACA GMRES) based on problem size. Returns `ScatteringResult`. See [aca-workflow.md](aca-workflow.md).
+  One-call scattering solve with automatic method selection (dense direct, dense GMRES, ACA GMRES, or MLFMA) based on problem size. Returns `ScatteringResult`. See [aca-workflow.md](aca-workflow.md).
 
 ### 4) Diagnostics and RCS
 
@@ -139,10 +145,10 @@ Validate simulation results and compute scattering cross sections.
 High-frequency approximate solver for electrically large problems where full MoM is too expensive.
 
 - **Physical optics solve:** `solve_po`
-  Compute PO surface currents and far-field scattering using the tangential magnetic field approximation on illuminated faces. Returns `POResult`. See `src/postprocessing/PhysicalOptics.jl`.
+  Compute PO surface currents and far-field scattering using the tangential magnetic field approximation on illuminated faces. Returns `POResult`. See [physical-optics.md](physical-optics.md).
 
 - **Types:** `POResult`
-  Result container for PO solutions, analogous to `ScatteringResult` for MoM.
+  Result container for PO solutions, analogous to `ScatteringResult` for MoM. See [physical-optics.md](physical-optics.md).
 
 ### 5) Differentiable Optimization
 
@@ -176,16 +182,18 @@ Check gradient correctness and visualize meshes.
 
 For a first read-through of the API documentation, follow this order:
 
-1. **[types.md](types.md)** — Core data structures (`TriMesh`, `RWGData`, `SphGrid`, `ScatteringResult`, matrix-free operators, etc.)
+1. **[types.md](types.md)** — Core data structures (`TriMesh`, `RWGData`, `SphGrid`, `ScatteringResult`, preconditioner types, matrix-free operators, etc.)
 2. **[mesh.md](mesh.md)** and **[rwg.md](rwg.md)** — Geometry creation, mesh quality, resolution diagnostics, refinement, and RWG basis construction
 3. **[assembly-solve.md](assembly-solve.md)** — EFIE assembly (dense and matrix-free), impedance loading, direct/GMRES solvers, and near-field preconditioning
 4. **[aca-workflow.md](aca-workflow.md)** — ACA H-matrix compression, cluster trees, and the `solve_scattering` high-level workflow
-5. **[farfield-rcs.md](farfield-rcs.md)** — Far-field patterns, Q-matrices, `direction_mask`, RCS, and Mie validation
-6. **[composite-operators.md](composite-operators.md)** — `ImpedanceLoadedOperator` for fast-operator optimization
-7. **[spatial-patches.md](spatial-patches.md)** — Automatic spatial patch assignment
-8. **[adjoint-optimize.md](adjoint-optimize.md)** — Adjoint gradients, L-BFGS optimization, and multi-angle RCS
-7. **[verification.md](verification.md)** — Gradient correctness checks
-8. **[excitation.md](excitation.md)** — Extended excitation system (plane waves, ports, dipoles, imported fields, pattern feeds)
+5. **[octree.md](octree.md)** and **[mlfma.md](mlfma.md)** — Octree spatial decomposition and MLFMA O(N log N) fast solver
+6. **[farfield-rcs.md](farfield-rcs.md)** — Far-field patterns, Q-matrices, `direction_mask`, RCS, and Mie validation
+7. **[composite-operators.md](composite-operators.md)** — `ImpedanceLoadedOperator` for fast-operator optimization
+8. **[spatial-patches.md](spatial-patches.md)** — Automatic spatial patch assignment
+9. **[adjoint-optimize.md](adjoint-optimize.md)** — Adjoint gradients, L-BFGS optimization, and multi-angle RCS
+10. **[verification.md](verification.md)** — Gradient correctness checks
+11. **[excitation.md](excitation.md)** — Extended excitation system (plane waves, ports, dipoles, imported fields, pattern feeds)
+12. **[physical-optics.md](physical-optics.md)** — Physical Optics high-frequency approximate solver
 
 ---
 
