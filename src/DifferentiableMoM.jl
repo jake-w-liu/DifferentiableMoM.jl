@@ -5,6 +5,7 @@ using SparseArrays
 using StaticArrays
 using Random
 using Krylov
+using SpecialFunctions
 
 include("Types.jl")
 
@@ -16,6 +17,7 @@ include("geometry/MeshIO.jl")
 include("basis/RWG.jl")
 include("basis/Quadrature.jl")
 include("basis/Greens.jl")
+include("basis/PeriodicGreens.jl")
 
 # Assembly
 include("assembly/SingularIntegrals.jl")
@@ -24,6 +26,8 @@ include("assembly/Impedance.jl")
 include("assembly/Excitation.jl")
 include("assembly/CompositeOperator.jl")
 include("assembly/SpatialPatches.jl")
+include("assembly/PeriodicEFIE.jl")
+include("assembly/DensityInterpolation.jl")
 
 # Fast methods
 include("fast/ClusterTree.jl")
@@ -47,6 +51,8 @@ include("optimization/Adjoint.jl")
 include("optimization/Verification.jl")
 include("optimization/Optimize.jl")
 include("optimization/MultiAngleRCS.jl")
+include("optimization/DensityFiltering.jl")
+include("optimization/DensityAdjoint.jl")
 
 # Workflow
 include("Workflow.jl")
@@ -56,5 +62,6 @@ include("postprocessing/Diagnostics.jl")
 include("postprocessing/PhysicalOptics.jl")
 include("postprocessing/Mie.jl")
 include("postprocessing/Visualization.jl")
+include("postprocessing/PeriodicMetrics.jl")
 
 end # module

@@ -3059,10 +3059,15 @@ println("  36d: PASS")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Periodic MoM + Topology Optimization Tests (37-42)
+# ─────────────────────────────────────────────────
+include("test_periodic_topology.jl")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 36 TESTS PASSED")
+println("ALL 42 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)
