@@ -63,12 +63,17 @@ W_default, w_sum_default = build_filter_weights(mesh, r_min_default)
 pw = make_plane_wave(Vec3(0.0, 0.0, -k), 1.0, Vec3(1.0, 0.0, 0.0))
 v  = Vector{ComplexF64}(assemble_excitation(mesh, rwg, pw))
 
-grid_ff = make_sph_grid(20, 40)
-Q_spec  = Matrix{ComplexF64}(specular_rcs_objective(mesh, rwg, grid_ff, k, lattice))
+Ntheta_ff, Nphi_ff = 20, 40
+spec_half_angle = 10 * π / 180
+grid_ff = make_sph_grid(Ntheta_ff, Nphi_ff)
+Q_spec  = Matrix{ComplexF64}(specular_rcs_objective(
+    mesh, rwg, grid_ff, k, lattice; half_angle=spec_half_angle, polarization=:x))
 
 config  = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5)
 alpha_vf = 0.1
 println("  SIMP: p=$(config.p), Z_max=$(round(config.Z_max, sigdigits=4)), α_vf=$(alpha_vf)")
+println("  Objective: Q_spec on $(Ntheta_ff)×$(Nphi_ff) spherical grid, x-pol, " *
+        "specular cone half-angle=$(round(spec_half_angle * 180 / π, digits=1))°")
 
 centroids = [triangle_center(mesh, t) for t in 1:Nt]
 
@@ -79,7 +84,8 @@ centroids = [triangle_center(mesh, t) for t in 1:Nt]
 println("\n▸ Reference: Full PEC plate (ρ̄ = 1)")
 _, rho_bar_pec = filter_and_project(W_default, w_sum_default, ones(Nt), 64.0)
 Z_pec = Z_per + assemble_Z_penalty(Mt, rho_bar_pec, config)
-I_pec = Z_pec \ v
+F_pec = lu(Z_pec)
+I_pec = F_pec \ v
 J_pec = real(dot(I_pec, Q_spec * I_pec))
 println("  J_specular(PEC) = $(round(J_pec, sigdigits=6))")
 
@@ -97,7 +103,8 @@ end
 Z_pen_pec = assemble_Z_penalty(Mt, rho_bar_pec, config)
 pb_pec = power_balance(Vector{ComplexF64}(I_pec), Z_pen_pec, dx_cell * dy_cell, k, modes_pec, R_pec)
 println("  Power balance (PEC): P_refl/P_inc=$(round(100*pb_pec.refl_frac, digits=1))%, " *
-        "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%")
+        "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%, " *
+        "P_resid/P_inc=$(round(100*pb_pec.resid_frac, digits=1))%")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Section 3: L-BFGS Optimization with Beta Continuation
@@ -139,14 +146,17 @@ function run_optimization(Z_per::Matrix{ComplexF64}, Mt, v, Q, config, W, w_sum,
 
             rho_tilde, rho_bar = filter_and_project(W, w_sum, rho, beta)
             Z_total = Z_per + assemble_Z_penalty(Mt, rho_bar, config)
-            I_c = Z_total \ v
+            F = lu(Z_total)
+            I_c = F \ v
 
-            J_scat  = real(dot(I_c, Q * I_c))
+            QI_c = Q * I_c
+            J_scat  = real(dot(I_c, QI_c))
             vf_cur  = mean(rho_bar)
             J_vf    = alpha_vf * (vf_cur - vf_target)^2
             J_tot   = J_scat + J_vf
 
-            lam = Z_total' \ (Q * I_c)
+            # Forward and adjoint solves share the same Z_total; reuse one LU factorization.
+            lam = F' \ QI_c
 
             g_rb = gradient_density(Mt, Vector{ComplexF64}(I_c),
                                     Vector{ComplexF64}(lam), rho_bar, config)
@@ -230,7 +240,9 @@ t_opt = time() - t0
 println("\n  Optimization completed in $(round(t_opt, digits=1)) s")
 
 _, rho_bar_final = filter_and_project(W_default, w_sum_default, rho_opt, 64.0)
-I_opt = (Z_per + assemble_Z_penalty(Mt, rho_bar_final, config)) \ v
+Z_opt = Z_per + assemble_Z_penalty(Mt, rho_bar_final, config)
+F_opt = lu(Z_opt)
+I_opt = F_opt \ v
 J_opt = real(dot(I_opt, Q_spec * I_opt))
 reduction_dB = 10 * log10(max(J_opt, 1e-30) / max(J_pec, 1e-30))
 println("  J: PEC=$(round(J_pec, sigdigits=5)) → opt=$(round(J_opt, sigdigits=5)) " *
@@ -274,7 +286,45 @@ for i in prop_idx_opt
 end
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Section 4b: Power Balance Analysis
+# Section 4b: Angular RCS Comparison (free-space far-field cut)
+# ═══════════════════════════════════════════════════════════════════════════
+
+println("\n▸ Angular RCS Comparison (free-space far-field cut)")
+# Qualitative visualization based on the free-space radiation integral of the
+# unit-cell current distribution (not a periodic Floquet decomposition).
+theta_cut_deg = collect(0.0:2.0:80.0)
+phi_cut_deg = 0.0
+theta_cut = theta_cut_deg .* (π / 180)
+phi_cut = fill(phi_cut_deg * π / 180, length(theta_cut))
+N_cut = length(theta_cut)
+rhat_cut = zeros(Float64, 3, N_cut)
+for i in 1:N_cut
+    θ = theta_cut[i]
+    ϕ = phi_cut[i]
+    rhat_cut[1, i] = sin(θ) * cos(ϕ)
+    rhat_cut[2, i] = sin(θ) * sin(ϕ)
+    rhat_cut[3, i] = cos(θ)
+end
+grid_cut = SphGrid(rhat_cut, collect(theta_cut), collect(phi_cut), zeros(Float64, N_cut))
+
+G_cut = radiation_vectors(mesh, rwg, grid_cut, k)
+E_cut_pec = compute_farfield(G_cut, Vector{ComplexF64}(I_pec), N_cut)
+E_cut_opt = compute_farfield(G_cut, Vector{ComplexF64}(I_opt), N_cut)
+σ_cut_pec = bistatic_rcs(E_cut_pec; E0=1.0)
+σ_cut_opt = bistatic_rcs(E_cut_opt; E0=1.0)
+rcs_pec_dB = 10 .* log10.(max.(σ_cut_pec, 1e-30))
+rcs_opt_dB = 10 .* log10.(max.(σ_cut_opt, 1e-30))
+
+rcs_df = DataFrame(theta_deg=theta_cut_deg,
+                   rcs_pec_dB=rcs_pec_dB,
+                   rcs_opt_dB=rcs_opt_dB)
+CSV.write(joinpath(DATA_DIR, "results_rcs_comparison.csv"), rcs_df)
+println("  φ=$(phi_cut_deg)° cut, θ = 0:2:80° ($(N_cut) samples)")
+println("  θ=0° shift (opt − PEC) = $(round(rcs_opt_dB[1] - rcs_pec_dB[1], digits=2)) dB")
+println("  ✓ Saved: data/results_rcs_comparison.csv")
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 4c: Power Balance Analysis
 # ═══════════════════════════════════════════════════════════════════════════
 
 println("\n▸ Power Balance Analysis")
@@ -282,9 +332,11 @@ Z_pen_opt = assemble_Z_penalty(Mt, rho_bar_final, config)
 pb_opt = power_balance(Vector{ComplexF64}(I_opt), Z_pen_opt, dx_cell * dy_cell, k, modes_opt, R_opt)
 
 println("  PEC:       P_refl/P_inc=$(round(100*pb_pec.refl_frac, digits=1))%, " *
-        "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%")
+        "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%, " *
+        "P_resid/P_inc=$(round(100*pb_pec.resid_frac, digits=1))%")
 println("  Optimized: P_refl/P_inc=$(round(100*pb_opt.refl_frac, digits=1))%, " *
-        "P_abs/P_inc=$(round(100*pb_opt.abs_frac, digits=1))%")
+        "P_abs/P_inc=$(round(100*pb_opt.abs_frac, digits=1))%, " *
+        "P_resid/P_inc=$(round(100*pb_opt.resid_frac, digits=1))%")
 println("  |R₀₀|² reduction: $(round(10*log10(abs(R_opt[prop_idx_opt[1]])^2 / abs(R_pec[prop_idx_opt[1]])^2), digits=2)) dB")
 
 pb_df = DataFrame(
@@ -292,8 +344,10 @@ pb_df = DataFrame(
     P_inc=[pb_pec.P_inc, pb_opt.P_inc],
     P_refl=[pb_pec.P_refl, pb_opt.P_refl],
     P_abs=[pb_pec.P_abs, pb_opt.P_abs],
+    P_resid=[pb_pec.P_resid, pb_opt.P_resid],
     refl_frac=[pb_pec.refl_frac, pb_opt.refl_frac],
     abs_frac=[pb_pec.abs_frac, pb_opt.abs_frac],
+    resid_frac=[pb_pec.resid_frac, pb_opt.resid_frac],
     R00_abs=[abs(R_pec[prop_idx_opt[1]]), abs(R_opt[prop_idx_opt[1]])])
 CSV.write(joinpath(DATA_DIR, "results_power_balance.csv"), pb_df)
 println("  ✓ Saved: data/results_power_balance.csv")
@@ -307,8 +361,9 @@ rho_gv = 0.3 .+ 0.4 * rand(Nt)
 beta_gv = 4.0
 rt_gv, rb_gv = filter_and_project(W_default, w_sum_default, rho_gv, beta_gv)
 Z_gv = Z_per + assemble_Z_penalty(Mt, rb_gv, config)
-I_gv = Z_gv \ v
-lam_gv = Z_gv' \ (Q_spec * I_gv)
+F_gv = lu(Z_gv)
+I_gv = F_gv \ v
+lam_gv = F_gv' \ (Q_spec * I_gv)
 g_adj = gradient_density_full(Mt, Vector{ComplexF64}(I_gv), Vector{ComplexF64}(lam_gv),
                               rt_gv, rb_gv, config, W_default, w_sum_default, beta_gv)
 
@@ -502,12 +557,28 @@ savefig(fig5b, joinpath(FIG_DIR, "fig_results_parametric_beta.pdf"))
 
 println("  ✓ Fig 5: Parametric studies (individual)")
 
-# --- Fig 6: Power budget comparison (PEC vs Optimized) ---
+# --- Fig 6: Angular RCS comparison (free-space far-field cut) ---
+rcs_data = CSV.read(joinpath(DATA_DIR, "results_rcs_comparison.csv"), DataFrame)
+fig6 = plot_scatter(
+    [collect(rcs_data.theta_deg), collect(rcs_data.theta_deg)],
+    [collect(rcs_data.rcs_pec_dB), collect(rcs_data.rcs_opt_dB)];
+    mode=["lines", "lines"],
+    legend=["PEC plate", "Optimized"],
+    color=["#1f77b4", "#d62728"],
+    xlabel="Polar angle θ (deg), φ = 0°",
+    ylabel="Bistatic RCS proxy (dB)",
+    title="Angular RCS comparison (free-space far-field cut)",
+    width=550, height=400, fontsize=14)
+set_legend!(fig6; position=:topright)
+savefig(fig6, joinpath(FIG_DIR, "fig_results_rcs_comparison.pdf"))
+println("  ✓ Fig 6: RCS comparison")
+
+# --- Fig 7: Power budget comparison (PEC vs Optimized) ---
 pb_data = CSV.read(joinpath(DATA_DIR, "results_power_balance.csv"), DataFrame)
 # Bar chart: reflected and absorbed power as % of P_inc
 refl_pct = pb_data.refl_frac .* 100
 abs_pct = pb_data.abs_frac .* 100
-fig6 = plot_scatter(
+fig7 = plot_scatter(
     [Float64[1, 2], Float64[1, 2]],
     [refl_pct, abs_pct];
     mode=["markers", "markers"],
@@ -518,9 +589,9 @@ fig6 = plot_scatter(
     title="Power budget: PEC vs Optimized",
     xrange=[0.5, 2.5],
     width=500, height=400, fontsize=14)
-set_legend!(fig6; position=:bottomleft)
-savefig(fig6, joinpath(FIG_DIR, "fig_results_power_balance.pdf"))
-println("  ✓ Fig 6: Power balance")
+set_legend!(fig7; position=:bottomleft)
+savefig(fig7, joinpath(FIG_DIR, "fig_results_power_balance.pdf"))
+println("  ✓ Fig 7: Power balance")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Summary
@@ -536,10 +607,14 @@ R00_dB = 20 * log10(R00_opt / R00_pec)
 println("  |R₀₀|: PEC=$(round(R00_pec, sigdigits=4)) → opt=$(round(R00_opt, sigdigits=4)) ($(round(R00_dB, digits=1)) dB)")
 println("  Reflected:   PEC=$(round(100*pb_pec.refl_frac, digits=1))%, opt=$(round(100*pb_opt.refl_frac, digits=1))%")
 println("  Absorbed:    PEC=$(round(100*pb_pec.abs_frac, digits=1))%, opt=$(round(100*pb_opt.abs_frac, digits=1))%")
+println("  Residual*:   PEC=$(round(100*pb_pec.resid_frac, digits=1))%, opt=$(round(100*pb_opt.resid_frac, digits=1))%")
+println("    *Residual = 1 - reflected - absorbed (not explicitly decomposed into transmission here)")
 println("  Final volume fraction:  $(round(mean(rho_bar_final), digits=3))")
 println("  Binary fraction:        $(round(100*count(x -> x < 0.05 || x > 0.95, rho_bar_final)/Nt, digits=1))%")
 println("  Gradient max rel error: $(round(maximum(rel_err_gv), sigdigits=3))")
 println()
-println("  Data:    data/results_*.csv (9 files)")
-println("  Figures: figures/fig_results_*.pdf (9 figures)")
+results_csvs = filter(f -> startswith(f, "results_") && endswith(f, ".csv"), readdir(DATA_DIR))
+result_figs = filter(f -> startswith(f, "fig_results_") && endswith(f, ".pdf"), readdir(FIG_DIR))
+println("  Data:    data/results_*.csv ($(length(results_csvs)) files)")
+println("  Figures: figures/fig_results_*.pdf ($(length(result_figs)) figures)")
 println("=" ^ 70)

@@ -154,17 +154,21 @@ function reflection_coefficients(mesh::TriMesh, rwg::RWGData,
 end
 
 """
-    power_balance(I_coeffs, Z_pen, A_cell, modes, R_coeffs; eta0=376.730313668, E0=1.0)
+    power_balance(I_coeffs, Z_pen, A_cell, k, modes, R_coeffs; eta0=376.730313668, E0=1.0)
 
 Compute the power balance for a periodic metasurface unit cell.
 
-Returns a NamedTuple: (P_inc, P_refl, P_abs, abs_frac, refl_frac)
+Returns a NamedTuple:
+`(P_inc, P_refl, P_abs, P_resid, refl_frac, abs_frac, resid_frac)`
 
 - P_inc:   incident power through the unit cell = |E₀|² A / (2η₀)
 - P_refl:  reflected power = Σ_mn |R_mn|² (kz_mn/k) P_inc  [propagating modes]
 - P_abs:   absorbed by SIMP penalty impedance = ½ Re(I† Z_pen I)
+- P_resid: residual power = P_inc - P_refl - P_abs
+           (not explicitly decomposed into transmission/other channels here)
 - refl_frac: P_refl / P_inc
 - abs_frac:  P_abs / P_inc
+- resid_frac: P_resid / P_inc
 """
 function power_balance(I_coeffs::Vector{<:Number},
                        Z_pen::AbstractMatrix,
@@ -190,25 +194,34 @@ function power_balance(I_coeffs::Vector{<:Number},
 
     refl_frac = P_refl / P_inc
     abs_frac = P_abs / P_inc
+    P_resid = P_inc - P_refl - P_abs
+    resid_frac = P_resid / P_inc
 
-    return (P_inc=P_inc, P_refl=P_refl, P_abs=P_abs,
-            refl_frac=refl_frac, abs_frac=abs_frac)
+    return (P_inc=P_inc, P_refl=P_refl, P_abs=P_abs, P_resid=P_resid,
+            refl_frac=refl_frac, abs_frac=abs_frac, resid_frac=resid_frac)
 end
 
 """
-    specular_rcs_objective(mesh, rwg, grid, k, lattice; quad_order=3)
+    specular_rcs_objective(mesh, rwg, grid, k, lattice;
+                           quad_order=3, half_angle=π/18, polarization=:x)
 
 Build a Q matrix targeting the specular reflection direction.
 
 For normal incidence: specular = broadside (θ=0).
 For oblique incidence: specular direction from Snell's law.
 
-Returns Q ∈ C^{N×N} such that J = Re(I† Q I) measures specular scattered power.
+`half_angle` sets the cone half-angle (radians) around the specular direction.
+`polarization` selects the projection polarization (`:x` currently supported).
+
+Returns Q ∈ C^{N×N} such that J = Re(I† Q I) measures cone-integrated
+specular scattered power in the chosen polarization.
 """
 function specular_rcs_objective(mesh::TriMesh, rwg::RWGData,
                                 grid::SphGrid, k::Real,
                                 lattice::PeriodicLattice;
-                                quad_order::Int=3)
+                                quad_order::Int=3,
+                                half_angle::Float64=π/18,
+                                polarization::Symbol=:x)
     # Specular direction: θ_r = θ_inc, φ_r = φ_inc + π
     theta_spec = asin(clamp(sqrt(lattice.kx_bloch^2 + lattice.ky_bloch^2) / k, 0.0, 1.0))
     phi_spec = atan(lattice.ky_bloch, lattice.kx_bloch) + π
@@ -217,11 +230,15 @@ function specular_rcs_objective(mesh::TriMesh, rwg::RWGData,
     spec_dir = Vec3(sin(theta_spec) * cos(phi_spec),
                     sin(theta_spec) * sin(phi_spec),
                     cos(theta_spec))
-    mask = direction_mask(grid, spec_dir; half_angle=π/18)
+    mask = direction_mask(grid, spec_dir; half_angle=half_angle)
 
     # Build radiation vectors and Q matrix
     G_mat = radiation_vectors(mesh, rwg, grid, k; quad_order=quad_order)
-    pol = pol_linear_x(grid)
+    pol = if polarization == :x
+        pol_linear_x(grid)
+    else
+        error("Unsupported polarization=$polarization (currently only :x is implemented).")
+    end
     Q = build_Q(G_mat, grid, pol; mask=mask)
 
     return Q

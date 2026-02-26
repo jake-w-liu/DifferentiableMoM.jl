@@ -697,5 +697,45 @@ println("\n── Test 42: PeriodicMetrics ──")
         # θ_r = acos(kz/k) = acos(√3/2) = 30° = π/6
         @test m00.theta_r ≈ π / 6 rtol=1e-10
     end
+
+    # ── B: Power balance residual bookkeeping ──
+    @testset "B: Power balance residual bookkeeping" begin
+        modes = floquet_modes(k_pm, lat_pm; N_orders=1)
+        R = zeros(ComplexF64, length(modes))
+        # Put all reflected power into the specular mode for a simple check
+        idx00 = findfirst(m -> (m.m == 0 && m.n == 0), modes)
+        @test idx00 !== nothing
+        R[idx00] = 0.5 + 0im
+
+        I_test = ComplexF64[1.0 + 0im, 2.0 + 0im]
+        Z_pen = ComplexF64[2.0 0.0; 0.0 3.0]  # positive real penalty
+        pb = power_balance(I_test, Z_pen, dx_pm * dy_pm, k_pm, modes, R)
+
+        @test pb.P_inc > 0
+        @test pb.P_refl ≥ 0
+        @test pb.P_abs ≥ 0
+        @test pb.P_resid ≈ pb.P_inc - pb.P_refl - pb.P_abs atol=1e-15 rtol=1e-14
+        @test pb.resid_frac ≈ 1 - pb.refl_frac - pb.abs_frac atol=1e-15 rtol=1e-14
+    end
+
+    # ── B: Specular objective kwargs/defaults ──
+    @testset "B: Specular objective kwargs/defaults" begin
+        mesh_q = make_rect_plate(dx_pm, dy_pm, 2, 2)
+        rwg_q = build_rwg(mesh_q; precheck=false)
+        grid_q = make_sph_grid(6, 12)
+
+        Q_default = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm)
+        Q_explicit = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                            half_angle=π/18, polarization=:x)
+        @test size(Q_default) == (rwg_q.nedges, rwg_q.nedges)
+        @test Q_default ≈ Q_explicit rtol=1e-13 atol=1e-13
+
+        Q_narrow = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                          half_angle=5π/180, polarization=:x)
+        @test size(Q_narrow) == size(Q_default)
+
+        @test_throws ErrorException specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                                           polarization=:y)
+    end
 end
 println("  PASS ✓")
