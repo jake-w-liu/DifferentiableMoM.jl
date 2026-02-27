@@ -15,18 +15,14 @@ using StaticArrays
 using Statistics
 using CSV, DataFrames
 using PlotlySupply
+using PlotlyKaleido
+PlotlyKaleido.start(mathjax=false)
 
 const PKG_DIR  = dirname(@__DIR__)
 const DATA_DIR = joinpath(PKG_DIR, "..", "data")
 const FIG_DIR  = joinpath(PKG_DIR, "..", "figures")
 mkpath(DATA_DIR)
 mkpath(FIG_DIR)
-
-# Delay before each figure save to let MathJax fully load in Kaleido
-function delayed_savefig(args...; kwargs...)
-    sleep(5)
-    savefig(args...; kwargs...)
-end
 
 println("=" ^ 70)
 println("  Mesh Convergence for Final Periodic TO Metrics (TAP Upgrade)")
@@ -240,7 +236,7 @@ fig_conv = plot_scatter(
     title="Mesh convergence of final optimized headline metrics",
     width=620, height=420, fontsize=14)
 set_legend!(fig_conv; position=:bottomleft)
-delayed_savefig(fig_conv, joinpath(FIG_DIR, "fig_results_mesh_convergence.pdf"))
+savefig(fig_conv, joinpath(FIG_DIR, "fig_results_mesh_convergence.pdf"))
 println("  ✓ Fig: figures/fig_results_mesh_convergence.pdf")
 
 # Supplementary plot: power-fraction convergence (table is primary in paper)
@@ -257,7 +253,7 @@ fig_pb = plot_scatter(
     title="Mesh convergence of optimized power-balance fractions (supplementary)",
     width=620, height=420, fontsize=14)
 set_legend!(fig_pb; position=:topright)
-delayed_savefig(fig_pb, joinpath(FIG_DIR, "fig_supp_mesh_convergence_power.pdf"))
+savefig(fig_pb, joinpath(FIG_DIR, "fig_supp_mesh_convergence_power.pdf"))
 println("  ✓ Supp: figures/fig_supp_mesh_convergence_power.pdf")
 
 println("\n" * "=" ^ 70)

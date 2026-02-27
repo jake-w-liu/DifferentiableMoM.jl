@@ -13,6 +13,8 @@ using Statistics
 using Random
 using CSV, DataFrames
 using PlotlySupply
+using PlotlyKaleido
+PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(42)
 
@@ -21,12 +23,6 @@ const DATA_DIR = joinpath(PKG_DIR, "..", "data")
 const FIG_DIR  = joinpath(PKG_DIR, "..", "figures")
 mkpath(DATA_DIR)
 mkpath(FIG_DIR)
-
-# Delay before each figure save to let MathJax fully load in Kaleido
-function delayed_savefig(args...; kwargs...)
-    sleep(5)
-    savefig(args...; kwargs...)
-end
 
 println("=" ^ 70)
 println("  Periodic Metasurface Topology Optimization — RCS Reduction Demo")
@@ -498,7 +494,7 @@ fig1a = plot_scatter(
     yscale="log", yrange=[-16, 0],
     title="(a) Ewald convergence",
     width=500, height=380, fontsize=14)
-delayed_savefig(fig1a, joinpath(FIG_DIR, "fig_results_ewald_convergence.pdf"))
+savefig(fig1a, joinpath(FIG_DIR, "fig_results_ewald_convergence.pdf"))
 
 fig1b = plot_scatter(
     collect(Float64, efie_df.d_over_lambda), collect(Float64, efie_df.rel_diff_efie);
@@ -508,7 +504,7 @@ fig1b = plot_scatter(
     xscale="log", yscale="log",
     title="(b) Periodic EFIE → free-space",
     width=500, height=380, fontsize=14)
-delayed_savefig(fig1b, joinpath(FIG_DIR, "fig_results_efie_convergence.pdf"))
+savefig(fig1b, joinpath(FIG_DIR, "fig_results_efie_convergence.pdf"))
 println("  ✓ Fig 1: Validation plots")
 
 # --- Fig 2: Gradient verification scatter ---
@@ -528,7 +524,7 @@ fig2 = plot_scatter(
     title="Gradient verification ($Nt triangles)",
     width=480, height=440, fontsize=14)
 set_legend!(fig2; position=:topleft)
-delayed_savefig(fig2, joinpath(FIG_DIR, "fig_results_gradient_verification.pdf"))
+savefig(fig2, joinpath(FIG_DIR, "fig_results_gradient_verification.pdf"))
 println("  ✓ Fig 2: Gradient scatter plot")
 
 # --- Fig 3: Optimization convergence ---
@@ -545,7 +541,7 @@ fig3 = plot_scatter(x_segs, y_segs;
     title="Optimization convergence",
     width=550, height=400, fontsize=14)
 set_legend!(fig3; position=:topleft)
-delayed_savefig(fig3, joinpath(FIG_DIR, "fig_results_convergence.pdf"))
+savefig(fig3, joinpath(FIG_DIR, "fig_results_convergence.pdf"))
 println("  ✓ Fig 3: Convergence")
 
 # --- Fig 4: Topology snapshots ---
@@ -579,7 +575,7 @@ for (label, bkey) in snap_labels
         xlabel="Cell x", ylabel="Cell y",
         zrange=[0, 1], colorscale="Greys",
         width=400, height=400, fontsize=18, equalar=true)
-    delayed_savefig(fig, joinpath(FIG_DIR, "fig_results_topology_$(label).pdf"))
+    savefig(fig, joinpath(FIG_DIR, "fig_results_topology_$(label).pdf"))
 end
 
 println("  ✓ Fig 4: Topology snapshots (individual, equalar=true)")
@@ -593,7 +589,7 @@ fig5a = plot_scatter(
     title="(a) Filter radius sensitivity",
     width=500, height=380, fontsize=14)
 set_legend!(fig5a; position=:topleft)
-delayed_savefig(fig5a, joinpath(FIG_DIR, "fig_results_parametric_rmin.pdf"))
+savefig(fig5a, joinpath(FIG_DIR, "fig_results_parametric_rmin.pdf"))
 
 fig5b = plot_scatter(
     collect(results_beta.beta_max), collect(results_beta.reduction_dB);
@@ -604,7 +600,7 @@ fig5b = plot_scatter(
     title="(b) Continuation schedule sensitivity",
     width=500, height=380, fontsize=14)
 set_legend!(fig5b; position=:topleft)
-delayed_savefig(fig5b, joinpath(FIG_DIR, "fig_results_parametric_beta.pdf"))
+savefig(fig5b, joinpath(FIG_DIR, "fig_results_parametric_beta.pdf"))
 
 println("  ✓ Fig 5: Parametric studies (individual)")
 
@@ -623,7 +619,7 @@ fig6 = plot_scatter(
     xrange=[0.0, 75.0], yrange=[0.0, 1.02],
     width=550, height=400, fontsize=14)
 set_legend!(fig6; position=:topright)
-delayed_savefig(fig6, joinpath(FIG_DIR, "fig_results_r00_angle_sweep.pdf"))
+savefig(fig6, joinpath(FIG_DIR, "fig_results_r00_angle_sweep.pdf"))
 for stale in (
     joinpath(FIG_DIR, "fig_results_rcs_comparison.pdf"),
     joinpath(FIG_DIR, "fig_results_r00_frequency_sweep.pdf"),
@@ -651,7 +647,7 @@ fig7 = plot_scatter(
     xrange=[0.5, 2.5],
     width=500, height=400, fontsize=14)
 set_legend!(fig7; position=:bottomleft)
-delayed_savefig(fig7, joinpath(FIG_DIR, "fig_supp_power_balance.pdf"))
+savefig(fig7, joinpath(FIG_DIR, "fig_supp_power_balance.pdf"))
 legacy_pb = joinpath(FIG_DIR, "fig_results_power_balance.pdf")
 isfile(legacy_pb) && rm(legacy_pb; force=true)
 println("  ✓ Supplementary Fig: Power balance (table is primary in paper)")

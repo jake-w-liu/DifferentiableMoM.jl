@@ -24,6 +24,8 @@ using Statistics
 using Random
 using CSV, DataFrames
 using PlotlySupply
+using PlotlyKaleido
+PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(42)
 
@@ -32,12 +34,6 @@ const DATA_DIR = joinpath(PKG_DIR, "..", "data")
 const FIG_DIR = joinpath(PKG_DIR, "..", "figures")
 mkpath(DATA_DIR)
 mkpath(FIG_DIR)
-
-# Delay before each figure save to let MathJax fully load in Kaleido
-function delayed_savefig(args...; kwargs...)
-    sleep(5)
-    savefig(args...; kwargs...)
-end
 
 println("=" ^ 60)
 println("  Periodic MoM + Topology Optimization — Heuristic Validation")
@@ -93,7 +89,7 @@ fig_conv = plot_scatter(
     ylabel="Error vs reference",
     yscale="log", yrange=[-16, 0],
     width=500, height=400, fontsize=12)
-delayed_savefig(fig_conv, joinpath(FIG_DIR, "heuristic_ewald_convergence.pdf"))
+savefig(fig_conv, joinpath(FIG_DIR, "heuristic_ewald_convergence.pdf"))
 println("  ✓ Saved: figures/heuristic_ewald_convergence.pdf")
 
 # ─────────────────────────────────────────────────────────────────
@@ -215,7 +211,7 @@ fig_large_greens = plot_scatter(
     xlabel="d / λ", ylabel="|ΔG|",
     xscale="log",
     width=500, height=400, fontsize=12)
-delayed_savefig(fig_large_greens, joinpath(FIG_DIR, "heuristic_ewald_large_period_greens.pdf"))
+savefig(fig_large_greens, joinpath(FIG_DIR, "heuristic_ewald_large_period_greens.pdf"))
 println("  ✓ Saved: figures/heuristic_ewald_large_period_greens.pdf")
 
 fig_large_efie = plot_scatter(
@@ -227,7 +223,7 @@ fig_large_efie = plot_scatter(
     xlabel="d / λ", ylabel="Relative difference",
     xscale="log", yscale="log",
     width=500, height=400, fontsize=12)
-delayed_savefig(fig_large_efie, joinpath(FIG_DIR, "heuristic_ewald_large_period_efie.pdf"))
+savefig(fig_large_efie, joinpath(FIG_DIR, "heuristic_ewald_large_period_efie.pdf"))
 println("  ✓ Saved: figures/heuristic_ewald_large_period_efie.pdf")
 
 # ─────────────────────────────────────────────────────────────────
@@ -320,7 +316,7 @@ fig_ei = let
         yscale="log", yrange=[-16, 0],
         width=550, height=400, fontsize=12)
 end
-delayed_savefig(fig_ei, joinpath(FIG_DIR, "heuristic_E_independence.pdf"))
+savefig(fig_ei, joinpath(FIG_DIR, "heuristic_E_independence.pdf"))
 println("  ✓ Saved: figures/heuristic_E_independence.pdf")
 
 # ─────────────────────────────────────────────────────────────────

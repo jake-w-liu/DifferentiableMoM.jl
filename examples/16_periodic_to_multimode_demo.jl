@@ -15,6 +15,8 @@ using Statistics
 using Random
 using CSV, DataFrames
 using PlotlySupply
+using PlotlyKaleido
+PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(4242)
 
@@ -23,12 +25,6 @@ const DATA_DIR = joinpath(PKG_DIR, "..", "data")
 const FIG_DIR  = joinpath(PKG_DIR, "..", "figures")
 mkpath(DATA_DIR)
 mkpath(FIG_DIR)
-
-# Delay before each figure save to let MathJax fully load in Kaleido
-function delayed_savefig(args...; kwargs...)
-    sleep(5)
-    savefig(args...; kwargs...)
-end
 
 println("=" ^ 70)
 println("  Periodic TO Demo (Multi-Mode Unit Cell, TAP Upgrade)")
@@ -382,7 +378,7 @@ fig_modes = plot_scatter(
     title="Multi-mode Floquet amplitudes (d = 1.2λ)",
     width=620, height=420, fontsize=14)
 set_legend!(fig_modes; position=:topright)
-delayed_savefig(fig_modes, joinpath(FIG_DIR, "fig_results_multimode_floquet.pdf"))
+savefig(fig_modes, joinpath(FIG_DIR, "fig_results_multimode_floquet.pdf"))
 
 # Optional topology visualization (can be main or supplementary)
 G_top = density_to_grid(rho_bar_final, centroids, Nx, Ny, dx_cell, dy_cell)
@@ -390,7 +386,7 @@ fig_top = plot_heatmap(collect(1:Nx), collect(1:Ny), G_top;
     xlabel="Cell x", ylabel="Cell y",
     zrange=[0, 1], colorscale="Greys",
     width=440, height=420, fontsize=16, equalar=true)
-delayed_savefig(fig_top, joinpath(FIG_DIR, "fig_results_multimode_topology.pdf"))
+savefig(fig_top, joinpath(FIG_DIR, "fig_results_multimode_topology.pdf"))
 
 # Supplementary convergence trace
 betas_uniq = unique(trace.beta)
@@ -406,7 +402,7 @@ fig_conv = plot_scatter(x_segs, y_segs;
     title="Multi-mode optimization convergence (supplementary)",
     width=620, height=420, fontsize=14)
 set_legend!(fig_conv; position=:topleft)
-delayed_savefig(fig_conv, joinpath(FIG_DIR, "fig_supp_multimode_convergence.pdf"))
+savefig(fig_conv, joinpath(FIG_DIR, "fig_supp_multimode_convergence.pdf"))
 
 println("  ✓ Fig: figures/fig_results_multimode_floquet.pdf")
 println("  ✓ Fig: figures/fig_results_multimode_topology.pdf")
