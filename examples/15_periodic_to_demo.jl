@@ -101,12 +101,14 @@ for i in prop_idx_pec
     println("    ($(m.m),$(m.n)): R = $(round(R_pec[i], sigdigits=4)), |R| = $(round(abs(R_pec[i]), sigdigits=4))")
 end
 
-# Power balance for PEC
+# Power balance for PEC (closure-based transmission estimate)
 Z_pen_pec = assemble_Z_penalty(Mt, rho_bar_pec, config)
-pb_pec = power_balance(Vector{ComplexF64}(I_pec), Z_pen_pec, dx_cell * dy_cell, k, modes_pec, R_pec)
+pb_pec = power_balance(Vector{ComplexF64}(I_pec), Z_pen_pec, dx_cell * dy_cell, k, modes_pec, R_pec;
+                       transmission=:closure)
 println("  Power balance (PEC): P_refl/P_inc=$(round(100*pb_pec.refl_frac, digits=1))%, " *
         "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%, " *
-        "P_resid/P_inc=$(round(100*pb_pec.resid_frac, digits=1))%")
+        "P_trans/P_inc=$(round(100*pb_pec.trans_frac, digits=1))%, " *
+        "P_resid/P_inc=$(round(100*pb_pec.resid_frac, digits=2))%")
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Section 3: L-BFGS Optimization with Beta Continuation
@@ -376,14 +378,17 @@ println("  ✓ Saved: data/results_r00_angle_sweep.csv")
 # ═══════════════════════════════════════════════════════════════════════════
 
 println("\n▸ Power Balance Analysis")
-pb_opt = power_balance(Vector{ComplexF64}(I_opt), Z_pen_opt, dx_cell * dy_cell, k, modes_opt, R_opt)
+pb_opt = power_balance(Vector{ComplexF64}(I_opt), Z_pen_opt, dx_cell * dy_cell, k, modes_opt, R_opt;
+                       transmission=:closure)
 
 println("  PEC:       P_refl/P_inc=$(round(100*pb_pec.refl_frac, digits=1))%, " *
         "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%, " *
-        "P_resid/P_inc=$(round(100*pb_pec.resid_frac, digits=1))%")
+        "P_trans/P_inc=$(round(100*pb_pec.trans_frac, digits=1))%, " *
+        "P_resid/P_inc=$(round(100*pb_pec.resid_frac, digits=2))%")
 println("  Optimized: P_refl/P_inc=$(round(100*pb_opt.refl_frac, digits=1))%, " *
         "P_abs/P_inc=$(round(100*pb_opt.abs_frac, digits=1))%, " *
-        "P_resid/P_inc=$(round(100*pb_opt.resid_frac, digits=1))%")
+        "P_trans/P_inc=$(round(100*pb_opt.trans_frac, digits=1))%, " *
+        "P_resid/P_inc=$(round(100*pb_opt.resid_frac, digits=2))%")
 println("  |R₀₀|² reduction: $(round(10*log10(abs(R_opt[prop_idx_opt[1]])^2 / abs(R_pec[prop_idx_opt[1]])^2), digits=2)) dB")
 
 pb_df = DataFrame(
@@ -391,9 +396,11 @@ pb_df = DataFrame(
     P_inc=[pb_pec.P_inc, pb_opt.P_inc],
     P_refl=[pb_pec.P_refl, pb_opt.P_refl],
     P_abs=[pb_pec.P_abs, pb_opt.P_abs],
+    P_trans=[pb_pec.P_trans, pb_opt.P_trans],
     P_resid=[pb_pec.P_resid, pb_opt.P_resid],
     refl_frac=[pb_pec.refl_frac, pb_opt.refl_frac],
     abs_frac=[pb_pec.abs_frac, pb_opt.abs_frac],
+    trans_frac=[pb_pec.trans_frac, pb_opt.trans_frac],
     resid_frac=[pb_pec.resid_frac, pb_opt.resid_frac],
     R00_abs=[abs(R_pec[prop_idx_opt[1]]), abs(R_opt[prop_idx_opt[1]])])
 CSV.write(joinpath(DATA_DIR, "results_power_balance.csv"), pb_df)
@@ -632,16 +639,17 @@ println("  ✓ Fig 6: Periodic |R00| angle sweep (10 GHz, TE)")
 
 # --- Supplementary Fig: Power budget comparison (PEC vs Optimized) ---
 pb_data = CSV.read(joinpath(DATA_DIR, "results_power_balance.csv"), DataFrame)
-# Bar chart: reflected and absorbed power as % of P_inc
+# Bar chart: reflected, absorbed, and transmitted power as % of P_inc
 refl_pct = pb_data.refl_frac .* 100
 abs_pct = pb_data.abs_frac .* 100
+trans_pct = pb_data.trans_frac .* 100
 fig7 = plot_scatter(
-    [Float64[1, 2], Float64[1, 2]],
-    [refl_pct, abs_pct];
-    mode=["markers", "markers"],
-    marker_size=[16, 16],
-    legend=["Reflected (%)", "Absorbed (%)"],
-    color=["#1f77b4", "#d62728"],
+    [Float64[1, 2], Float64[1, 2], Float64[1, 2]],
+    [refl_pct, abs_pct, trans_pct];
+    mode=["markers", "markers", "markers"],
+    marker_size=[16, 16, 16],
+    legend=["Reflected (%)", "Absorbed (%)", "Transmitted (%)"],
+    color=["#1f77b4", "#d62728", "#2ca02c"],
     xlabel="", ylabel="Fraction of incident power (%)",
     title="Power budget: PEC vs Optimized",
     xrange=[0.5, 2.5],
@@ -666,8 +674,9 @@ R00_dB = 20 * log10(R00_opt / R00_pec)
 println("  |R₀₀|: PEC=$(round(R00_pec, sigdigits=4)) → opt=$(round(R00_opt, sigdigits=4)) ($(round(R00_dB, digits=1)) dB)")
 println("  Reflected:   PEC=$(round(100*pb_pec.refl_frac, digits=1))%, opt=$(round(100*pb_opt.refl_frac, digits=1))%")
 println("  Absorbed:    PEC=$(round(100*pb_pec.abs_frac, digits=1))%, opt=$(round(100*pb_opt.abs_frac, digits=1))%")
-println("  Residual*:   PEC=$(round(100*pb_pec.resid_frac, digits=1))%, opt=$(round(100*pb_opt.resid_frac, digits=1))%")
-println("    *Residual = 1 - reflected - absorbed (not explicitly decomposed into transmission here)")
+println("  Transmitted: PEC=$(round(100*pb_pec.trans_frac, digits=1))%, opt=$(round(100*pb_opt.trans_frac, digits=1))%")
+println("  Residual*:   PEC=$(round(100*pb_pec.resid_frac, digits=2))%, opt=$(round(100*pb_opt.resid_frac, digits=2))%")
+println("    *Residual = 1 - reflected - absorbed - transmitted (numerical closure error)")
 println("  Final volume fraction:  $(round(mean(rho_bar_final), digits=3))")
 println("  Binary fraction:        $(round(100*count(x -> x < 0.05 || x > 0.95, rho_bar_final)/Nt, digits=1))%")
 println("  Gradient max rel error: $(round(maximum(rel_err_gv), sigdigits=3))")

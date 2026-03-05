@@ -76,6 +76,9 @@ Construct RWG basis functions on the mesh, then assemble the EFIE system matrix 
 - **Impedance loading:** `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_dZ_dtheta`, `assemble_full_Z`
   Add surface impedance loading for design optimization. See [assembly-solve.md](assembly-solve.md).
 
+- **Periodic kernels and EFIE:** `PeriodicLattice`, `greens_periodic_correction`, `assemble_Z_efie_periodic`
+  Build periodic unit-cell operators with Ewald-accelerated Green's correction. See [periodic-methods.md](periodic-methods.md).
+
 - **Composite operator:** `ImpedanceLoadedOperator`
   Matrix-free operator wrapping any `AbstractMatrix{ComplexF64}` base (MLFMA, ACA, dense) with sparse impedance perturbation `Z(theta) = Z_base - Sigma_p theta_p M_p`. Enables GMRES-based optimization with fast operators. See [composite-operators.md](composite-operators.md).
 
@@ -140,6 +143,9 @@ Validate simulation results and compute scattering cross sections.
 - **Analytical reference:** `mie_s1s2_pec`, `mie_bistatic_rcs_pec`
   Mie series for PEC sphere scattering; use as a validation reference for your MoM results.
 
+- **Periodic Floquet metrics:** `FloquetMode`, `floquet_modes`, `reflection_coefficients`, `transmission_coefficients`, `specular_rcs_objective`, `power_balance`
+  Post-process periodic unit-cell responses into Floquet coefficients and power accounting. See [periodic-methods.md](periodic-methods.md).
+
 ### 4b) Physical Optics
 
 High-frequency approximate solver for electrically large problems where full MoM is too expensive.
@@ -166,6 +172,9 @@ Compute gradients via the adjoint method and run impedance optimization.
 - **Conditioning helpers:** `make_mass_regularizer`, `make_left_preconditioner`, `select_preconditioner`, `transform_patch_matrices`, `prepare_conditioned_system`
   Advanced: mass-based preconditioning and regularization for ill-conditioned optimization problems.
 
+- **Density topology optimization:** `DensityConfig`, `precompute_triangle_mass`, `assemble_Z_penalty`, `assemble_dZ_drhobar`, `build_filter_weights`, `apply_filter`, `apply_filter_transpose`, `heaviside_project`, `heaviside_derivative`, `filter_and_project`, `gradient_chain_rule`, `gradient_density`, `gradient_density_full`
+  End-to-end density interpolation, filtering/projection, and adjoint gradients with respect to raw densities. See [density-topology.md](density-topology.md).
+
 ### 6) Verification and Visualization
 
 Check gradient correctness and visualize meshes.
@@ -188,12 +197,14 @@ For a first read-through of the API documentation, follow this order:
 4. **[aca-workflow.md](aca-workflow.md)** — ACA H-matrix compression, cluster trees, and the `solve_scattering` high-level workflow
 5. **[octree.md](octree.md)** and **[mlfma.md](mlfma.md)** — Octree spatial decomposition and MLFMA O(N log N) fast solver
 6. **[farfield-rcs.md](farfield-rcs.md)** — Far-field patterns, Q-matrices, `direction_mask`, RCS, and Mie validation
-7. **[composite-operators.md](composite-operators.md)** — `ImpedanceLoadedOperator` for fast-operator optimization
-8. **[spatial-patches.md](spatial-patches.md)** — Automatic spatial patch assignment
-9. **[adjoint-optimize.md](adjoint-optimize.md)** — Adjoint gradients, L-BFGS optimization, and multi-angle RCS
-10. **[verification.md](verification.md)** — Gradient correctness checks
-11. **[excitation.md](excitation.md)** — Extended excitation system (plane waves, ports, dipoles, imported fields, pattern feeds)
-12. **[physical-optics.md](physical-optics.md)** — Physical Optics high-frequency approximate solver
+7. **[periodic-methods.md](periodic-methods.md)** — `PeriodicLattice`, periodic EFIE assembly, Floquet metrics, and periodic power balance
+8. **[composite-operators.md](composite-operators.md)** — `ImpedanceLoadedOperator` for fast-operator optimization
+9. **[spatial-patches.md](spatial-patches.md)** — Automatic spatial patch assignment
+10. **[adjoint-optimize.md](adjoint-optimize.md)** — Adjoint gradients, L-BFGS optimization, and multi-angle RCS
+11. **[density-topology.md](density-topology.md)** — Density interpolation, filtering/projection, and density adjoint gradients
+12. **[verification.md](verification.md)** — Gradient correctness checks
+13. **[excitation.md](excitation.md)** — Extended excitation system (plane waves, ports, dipoles, imported fields, pattern feeds)
+14. **[physical-optics.md](physical-optics.md)** — Physical Optics high-frequency approximate solver
 
 ---
 
@@ -202,9 +213,4 @@ For a first read-through of the API documentation, follow this order:
 - All exported function names and signatures listed here are stable for current tutorial and validation workflows.
 - Internal helper methods in `src/` may evolve; rely on the exported API for forward compatibility.
 
----
 
-## Exercises
-
-- **Basic:** Trace one example script (e.g., `examples/01_pec_plate_basics.jl`) and classify every called function into one of the workflow groups above.
-- **Challenge:** Replace a manual matrix solve (`Z \ v`) in a script with `prepare_conditioned_system` + `solve_system` while preserving the output.

@@ -716,6 +716,24 @@ println("\n── Test 42: PeriodicMetrics ──")
         @test pb.P_abs ≥ 0
         @test pb.P_resid ≈ pb.P_inc - pb.P_refl - pb.P_abs atol=1e-15 rtol=1e-14
         @test pb.resid_frac ≈ 1 - pb.refl_frac - pb.abs_frac atol=1e-15 rtol=1e-14
+
+        # Closure-based transmission estimate
+        pb_closure = power_balance(I_test, Z_pen, dx_pm * dy_pm, k_pm, modes, R;
+                                   transmission=:closure)
+        @test pb_closure.P_trans ≥ 0
+        @test pb_closure.P_resid ≈ pb_closure.P_inc - pb_closure.P_refl - pb_closure.P_abs - pb_closure.P_trans atol=1e-15 rtol=1e-14
+        @test pb_closure.trans_frac ≥ 0
+        @test pb_closure.resid_frac ≈ 1 - pb_closure.refl_frac - pb_closure.abs_frac - pb_closure.trans_frac atol=1e-15 rtol=1e-14
+
+        # Floquet transmission mode with inferred T coefficients
+        T = transmission_coefficients(modes, R)
+        @test length(T) == length(R)
+        @test T[idx00] ≈ 1 - R[idx00] atol=1e-14
+
+        pb_floquet = power_balance(I_test, Z_pen, dx_pm * dy_pm, k_pm, modes, R;
+                                   transmission=:floquet)
+        @test pb_floquet.P_trans ≥ 0
+        @test pb_floquet.P_resid ≈ pb_floquet.P_inc - pb_floquet.P_refl - pb_floquet.P_abs - pb_floquet.P_trans atol=1e-15 rtol=1e-14
     end
 
     # ── B: Specular objective kwargs/defaults ──

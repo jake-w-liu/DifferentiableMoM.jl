@@ -15,7 +15,7 @@
 #   where J̃_mn = (1/A) ∫_cell J(r') exp(i κ_t·r') dS'
 #   For PEC at normal incidence: R₀₀ = -1 (verified).
 
-export floquet_modes, reflection_coefficients, specular_rcs_objective
+export floquet_modes, reflection_coefficients, transmission_coefficients, specular_rcs_objective
 export power_balance
 export FloquetMode
 
@@ -154,20 +154,56 @@ function reflection_coefficients(mesh::TriMesh, rwg::RWGData,
 end
 
 """
-    power_balance(I_coeffs, Z_pen, A_cell, k, modes, R_coeffs; eta0=376.730313668, E0=1.0)
+    transmission_coefficients(modes, R_coeffs; incident_order=(0, 0))
+
+Compute transmitted Floquet amplitudes from reflection amplitudes for a free-standing
+electric-current sheet model in identical media above and below the sheet.
+
+Convention used in this code path:
+- Incident order `(m,n) = incident_order` has total transmitted amplitude
+  `T = 1 - R` (incident + forward-scattered field).
+- Non-incident orders are purely scattered, with `T = -R`.
+  (Only power is used downstream, so the sign does not affect mode power fractions.)
+"""
+function transmission_coefficients(modes::Vector{FloquetMode},
+                                   R_coeffs::Vector{ComplexF64};
+                                   incident_order::Tuple{Int,Int}=(0, 0))
+    length(modes) == length(R_coeffs) ||
+        throw(DimensionMismatch("modes length ($(length(modes))) != R_coeffs length ($(length(R_coeffs)))"))
+
+    T_coeffs = similar(R_coeffs)
+    m_inc, n_inc = incident_order
+    for (i, mode) in enumerate(modes)
+        if mode.m == m_inc && mode.n == n_inc
+            T_coeffs[i] = 1 - R_coeffs[i]
+        else
+            T_coeffs[i] = -R_coeffs[i]
+        end
+    end
+    return T_coeffs
+end
+
+"""
+    power_balance(I_coeffs, Z_pen, A_cell, k, modes, R_coeffs;
+                  eta0=376.730313668, E0=1.0,
+                  transmission=:none, T_coeffs=nothing, incident_order=(0, 0))
 
 Compute the power balance for a periodic metasurface unit cell.
 
 Returns a NamedTuple:
-`(P_inc, P_refl, P_abs, P_resid, refl_frac, abs_frac, resid_frac)`
+`(P_inc, P_refl, P_abs, P_trans, P_resid, refl_frac, abs_frac, trans_frac, resid_frac)`
 
 - P_inc:   incident power through the unit cell = |E₀|² A / (2η₀)
 - P_refl:  reflected power = Σ_mn |R_mn|² (kz_mn/k) P_inc  [propagating modes]
 - P_abs:   absorbed by SIMP penalty impedance = ½ Re(I† Z_pen I)
-- P_resid: residual power = P_inc - P_refl - P_abs
-           (not explicitly decomposed into transmission/other channels here)
+- P_trans: transmitted power (depends on `transmission` mode)
+  - `:none`: 0 (legacy behavior)
+  - `:closure`: `max(P_inc - P_refl - P_abs, 0)` (conservation-based estimate)
+  - `:floquet`: Σ_mn |T_mn|² (kz_mn/k) P_inc using `T_coeffs` or inferred from `R`
+- P_resid: residual power = P_inc - P_refl - P_abs - P_trans
 - refl_frac: P_refl / P_inc
 - abs_frac:  P_abs / P_inc
+- trans_frac: P_trans / P_inc
 - resid_frac: P_resid / P_inc
 """
 function power_balance(I_coeffs::Vector{<:Number},
@@ -177,7 +213,10 @@ function power_balance(I_coeffs::Vector{<:Number},
                        modes::Vector{FloquetMode},
                        R_coeffs::Vector{ComplexF64};
                        eta0::Float64=376.730313668,
-                       E0::Float64=1.0)
+                       E0::Float64=1.0,
+                       transmission::Symbol=:none,
+                       T_coeffs::Union{Nothing,Vector{ComplexF64}}=nothing,
+                       incident_order::Tuple{Int,Int}=(0, 0))
     P_inc = abs(E0)^2 * A_cell / (2 * eta0)
 
     # Reflected power from Floquet modes
@@ -192,13 +231,38 @@ function power_balance(I_coeffs::Vector{<:Number},
     # Power absorbed by SIMP penalty impedance
     P_abs = 0.5 * real(dot(I_coeffs, Z_pen * I_coeffs))
 
+    # Transmitted power
+    P_trans = 0.0
+    if transmission == :none
+        P_trans = 0.0
+    elseif transmission == :closure
+        # Conservation-based transmission estimate from unaccounted non-absorbed power.
+        P_trans = clamp(P_inc - P_refl - P_abs, 0.0, P_inc)
+    elseif transmission == :floquet
+        Tc = isnothing(T_coeffs) ?
+            transmission_coefficients(modes, R_coeffs; incident_order=incident_order) :
+            T_coeffs
+        length(Tc) == length(modes) ||
+            throw(DimensionMismatch("T_coeffs length ($(length(Tc))) != modes length ($(length(modes)))"))
+
+        for (i, mode) in enumerate(modes)
+            if mode.propagating
+                P_trans += abs2(Tc[i]) * real(mode.kz) / k
+            end
+        end
+        P_trans *= P_inc
+    else
+        error("Unknown transmission mode: $transmission (expected :none, :closure, or :floquet)")
+    end
+
     refl_frac = P_refl / P_inc
     abs_frac = P_abs / P_inc
-    P_resid = P_inc - P_refl - P_abs
+    trans_frac = P_trans / P_inc
+    P_resid = P_inc - P_refl - P_abs - P_trans
     resid_frac = P_resid / P_inc
 
-    return (P_inc=P_inc, P_refl=P_refl, P_abs=P_abs, P_resid=P_resid,
-            refl_frac=refl_frac, abs_frac=abs_frac, resid_frac=resid_frac)
+    return (P_inc=P_inc, P_refl=P_refl, P_abs=P_abs, P_trans=P_trans, P_resid=P_resid,
+            refl_frac=refl_frac, abs_frac=abs_frac, trans_frac=trans_frac, resid_frac=resid_frac)
 end
 
 """
