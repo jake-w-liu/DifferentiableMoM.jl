@@ -43,13 +43,23 @@ makedocs(
             "Optimization Workflow" => "differentiable-design/04-optimization-workflow.md",
             "Multi-Angle RCS" => "differentiable-design/05-multiangle-rcs.md",
         ],
-        "Part IV — Validation" => [
+        "Part IV — Methods" => [
+            "GMRES and Near-Field Preconditioning" => "methods/01-gmres-and-nf-preconditioning.md",
+            "ACA H-Matrix Compression" => "methods/02-aca-hmatrix-compression.md",
+            "Physical Optics" => "methods/03-physical-optics.md",
+            "Matrix-Free Operators" => "methods/04-matrix-free-operators.md",
+            "solve_scattering Workflow" => "methods/05-solve-scattering-workflow.md",
+            "MLFMA" => "methods/06-mlfma.md",
+            "Periodic EFIE and Floquet Metrics" => "methods/07-periodic-efie-and-floquet-metrics.md",
+            "Density Topology Optimization" => "methods/08-density-topology-optimization.md",
+        ],
+        "Part V — Validation" => [
             "Internal Consistency" => "validation/01-internal-consistency.md",
             "Gradient Verification" => "validation/02-gradient-verification.md",
             "Bempp Cross-Validation" => "validation/03-bempp-cross-validation.md",
             "Sphere-vs-Mie Benchmark" => "validation/04-sphere-mie-benchmark.md",
         ],
-        "Part V — Advanced Workflows" => [
+        "Part VI — Advanced Workflows" => [
             "Complex OBJ Platforms" => "advanced/01-complex-obj-platforms.md",
             "Large-Problem Strategy" => "advanced/02-large-problem-strategy.md",
             "Robustness Studies" => "advanced/03-robustness-studies.md",

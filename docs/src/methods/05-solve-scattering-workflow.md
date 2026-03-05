@@ -361,4 +361,4 @@ Write a frequency sweep (1--10 GHz, 20 points) using both `solve_scattering` and
 
 ---
 
-*Next: "Adjoint Method and Gradient Computation" -- derives the adjoint equation for EFIE impedance optimization and shows how `solve_scattering` results feed into the gradient pipeline.*
+*Next: [Multi-Level Fast Multipole Algorithm (MLFMA)](06-mlfma.md) introduces the large-scale hierarchical acceleration path used when `solve_scattering` selects `method=:mlfma`.*

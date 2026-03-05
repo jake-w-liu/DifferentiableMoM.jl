@@ -403,4 +403,4 @@ Implement a frequency sweep (0.1--1.0 GHz) with MLFMA. At each frequency, rebuil
 
 ---
 
-*Next: "Automatic Differentiation and Adjoint Methods" -- extends MLFMA to differentiable optimization workflows with impedance sensitivities.*
+*Next: [Periodic EFIE and Floquet Metrics](07-periodic-efie-and-floquet-metrics.md) covers Ewald-periodic assembly and Floquet postprocessing for periodic unit-cell workflows.*

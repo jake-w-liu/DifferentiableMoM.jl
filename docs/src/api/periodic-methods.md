@@ -169,7 +169,7 @@ Compute complex reflection coefficients for propagating Floquet modes by integra
 
 **Returns:** `(modes, R_coeffs)`:
 - `modes::Vector{FloquetMode}`
-- `R_coeffs::Vector{ComplexF64}` with the same length/order as `modes`
+- `R_coeffs::Vector{ComplexF64}` with the same length/order as `modes` (evanescent-mode entries remain zero)
 
 ---
 

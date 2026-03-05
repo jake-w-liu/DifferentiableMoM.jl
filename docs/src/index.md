@@ -41,6 +41,9 @@ This documentation is intentionally structured for readers with basic electromag
   - [Physical Optics](methods/03-physical-optics.md)
   - [Matrix-Free Operators](methods/04-matrix-free-operators.md)
   - [solve_scattering Workflow](methods/05-solve-scattering-workflow.md)
+  - [MLFMA](methods/06-mlfma.md)
+  - [Periodic EFIE and Floquet Metrics](methods/07-periodic-efie-and-floquet-metrics.md)
+  - [Density Topology Optimization Implementation](methods/08-density-topology-optimization.md)
 - **Part V — Validation**
   - [Internal Consistency](validation/01-internal-consistency.md)
   - [Gradient Verification](validation/02-gradient-verification.md)
