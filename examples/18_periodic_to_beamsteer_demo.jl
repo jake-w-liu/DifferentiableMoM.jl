@@ -13,6 +13,7 @@ using Random
 using CSV, DataFrames
 using PlotlySupply
 using PlotlyKaleido
+import PlotlySupply: savefig
 PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(84)
@@ -37,7 +38,7 @@ dy_cell = 1.2 * lambda
 
 Nx = parse(Int, get(ENV, "DMOM_BS_NX", "12"))
 Ny = parse(Int, get(ENV, "DMOM_BS_NY", string(Nx)))
-iters_per_beta = parse(Int, get(ENV, "DMOM_BS_ITERS_PER_BETA", "8"))
+iters_per_beta = parse(Int, get(ENV, "DMOM_BS_ITERS_PER_BETA", "12"))
 betas = [1.0, 2.0, 4.0, 8.0, 16.0]
 
 println("  Frequency: $(freq/1e9) GHz")
@@ -156,9 +157,10 @@ function run_optimization_beamsteer(Z_per::Matrix{ComplexF64}, Mt, v, Q_target,
             J_target = real(dot(I_c, QI))
             vf_cur = mean(rho_bar)
             J_vf = alpha_vf * (vf_cur - vf_target)^2
-            J_total = J_target + J_vf
+            # Minimize negative target power to maximize steering efficiency.
+            J_total = -J_target + J_vf
 
-            lam = F' \ QI
+            lam = F' \ (-QI)
             g_rb = gradient_density(Mt, Vector{ComplexF64}(I_c), Vector{ComplexF64}(lam), rho_bar, config)
             g_rb .+= alpha_vf * 2.0 * (vf_cur - vf_target) / Nt_loc
             g = gradient_chain_rule(g_rb, rho_tilde, W, w_sum, beta)
@@ -168,7 +170,7 @@ function run_optimization_beamsteer(Z_per::Matrix{ComplexF64}, Mt, v, Q_target,
             push!(trace, (global_iter, beta, J_target, J_vf, J_total, gnorm, vf_cur, frac_binary))
 
             if verbose && (it <= 2 || it == iters_per_beta || it % 4 == 0)
-                println("    it=$global_iter Jt=$(round(J_total, sigdigits=5)) |g|=$(round(gnorm, sigdigits=3)) vf=$(round(vf_cur, digits=3))")
+                println("    it=$global_iter J_target=$(round(J_target, sigdigits=5)) J_total=$(round(J_total, sigdigits=5)) |g|=$(round(gnorm, sigdigits=3)) vf=$(round(vf_cur, digits=3))")
             end
 
             if it > 1
@@ -206,7 +208,7 @@ function run_optimization_beamsteer(Z_per::Matrix{ComplexF64}, Mt, v, Q_target,
                 rho_trial = project!(rho_old .+ alpha_ls .* d)
                 _, rb = filter_and_project(W, w_sum, rho_trial, beta)
                 I_t = (Z_per + assemble_Z_penalty(Mt, rb, config)) \ v
-                Jt = real(dot(I_t, Q_target * I_t)) + alpha_vf * (mean(rb) - vf_target)^2
+                Jt = -real(dot(I_t, Q_target * I_t)) + alpha_vf * (mean(rb) - vf_target)^2
                 if Jt <= J_total + 1e-4 * alpha_ls * dot(g, d)
                     rho .= rho_trial
                     accepted = true
