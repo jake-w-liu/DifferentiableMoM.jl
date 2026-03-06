@@ -193,7 +193,7 @@ For a **magnetic dipole** with moment $\mathbf{m}$ (A·m²),
 
 ```math
 \mathbf{E}_{\mathrm{mag}}(\mathbf{r}) = \frac{\eta_0}{4\pi}
-\Bigl(\frac{k}{R^2} + i\frac{k^2}{R}\Bigr) e^{-ikR} (\hat{\mathbf{R}} \times \mathbf{m}),
+\Bigl(\frac{k}{R^2} + i\frac{k^2}{R}\Bigr) e^{-ikR} (\mathbf{m} \times \hat{\mathbf{R}}),
 ```
 
 where $\eta_0 = \sqrt{\mu_0/\epsilon_0} \approx 376.73\,\Omega$ is the free‑space impedance.
@@ -702,16 +702,13 @@ These validation gates are run as part of the continuous‑integration pipeline.
 
 ### 12.1 Primary Source File
 
-All excitation‑related code resides in **`src/assembly/Excitation.jl`**. The file is organized as follows:
+All excitation‑related code resides in **`src/assembly/Excitation.jl`**. The main blocks are:
 
-- **Lines 1‑50**: Exports and abstract type definition.
-- **Lines 51‑150**: Struct definitions for all excitation types.
-- **Lines 151‑300**: Constructor helper functions (`make_plane_wave`, `make_dipole`, etc.).
-- **Lines 301‑500**: Pattern‑feed utilities (grid validation, interpolation, analytic dipole pattern generation).
-- **Lines 501‑650**: Field‑evaluation functions (`plane_wave_field`, `dipole_incident_field`, `loop_incident_field`, `pattern_feed_field`).
-- **Lines 651‑750**: Type‑conversion and quadrature‑order helpers.
-- **Lines 751‑950**: Assembly dispatcher `assemble_excitation` and specialized assembly functions for each excitation type.
-- **Lines 951‑1000**: Multiple‑excitations matrix assembly.
+- Exports and `AbstractExcitation` base type.
+- Excitation structs (`PlaneWaveExcitation`, `DipoleExcitation`, `LoopExcitation`, `ImportedExcitation`, `PatternFeedExcitation`, `DeltaGapExcitation`, `PortExcitation`, `MultiExcitation`).
+- Constructor helpers (`make_plane_wave`, `make_dipole`, `make_loop`, `make_pattern_feed`, `make_imported_excitation`, `make_multi_excitation`).
+- Field evaluators (`plane_wave_field`, `dipole_incident_field`, `loop_incident_field`, `pattern_feed_field`).
+- Dispatch and assembly routines (`assemble_excitation`, `assemble_plane_wave`, `assemble_dipole`, `assemble_loop`, `assemble_imported_excitation`, `assemble_pattern_feed`, `assemble_port`, `assemble_delta_gap`, `assemble_multi`, `assemble_multiple_excitations`).
 
 ### 12.2 Adding a New Excitation Type
 
@@ -820,7 +817,7 @@ If none of these fit, you may need to implement a custom excitation type followi
 Before trusting results from a new excitation setup, run these sanity checks:
 
 - [ ] **Quadrature convergence**: Increase `quad_order` by one level; the RHS vector should change by less than $10^{-6}$ relative.
-- [ ] **Power balance**: For a lossless scatterer (PEC), the total scattered power should equal the total absorbed power (check via `power_balance` diagnostics).
+- [ ] **Energy consistency**: For a PEC case, compare `input_power(I, v)` and `radiated_power(E_ff, grid)` (or `energy_ratio(I, v, E_ff, grid)`), which should be close to 1 in a converged run.
 - [ ] **Far‑field pattern**: If applicable, compare the far‑field pattern with an independent calculation (analytical, another code).
 - [ ] **Linear superposition**: Test that `MultiExcitation` matches manual combination.
 - [ ] **Time‑convention**: Verify phase progression matches expectation (e.g., plane wave should advance phase in the direction of propagation).

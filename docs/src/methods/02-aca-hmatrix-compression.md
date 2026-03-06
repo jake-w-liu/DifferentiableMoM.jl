@@ -585,7 +585,8 @@ The auto-selection logic is:
 |-------------|--------|-------------|
 | $N \le 2{,}000$ | `:dense_direct` | Dense assembly + LU solve |
 | $2{,}000 < N \le 10{,}000$ | `:dense_gmres` | Dense + NF-preconditioned GMRES |
-| $N > 10{,}000$ | `:aca_gmres` | ACA H-matrix + NF-preconditioned GMRES |
+| $10{,}000 < N \le 50{,}000$ | `:aca_gmres` | ACA H-matrix + NF-preconditioned GMRES |
+| $N > 50{,}000$ | `:mlfma` | MLFMA + NF-preconditioned GMRES |
 
 You can also force ACA explicitly:
 
@@ -601,7 +602,7 @@ result = solve_scattering(mesh, freq_hz, excitation;
 
 ### 8.4 Preconditioner Effectiveness with ACA
 
-The near-field preconditioner gives **N-independent iteration counts** for GMRES, meaning the number of iterations does not grow as the problem size increases. This is because the preconditioner captures the dominant near-field coupling structure of the Green's function, and the far-field interactions (handled by the low-rank blocks) are well-conditioned.
+In tested regimes, the near-field preconditioner often gives weak iteration growth with problem size. This is because the preconditioner captures the dominant near-field coupling structure of the Green's function, and the far-field interactions (handled by the low-rank blocks) are better conditioned after preconditioning.
 
 Typical iteration counts with the near-field preconditioner:
 
@@ -769,7 +770,7 @@ Before proceeding, ensure you understand:
 - [ ] How the ACA matvec works: permute, dense `gemv`, low-rank two-step `gemv`, un-permute.
 - [ ] Why `ACAOperator` provides a `getindex` fallback (for near-field preconditioner extraction via `_efie_entry`).
 - [ ] The complexity: $O(N \log^2 N)$ storage and matvec, compared to $O(N^2)$ dense.
-- [ ] How `solve_scattering` auto-selects ACA for $N > 10{,}000$.
+- [ ] How `solve_scattering` auto-selects ACA for $10{,}000 < N \le 50{,}000$ (default thresholds).
 
 ---
 

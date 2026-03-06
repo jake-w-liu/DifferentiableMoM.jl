@@ -40,7 +40,9 @@ Nx = 10
 Ny = 10
 
 mesh = make_rect_plate(dx_cell, dy_cell, Nx, Ny)
-rwg = build_rwg(mesh; precheck=false)
+k_design = 2π / lambda_design
+lattice_design = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k_design)
+rwg = build_rwg_periodic(mesh, lattice_design; precheck=false)
 Nt = ntriangles(mesh)
 println("  Unit cell: λ/2 × λ/2 at 10 GHz, mesh $(Nx)×$(Ny), Nt=$(Nt), N=$(rwg.nedges)")
 
@@ -118,7 +120,7 @@ function analyze_case(freq_hz::Float64, case_name::String, rho_bar::Vector{Float
     idx00 === nothing && error("(0,0) Floquet mode missing at $(freq_hz/1e9) GHz")
 
     pb = power_balance(Vector{ComplexF64}(I), Z_pen, dx_cell * dy_cell, k, modes, R;
-                       transmission=:closure)
+                       transmission=:floquet)
 
     return (
         J_spec=J_spec,

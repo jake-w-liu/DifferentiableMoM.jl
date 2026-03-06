@@ -49,6 +49,8 @@ Only basis functions with support on triangle t have nonzero entries in M_t.
 function precompute_triangle_mass(mesh::TriMesh, rwg::RWGData; quad_order::Int=3)
     N = rwg.nedges
     Nt = ntriangles(mesh)
+    Tcoef = promote_type(eltype(rwg.coeff_plus), eltype(rwg.coeff_minus))
+    Tmass = Tcoef <: Real ? Float64 : ComplexF64
 
     xi, wq = tri_quad_rule(quad_order)
     Nq = length(wq)
@@ -65,7 +67,7 @@ function precompute_triangle_mass(mesh::TriMesh, rwg::RWGData; quad_order::Int=3
     end
 
     # Build sparse mass matrix for each triangle
-    Mt = [spzeros(Float64, N, N) for _ in 1:Nt]
+    Mt = [spzeros(Tmass, N, N) for _ in 1:Nt]
 
     for t in 1:Nt
         A = areas[t]
@@ -76,7 +78,7 @@ function precompute_triangle_mass(mesh::TriMesh, rwg::RWGData; quad_order::Int=3
             for bj in eachindex(basis_on_t)
                 n = basis_on_t[bj]
 
-                val = 0.0
+                val = zero(Tmass)
                 for q in 1:Nq
                     rq = quad_pts[t][q]
                     fm = eval_rwg(rwg, m, rq, t)

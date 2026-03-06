@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Dense Method of Moments (MoM) systems produce impedance matrices with $O(N^2)$ storage and $O(N^3)$ direct-solve cost, making LU factorization impractical for problems beyond a few thousand unknowns. This chapter introduces the GMRES iterative solver with near-field sparse preconditioning as implemented in `DifferentiableMoM.jl`, which reduces the per-solve cost to $O(N^2)$ matvecs with $O(1)$ iteration counts when a good preconditioner is employed. The treatment covers the algorithm, the physics-based near-field preconditioner, the adjoint extension for gradient computation, and practical usage of the package API.
+Dense Method of Moments (MoM) systems produce impedance matrices with $O(N^2)$ storage and $O(N^3)$ direct-solve cost, making LU factorization impractical for problems beyond a few thousand unknowns. This chapter introduces the GMRES iterative solver with near-field sparse preconditioning as implemented in `DifferentiableMoM.jl`, which reduces the per-solve cost to $O(N^2)$ matvecs and often keeps iteration growth weak in practical regimes. The treatment covers the algorithm, the physics-based near-field preconditioner, the adjoint extension for gradient computation, and practical usage of the package API.
 
 ---
 
@@ -12,7 +12,7 @@ After this chapter, you should be able to:
 
 1. Explain why iterative methods are preferred over direct LU factorization for large MoM systems, and quantify the crossover point.
 2. Describe the GMRES algorithm for non-symmetric complex linear systems and the role of the Krylov subspace.
-3. Construct a near-field sparse preconditioner from the spatial decay of the Green's function, and explain why it yields $N$-independent iteration counts.
+3. Construct a near-field sparse preconditioner from the spatial decay of the Green's function, and explain why it often yields weak iteration growth with $N$.
 4. Distinguish left and right preconditioning and their implications for residual monitoring.
 5. Use the `solve_gmres`, `build_nearfield_preconditioner`, and `solve_gmres_adjoint` functions from the package API.
 6. Set up preconditioned adjoint solves for gradient-based impedance optimization.
@@ -45,9 +45,10 @@ The package provides automatic method selection via `solve_scattering`, which us
 |---|---|---|
 | $N \le 2{,}000$ | Dense direct (LU) | Factorization is fast; no preconditioner setup needed |
 | $2{,}000 < N \le 10{,}000$ | Dense GMRES + NF preconditioner | GMRES with $O(1)$ iterations beats $O(N^3)$ LU |
-| $N > 10{,}000$ | ACA H-matrix + NF-preconditioned GMRES | Dense storage itself becomes prohibitive |
+| $10{,}000 < N \le 50{,}000$ | ACA H-matrix + NF-preconditioned GMRES | Dense storage itself becomes prohibitive |
+| $N > 50{,}000$ | MLFMA + NF-preconditioned GMRES | Hierarchical fast multipole scaling becomes necessary |
 
-These thresholds are configurable via the `dense_direct_limit` and `dense_gmres_limit` keyword arguments.
+These thresholds are configurable via `dense_direct_limit`, `dense_gmres_limit`, and `mlfma_threshold`.
 
 ### 1.4 Physical Insight: Spatial Decay of Interactions
 
@@ -184,7 +185,7 @@ The number of nonzero entries in $\mathbf{Z}_{\mathrm{nf}}$ scales as $O(N \cdot
 
 ### 3.3 Factorization Strategies
 
-Once the sparse matrix $\mathbf{Z}_{\mathrm{nf}}$ is assembled, two factorization options are available:
+Once the sparse matrix $\mathbf{Z}_{\mathrm{nf}}$ is assembled, three factorization options are available:
 
 **Sparse LU factorization** (`factorization=:lu`): The default and most effective option. Uses UMFPACK (via Julia's `SparseArrays.lu`) to compute a sparse LU factorization of $\mathbf{Z}_{\mathrm{nf}}$. Applying the preconditioner costs $O(\mathrm{nnz})$ per solve, where $\mathrm{nnz}$ is the number of nonzero entries plus fill-in from the factorization.
 
@@ -195,6 +196,8 @@ Once the sparse matrix $\mathbf{Z}_{\mathrm{nf}}$ is assembled, two factorizatio
 ```
 
 Application cost is $O(N)$. This is much cheaper than sparse LU but less effective at clustering eigenvalues. Use it when $N$ is very large and the sparse LU factorization itself becomes expensive.
+
+**Incomplete LU (ILU)** (`factorization=:ilu`): Uses `IncompleteLU.jl` with drop tolerance `ilu_tau`. This trades preconditioner strength for lower setup cost and memory, and is commonly useful in very large MLFMA problems.
 
 ### 3.4 Cutoff Selection and Sparsity
 
@@ -263,6 +266,13 @@ struct DiagonalPreconditionerData <: AbstractPreconditionerData
     dinv::Vector{ComplexF64}   # inverse diagonal entries
     cutoff::Float64
     nnz_ratio::Float64
+end
+
+struct ILUPreconditionerData <: AbstractPreconditionerData
+    ilu_fac::IncompleteLU.ILUFactorization{ComplexF64, Int64}
+    cutoff::Float64
+    nnz_ratio::Float64
+    tau::Float64
 end
 ```
 
@@ -335,6 +345,7 @@ function solve_gmres(Z, rhs;
                      precond_side=:left,
                      tol=1e-8,
                      maxiter=200,
+                     memory=20,
                      verbose=false)
 ```
 
@@ -497,9 +508,10 @@ Recommended values:
 | Factorization | Build cost | Apply cost | Best for |
 |---|---|---|---|
 | `:lu` (sparse LU) | $O(\mathrm{nnz}^{1.5})$ typical | $O(\mathrm{nnz})$ | $N \lesssim 50{,}000$; best convergence |
+| `:ilu` (incomplete LU) | lower than sparse LU (drop-tolerance controlled) | sparse triangular solves | Very large $N$ where full sparse LU is too costly |
 | `:diag` (Jacobi) | $O(N)$ | $O(N)$ | Very large $N$; memory-constrained |
 
-The sparse LU factorization is performed by UMFPACK, which handles complex sparse matrices efficiently. For extremely large problems where even the sparse LU becomes expensive, the diagonal preconditioner provides a lightweight alternative.
+The sparse LU factorization is performed by UMFPACK, which handles complex sparse matrices efficiently. For very large problems, ILU (`:ilu`) and diagonal (`:diag`) provide lower-cost alternatives.
 
 ### 7.3 Operator Compatibility
 
@@ -669,11 +681,17 @@ I_auto = result.I_coeffs
 P_lu = build_nearfield_preconditioner(Z, mesh, rwg, cutoff; factorization=:lu)
 I_lu, stats_lu = solve_gmres(Z, v; preconditioner=P_lu)
 
+# ILU preconditioner (memory/cost trade-off)
+P_ilu = build_nearfield_preconditioner(Z, mesh, rwg, cutoff;
+                                       factorization=:ilu, ilu_tau=1e-3)
+I_ilu, stats_ilu = solve_gmres(Z, v; preconditioner=P_ilu)
+
 # Diagonal (Jacobi) preconditioner
 P_diag = build_nearfield_preconditioner(Z, mesh, rwg, cutoff; factorization=:diag)
 I_diag, stats_diag = solve_gmres(Z, v; preconditioner=P_diag)
 
 println("Sparse LU:  $(stats_lu.niter) iterations")
+println("ILU:        $(stats_ilu.niter) iterations")
 println("Diagonal:   $(stats_diag.niter) iterations")
 ```
 
@@ -713,6 +731,7 @@ This section maps the concepts presented in this chapter to the source files and
 |---|---|---|
 | `AbstractPreconditionerData` | `NearFieldPreconditioner.jl` | Abstract base for all preconditioner data |
 | `NearFieldPreconditionerData` | `NearFieldPreconditioner.jl` | Sparse LU preconditioner (stores UMFPACK factorization) |
+| `ILUPreconditionerData` | `NearFieldPreconditioner.jl` | Incomplete LU preconditioner (stores ILU factors) |
 | `DiagonalPreconditionerData` | `NearFieldPreconditioner.jl` | Jacobi preconditioner (stores inverse diagonal) |
 | `NearFieldOperator` | `NearFieldPreconditioner.jl` | Krylov.jl-compatible wrapper applying $\mathbf{Z}_{\mathrm{nf}}^{-1}$ |
 | `NearFieldAdjointOperator` | `NearFieldPreconditioner.jl` | Krylov.jl-compatible wrapper applying $\mathbf{Z}_{\mathrm{nf}}^{-\dagger}$ |
@@ -795,10 +814,10 @@ gradient_impedance(Mp, I, lambda)
 - [ ] Describe the GMRES algorithm: Krylov subspace, Arnoldi process, least-squares minimization, and convergence dependence on eigenvalue clustering.
 - [ ] Construct a near-field sparse preconditioner using `build_nearfield_preconditioner` with an appropriate cutoff in wavelengths.
 - [ ] Distinguish left preconditioning ($\mathbf{M}^{-1}\mathbf{Z}\mathbf{x} = \mathbf{M}^{-1}\mathbf{b}$) from right preconditioning ($\mathbf{Z}\mathbf{M}^{-1}\mathbf{y} = \mathbf{b}$) and their residual-monitoring implications.
-- [ ] Explain why the near-field preconditioner yields $N$-independent iteration counts from the spatial decay of the Green's function.
+- [ ] Explain why near-field preconditioning often yields weak iteration growth with $N$ from the spatial decay of the Green's function.
 - [ ] Use `solve_gmres` and `solve_gmres_adjoint` with a `NearFieldPreconditionerData` object for forward and adjoint solves.
 - [ ] Set up the adjoint preconditioner $\mathbf{Z}_{\mathrm{nf}}^{-\dagger}$ and verify that the same `P_nf` object is reused for both forward and adjoint directions.
-- [ ] Choose between `:lu` and `:diag` factorization modes based on problem size and memory constraints.
+- [ ] Choose between `:lu`, `:ilu`, and `:diag` factorization modes based on problem size and memory constraints.
 - [ ] Diagnose GMRES convergence issues using `stats.niter` and `stats.residuals`, and apply appropriate remedies (increase cutoff, switch factorization, check mesh).
 - [ ] Locate the relevant source files: `src/solver/NearFieldPreconditioner.jl`, `src/solver/IterativeSolve.jl`, `src/solver/Solve.jl`, `src/optimization/Adjoint.jl`, `src/Workflow.jl`.
 

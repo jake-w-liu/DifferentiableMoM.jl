@@ -19,6 +19,18 @@ export floquet_modes, reflection_coefficients, transmission_coefficients, specul
 export power_balance
 export FloquetMode
 
+function _assert_coplanar_periodic_metrics_mesh(mesh::TriMesh; atol::Float64=1e-12)
+    zvals = @view mesh.xyz[3, :]
+    zmin = minimum(zvals)
+    zmax = maximum(zvals)
+    if abs(zmax - zmin) > atol
+        throw(ArgumentError(
+            "reflection_coefficients currently supports coplanar unit-cell meshes only " *
+            "(max z spread <= $(atol)). Got z spread=$(abs(zmax - zmin))."
+        ))
+    end
+end
+
 """
     FloquetMode
 
@@ -92,6 +104,9 @@ function reflection_coefficients(mesh::TriMesh, rwg::RWGData,
                                  E0::Float64=1.0,
                                  pol::SVector{3,Float64}=SVector(1.0, 0.0, 0.0),
                                  eta0::Float64=376.730313668)
+    _assert_coplanar_periodic_metrics_mesh(mesh)
+    _assert_boundary_touching_periodic_mesh_requires_bloch(mesh, lattice, rwg)
+
     modes = floquet_modes(k, lattice; N_orders=N_orders)
     A_cell = lattice.dx * lattice.dy
 
@@ -143,11 +158,28 @@ function reflection_coefficients(mesh::TriMesh, rwg::RWGData,
         # J̃_mn = (1/A) ∫ J exp(i κ_t · r') dS'
         J_tilde = integral / A_cell
 
-        # Properly normalized reflection coefficient:
-        #   R_mn = -(η₀ k)/(2 κz_mn E₀) × (ê_pol · J̃_mn)
-        # For (0,0) at normal incidence: κz = k, so R = -(η₀/2E₀)(ê·J̃)
+        # Use a mode-transverse co-polar vector obtained by projecting the
+        # incident polarization onto the mode's transverse plane.
+        #
+        # This avoids overestimating mode amplitudes when the global incident
+        # polarization has a component parallel to the reflected mode direction.
+        khat = SVector(
+            mode.kx / k,
+            mode.ky / k,
+            real(mode.kz) / k,
+        )
+        pol_mode_raw = pol - dot(pol, khat) * khat
+        pol_mode_norm = norm(pol_mode_raw)
+        if pol_mode_norm < 1e-12
+            continue
+        end
+        pol_mode = pol_mode_raw / pol_mode_norm
+
+        # Co-polar reflection coefficient:
+        #   R_mn = -(η₀ k)/(2 κz_mn E₀) × (ê_mode · J̃_mn)
+        # where ê_mode is transverse to this mode's propagation direction.
         kz_mn = real(mode.kz)
-        R_coeffs[mi] = -(eta0 * k) / (2 * kz_mn * E0) * dot(pol, J_tilde)
+        R_coeffs[mi] = -(eta0 * k) / (2 * kz_mn * E0) * dot(pol_mode, J_tilde)
     end
 
     return modes, R_coeffs
@@ -160,10 +192,11 @@ Compute transmitted Floquet amplitudes from reflection amplitudes for a free-sta
 electric-current sheet model in identical media above and below the sheet.
 
 Convention used in this code path:
-- Incident order `(m,n) = incident_order` has total transmitted amplitude
-  `T = 1 - R` (incident + forward-scattered field).
-- Non-incident orders are purely scattered, with `T = -R`.
-  (Only power is used downstream, so the sign does not affect mode power fractions.)
+- Incident order `(m,n) = incident_order`: two sign branches (`1 + R` and `1 - R`)
+  can arise from differing reflection-coefficient phase references in current-based
+  post-processing. We select the passive branch with smaller `|T|`.
+- Non-incident orders are purely scattered (`T = R`); only `|T|^2` is used
+  downstream for modal power.
 """
 function transmission_coefficients(modes::Vector{FloquetMode},
                                    R_coeffs::Vector{ComplexF64};
@@ -175,9 +208,13 @@ function transmission_coefficients(modes::Vector{FloquetMode},
     m_inc, n_inc = incident_order
     for (i, mode) in enumerate(modes)
         if mode.m == m_inc && mode.n == n_inc
-            T_coeffs[i] = 1 - R_coeffs[i]
+            # Choose the lower-amplitude branch to enforce a passive incident-order
+            # transmission convention under sign/phase ambiguity in R extraction.
+            t_plus = 1 + R_coeffs[i]
+            t_minus = 1 - R_coeffs[i]
+            T_coeffs[i] = abs2(t_plus) <= abs2(t_minus) ? t_plus : t_minus
         else
-            T_coeffs[i] = -R_coeffs[i]
+            T_coeffs[i] = R_coeffs[i]
         end
     end
     return T_coeffs

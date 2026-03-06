@@ -301,7 +301,7 @@ where 16 bytes = 8 bytes for real part + 8 bytes for imaginary part (double prec
 - **Matrix fill:** $O(N^2)$ operations (each $Z_{mn}$ requires numerical integration)
 - **Direct solve (LU):** $O(N^3)$ operations
 - **Matrix-vector multiply:** $O(N^2)$ operations
-- **Iterative solve (CG/GMRES):** $O(kN^2)$ operations for $k$ iterations
+- **Iterative solve (GMRES/Krylov):** $O(kN^2)$ operations for $k$ iterations
 
 ### 7.3 Practical Scaling Limits
 

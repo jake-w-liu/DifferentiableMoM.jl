@@ -16,6 +16,7 @@ using Random
 using CSV, DataFrames
 using PlotlySupply
 using PlotlyKaleido
+import PlotlySupply: savefig
 PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(4242)
@@ -54,12 +55,11 @@ println("  Unit cell: $(round(dx_cell/lambda, digits=2)) λ × $(round(dy_cell/l
 println("  Mesh: $(Nx)×$(Ny) (runtime setting), β schedule=$(Int.(betas)) × $(iters_per_beta)")
 
 mesh = make_rect_plate(dx_cell, dy_cell, Nx, Ny)
-rwg  = build_rwg(mesh; precheck=false)
+lattice = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k)
+rwg  = build_rwg_periodic(mesh, lattice; precheck=false)
 Nt = ntriangles(mesh)
 N  = rwg.nedges
 println("  Discretization: $(Nt) triangles, $(N) RWG edges")
-
-lattice = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k)
 
 println("  Assembling periodic EFIE matrix (dense)...")
 Z_per = Matrix{ComplexF64}(assemble_Z_efie_periodic(mesh, rwg, k, lattice))

@@ -17,6 +17,8 @@ function precompute_patch_mass(mesh::TriMesh, rwg::RWGData,
     N = rwg.nedges
     Nt = ntriangles(mesh)
     P = partition.P
+    Tcoef = promote_type(eltype(rwg.coeff_plus), eltype(rwg.coeff_minus))
+    Tmass = Tcoef <: Real ? Float64 : ComplexF64
 
     xi, wq = tri_quad_rule(quad_order)
     Nq = length(wq)
@@ -33,7 +35,7 @@ function precompute_patch_mass(mesh::TriMesh, rwg::RWGData,
     end
 
     # Build sparse mass matrices for each patch
-    Mp = [spzeros(Float64, N, N) for _ in 1:P]
+    Mp = [spzeros(Tmass, N, N) for _ in 1:P]
 
     for t in 1:Nt
         p = partition.tri_patch[t]
@@ -46,7 +48,7 @@ function precompute_patch_mass(mesh::TriMesh, rwg::RWGData,
                 n = basis_on_t[bj]
 
                 # Compute ∫_t f_m · f_n dS
-                val = 0.0
+                val = zero(Tmass)
                 for q in 1:Nq
                     rq = quad_pts[t][q]
                     fm = eval_rwg(rwg, m, rq, t)

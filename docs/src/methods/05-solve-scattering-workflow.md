@@ -67,7 +67,7 @@ where $N_{\text{dd}} = 2000$ (`dense_direct_limit`), $N_{\text{dg}} = 10{,}000$ 
 | $N \le 2000$ | `:dense_direct` | `assemble_Z_efie` | LU (`Z \ v`) | $O(N^2)$ |
 | $2000 < N \le 10{,}000$ | `:dense_gmres` | `assemble_Z_efie` | GMRES + NF preconditioner | $O(N^2)$ |
 | $10{,}000 < N \le 50{,}000$ | `:aca_gmres` | `build_aca_operator` | GMRES + NF preconditioner | $O(N \log^2 N)$ |
-| $N > 50{,}000$ | `:mlfma` | `build_mlfma_operator` | GMRES + reordered-ILU | $O(N \log N)$ |
+| $N > 50{,}000$ | `:mlfma` | `build_mlfma_operator` | GMRES + NF preconditioner from `A_mlfma.Z_near` (auto uses `:ilu`) | $O(N \log N)$ |
 
 The dense $N \times N$ `ComplexF64` matrix occupies $16 N^2$ bytes. At $N = 2000$ this is 61 MiB (LU is fastest). At $N = 10{,}000$ it grows to 1.5 GiB (GMRES avoids $O(N^3)$ LU cost). ACA H-matrix compression (used for $10k < N \le 50k$) reduces storage and matvec to $O(N \log^2 N)$. For very large problems ($N > 50{,}000$), MLFMA achieves $O(N \log N)$ complexity (see Chapter 6: MLFMA).
 
@@ -119,9 +119,10 @@ Internally, `solve_scattering` executes these steps in order:
    - Dense: `assemble_Z_efie(mesh, rwg, k; mesh_precheck=false)` -- precheck already done.
    - ACA: `build_aca_operator(mesh, rwg, k; leaf_size, eta, aca_tol, max_rank)`.
 7. **Preconditioner** (GMRES methods only):
-   - `preconditioner=:auto` defaults to `:lu`.
+   - `preconditioner=:auto` defaults to `:lu` for dense/ACA GMRES, and to `:ilu` for MLFMA.
    - Dense GMRES: `build_nearfield_preconditioner(Z, mesh, rwg, cutoff)` -- extracts from dense matrix.
    - ACA GMRES: `build_nearfield_preconditioner(mesh, rwg, k, cutoff)` -- assembles from geometry.
+   - MLFMA: `build_nearfield_preconditioner(A_mlfma.Z_near; factorization=...)`.
    - Cutoff distance = `nf_cutoff_lambda * lambda`.
 8. **Solve**: direct uses `Z \ v`; GMRES uses `solve_gmres(Z_or_A, v; preconditioner=P_nf, tol, maxiter)`.
 9. **Return** a `ScatteringResult` with solution, timing, and diagnostics.
@@ -133,7 +134,7 @@ Internally, `solve_scattering` executes these steps in order:
 ```julia
 struct ScatteringResult
     I_coeffs::Vector{ComplexF64}     # Surface current coefficients
-    method::Symbol                    # :dense_direct, :dense_gmres, or :aca_gmres
+    method::Symbol                    # :dense_direct, :dense_gmres, :aca_gmres, or :mlfma
     N::Int                           # Number of RWG unknowns
     assembly_time_s::Float64         # Assembly wall time
     solve_time_s::Float64            # Solve wall time
@@ -162,7 +163,7 @@ end
 
 | Keyword | Default | Description |
 |---------|---------|-------------|
-| `method` | `:auto` | One of `:auto`, `:dense_direct`, `:dense_gmres`, `:aca_gmres` |
+| `method` | `:auto` | One of `:auto`, `:dense_direct`, `:dense_gmres`, `:aca_gmres`, `:mlfma` |
 | `dense_direct_limit` | `2000` | $N$ threshold: below this, auto selects dense direct |
 | `dense_gmres_limit` | `10000` | $N$ threshold: above this, auto selects ACA GMRES |
 
@@ -186,7 +187,7 @@ end
 | Keyword | Default | Description |
 |---------|---------|-------------|
 | `nf_cutoff_lambda` | `1.0` | Near-field cutoff distance in wavelengths |
-| `preconditioner` | `:auto` | One of `:auto` (maps to `:lu`), `:lu`, `:diag`, `:none` |
+| `preconditioner` | `:auto` | `:auto` maps to `:lu` (dense/ACA) or `:ilu` (MLFMA). Explicit `:ilu` is meaningful in the MLFMA path; dense/ACA use `:lu`/`:diag`/`:none`. |
 
 ### ACA Settings
 
@@ -320,7 +321,7 @@ end
 
 1. **Threshold reasoning**: Explain why the default `dense_direct_limit` is 2000 and not 500 or 50,000. What hardware constraints determine the ideal threshold?
 
-2. **Preconditioner source**: For `:dense_gmres`, the near-field preconditioner is built from the already-assembled dense matrix `Z`. For `:aca_gmres`, it is built from mesh geometry directly. Why can't the ACA path extract the preconditioner from `A_aca`?
+2. **Preconditioner source**: For `:dense_gmres`, the near-field preconditioner is built from the already-assembled dense matrix `Z`. For `:aca_gmres`, the workflow builds it from geometry directly. Why might this be preferable to extracting entries through `A_aca[i,j]`?
 
 3. **Under-resolution risk**: A user sets `check_resolution=false` on a mesh where $h_{\max} = 0.5\lambda$. The solve succeeds. Why might the result be dangerously wrong?
 
@@ -328,7 +329,7 @@ end
 
 1. Use `solve_scattering` to compute the bistatic RCS of a $0.5\lambda \times 0.5\lambda$ PEC plate at 3 GHz. Print the method selected, assembly time, and solve time.
 
-2. For a mesh with $N \approx 3000$, call `solve_scattering` with each of the three methods. Compare timing and relative error in `I_coeffs`.
+2. For a mesh with $N \approx 3000$, call `solve_scattering` with `:dense_direct`, `:dense_gmres`, and `:aca_gmres`. Then force `:mlfma` on a larger mesh. Compare timing and relative error in `I_coeffs`.
 
 3. Set `dense_direct_limit=500` and `dense_gmres_limit=3000`. Verify that auto-selection changes for $N = 1500$.
 
@@ -343,7 +344,7 @@ Write a frequency sweep (1--10 GHz, 20 points) using both `solve_scattering` and
 ## 11. Chapter Checklist
 
 - [ ] Call `solve_scattering` with default settings and extract current coefficients.
-- [ ] Explain automatic method selection and the role of `dense_direct_limit` / `dense_gmres_limit`.
+- [ ] Explain automatic method selection and the role of `dense_direct_limit` / `dense_gmres_limit` / `mlfma_threshold`.
 - [ ] Override method selection with the `method` keyword.
 - [ ] Pass either an excitation object or a pre-assembled vector.
 - [ ] Interpret all fields of `ScatteringResult`, including timing and GMRES diagnostics.

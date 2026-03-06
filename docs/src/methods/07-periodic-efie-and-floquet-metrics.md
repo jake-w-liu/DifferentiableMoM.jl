@@ -81,6 +81,13 @@ The periodic kernel contribution used by the assembly is:
 2. spatial image sum over `(m,n) != (0,0)`,
 3. Floquet/spectral sum.
 
+Scope in current implementation:
+- The periodic correction/evaluation path is used for coplanar periodic unit cells.
+- Non-coplanar point offsets (`|z-z'| > 1e-12`) are rejected at runtime.
+- For boundary-touching periodic conductors, assembly/postprocessing require
+  Bloch-paired RWG data from `build_rwg_periodic(mesh, lattice; ...)` and reject
+  non-Bloch RWG input with `ArgumentError`.
+
 ### 2.2 Wood-Anomaly Guard
 
 In the spectral loop, modes with near-zero `|kz|` are skipped with:
@@ -152,8 +159,10 @@ Each `FloquetMode` stores `(m,n,kx,ky,kz,propagating,theta_r,phi_r)` where angle
 `reflection_coefficients(...)` computes current Fourier coefficients and applies:
 
 ```math
-R_{mn} = -\frac{\eta_0 k}{2\,k_{z,mn}\,E_0}\,(\hat{e}_{\text{pol}} \cdot \tilde{\mathbf{J}}_{mn}).
+R_{mn} = -\frac{\eta_0 k}{2\,k_{z,mn}\,E_0}\,(\hat{e}_{\text{mode}} \cdot \tilde{\mathbf{J}}_{mn}).
 ```
+
+where $\hat{e}_{\text{mode}}$ is the normalized projection of the incident polarization onto the mode-transverse plane.
 
 Implementation detail:
 - `R_coeffs` is allocated for all modes and aligned with `modes`,
@@ -163,10 +172,10 @@ Implementation detail:
 
 `transmission_coefficients(modes, R_coeffs; incident_order=(0,0))` uses:
 
-- incident order: `T = 1 - R`,
-- non-incident orders: `T = -R`.
+- incident order: branch selection between `T = 1 + R` and `T = 1 - R`, choosing the lower-amplitude branch,
+- non-incident orders: `T = R`.
 
-This is the explicit convention in code (free-standing current-sheet interpretation).
+This is the explicit convention in code for this current-sheet postprocessing path.
 
 ---
 
@@ -231,6 +240,8 @@ Only `:x` polarization is implemented in this function path.
 
 ```julia
 lattice = PeriodicLattice(dx, dy, theta_inc, phi_inc, k)
+rwg = build_rwg_periodic(mesh, lattice;
+                         precheck=true, allow_boundary=true, require_closed=false)
 Z_per = assemble_Z_efie_periodic(mesh, rwg, k, lattice; quad_order=3)
 I = solve_forward(Z_per, v)
 ```
@@ -263,6 +274,7 @@ The implementation is directly validated by periodic test blocks in
 - Test 42: Floquet metrics (`floquet_modes`, `power_balance`, transmission modes).
 
 In the project test suite, these pass under the periodic-topology block and serve as formulation-to-code regression checks.
+The same block also verifies strict input validation: boundary-touching periodic meshes must use Bloch-paired RWG via `build_rwg_periodic`.
 
 ---
 

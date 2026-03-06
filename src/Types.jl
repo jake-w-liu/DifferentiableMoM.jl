@@ -18,9 +18,13 @@ nvertices(m::TriMesh) = size(m.xyz, 2)
 ntriangles(m::TriMesh) = size(m.tri, 2)
 
 """
-RWG basis function data for each interior edge.
+RWG basis function data.
+
+`T` is the coefficient type used to weight each side of a basis function.
+For standard RWG, `T=Float64` with unit side coefficients.
+For Bloch-periodic paired edges, `T=ComplexF64` allows phase factors on one side.
 """
-struct RWGData
+struct RWGData{T<:Number}
     mesh::TriMesh
     nedges::Int
     tplus::Vector{Int}          # T+ triangle index
@@ -31,6 +35,9 @@ struct RWGData
     len::Vector{Float64}        # edge length
     area_plus::Vector{Float64}  # area of T+
     area_minus::Vector{Float64} # area of T-
+    coeff_plus::Vector{T}       # multiplicative factor on T+ side
+    coeff_minus::Vector{T}      # multiplicative factor on T- side
+    has_periodic_bloch::Bool    # true when built with periodic Bloch constraints
 end
 
 """

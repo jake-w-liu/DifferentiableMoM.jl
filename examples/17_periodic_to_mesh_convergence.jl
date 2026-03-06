@@ -16,6 +16,7 @@ using Statistics
 using CSV, DataFrames
 using PlotlySupply
 using PlotlyKaleido
+import PlotlySupply: savefig
 PlotlyKaleido.start(mathjax=false)
 
 const PKG_DIR  = dirname(@__DIR__)
@@ -103,10 +104,10 @@ end
 function evaluate_mesh_case(Nx::Int, Ny::Int, rho_ref::Vector{Float64};
                             k::Float64, dx_cell::Float64, dy_cell::Float64)
     mesh = make_rect_plate(dx_cell, dy_cell, Nx, Ny)
-    rwg  = build_rwg(mesh; precheck=false)
+    lattice = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k)
+    rwg  = build_rwg_periodic(mesh, lattice; precheck=false)
     Nt = ntriangles(mesh)
     N = rwg.nedges
-    lattice = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k)
 
     Z_per = Matrix{ComplexF64}(assemble_Z_efie_periodic(mesh, rwg, k, lattice))
     Mt = precompute_triangle_mass(mesh, rwg)
@@ -136,7 +137,8 @@ function evaluate_mesh_case(Nx::Int, Ny::Int, rho_ref::Vector{Float64};
     modes_opt, R_opt = reflection_coefficients(mesh, rwg, Vector{ComplexF64}(I_opt), k, lattice;
                                                pol=pol_inc, E0=1.0)
     spec_idx = find_specular_index(modes_opt)
-    pb_opt = power_balance(Vector{ComplexF64}(I_opt), Z_pen_opt, dx_cell * dy_cell, k, modes_opt, R_opt)
+    pb_opt = power_balance(Vector{ComplexF64}(I_opt), Z_pen_opt, dx_cell * dy_cell, k, modes_opt, R_opt;
+                           transmission=:floquet)
 
     # PEC reference on this mesh (for mesh-consistent reduction metrics)
     Z_pen_pec = assemble_Z_penalty(Mt, rho_bar_pec, config)
@@ -147,7 +149,8 @@ function evaluate_mesh_case(Nx::Int, Ny::Int, rho_ref::Vector{Float64};
     modes_pec, R_pec = reflection_coefficients(mesh, rwg, Vector{ComplexF64}(I_pec), k, lattice;
                                                pol=pol_inc, E0=1.0)
     spec_idx_pec = find_specular_index(modes_pec)
-    pb_pec = power_balance(Vector{ComplexF64}(I_pec), Z_pen_pec, dx_cell * dy_cell, k, modes_pec, R_pec)
+    pb_pec = power_balance(Vector{ComplexF64}(I_pec), Z_pen_pec, dx_cell * dy_cell, k, modes_pec, R_pec;
+                           transmission=:floquet)
 
     return (
         Nx=Nx, Ny=Ny, Nt=Nt, N_rwg=N,
@@ -157,8 +160,10 @@ function evaluate_mesh_case(Nx::Int, Ny::Int, rho_ref::Vector{Float64};
         J_reduction_dB=10 * log10(max(J_opt, 1e-30) / max(J_pec, 1e-30)),
         R00_pec=abs(R_pec[spec_idx_pec]), R00_opt=abs(R_opt[spec_idx]),
         R00_amp_dB=20 * log10(max(abs(R_opt[spec_idx]), 1e-30) / max(abs(R_pec[spec_idx_pec]), 1e-30)),
-        refl_frac_pec=pb_pec.refl_frac, abs_frac_pec=pb_pec.abs_frac, resid_frac_pec=pb_pec.resid_frac,
-        refl_frac_opt=pb_opt.refl_frac, abs_frac_opt=pb_opt.abs_frac, resid_frac_opt=pb_opt.resid_frac,
+        refl_frac_pec=pb_pec.refl_frac, abs_frac_pec=pb_pec.abs_frac,
+        trans_frac_pec=pb_pec.trans_frac, resid_frac_pec=pb_pec.resid_frac,
+        refl_frac_opt=pb_opt.refl_frac, abs_frac_opt=pb_opt.abs_frac,
+        trans_frac_opt=pb_opt.trans_frac, resid_frac_opt=pb_opt.resid_frac,
         nprop=count(m -> m.propagating, modes_opt),
     )
 end
@@ -175,7 +180,7 @@ for (Nx, Ny) in mesh_sizes
     push!(rows, row)
     println("  N=$(row.N_rwg), h/λ=$(round(row.h_over_lambda, digits=4)), nprop=$(row.nprop)")
     println("  |R00|=$(round(row.R00_opt, sigdigits=4)), J reduction=$(round(row.J_reduction_dB, digits=2)) dB")
-    println("  opt power: refl=$(round(100row.refl_frac_opt,digits=1))%, abs=$(round(100row.abs_frac_opt,digits=1))%, resid=$(round(100row.resid_frac_opt,digits=1))%")
+    println("  opt power: refl=$(round(100row.refl_frac_opt,digits=1))%, abs=$(round(100row.abs_frac_opt,digits=1))%, trans=$(round(100row.trans_frac_opt,digits=1))%, resid=$(round(100row.resid_frac_opt,digits=3))%")
     println("  runtime=$(round(time()-t0, digits=1)) s")
 end
 
@@ -188,6 +193,7 @@ conv_df.J_delta_vs_finest_dB = 10 .* log10.(max.(conv_df.J_opt, 1e-30) ./ ref_ro
 conv_df.R00_delta_vs_finest_dB = 20 .* log10.(max.(conv_df.R00_opt, 1e-30) ./ ref_row.R00_opt)
 conv_df.refl_delta_pctpt = 100 .* (conv_df.refl_frac_opt .- ref_row.refl_frac_opt)
 conv_df.abs_delta_pctpt = 100 .* (conv_df.abs_frac_opt .- ref_row.abs_frac_opt)
+conv_df.trans_delta_pctpt = 100 .* (conv_df.trans_frac_opt .- ref_row.trans_frac_opt)
 conv_df.resid_delta_pctpt = 100 .* (conv_df.resid_frac_opt .- ref_row.resid_frac_opt)
 
 # Reference-row consistency check against paper results from examples/15 (10×10 row).
@@ -210,6 +216,7 @@ checks = Dict(
     "R00_opt" => abs(row10.R00_opt - floq_df.R_opt_abs[idx00]),
     "refl_frac_opt" => abs(row10.refl_frac_opt - pb_df.refl_frac[idx_opt_pb]),
     "abs_frac_opt" => abs(row10.abs_frac_opt - pb_df.abs_frac[idx_opt_pb]),
+    "trans_frac_opt" => abs(row10.trans_frac_opt - pb_df.trans_frac[idx_opt_pb]),
     "resid_frac_opt" => abs(row10.resid_frac_opt - pb_df.resid_frac[idx_opt_pb]),
     "J_opt" => abs(row10.J_opt - J_opt_ex15),
 )
@@ -241,13 +248,14 @@ println("  ✓ Fig: figures/fig_results_mesh_convergence.pdf")
 
 # Supplementary plot: power-fraction convergence (table is primary in paper)
 fig_pb = plot_scatter(
-    [collect(conv_df.N_rwg), collect(conv_df.N_rwg), collect(conv_df.N_rwg)],
-    [100 .* collect(conv_df.refl_frac_opt), 100 .* collect(conv_df.abs_frac_opt), 100 .* collect(conv_df.resid_frac_opt)];
-    mode=["lines+markers", "lines+markers", "lines+markers"],
-    legend=["Reflected (%)", "Absorbed (%)", "Residual (%)"],
-    color=["#1f77b4", "#d62728", "#2ca02c"],
-    dash=["solid", "dash", "dashdot"],
-    marker_size=[8, 8, 8],
+    [collect(conv_df.N_rwg), collect(conv_df.N_rwg), collect(conv_df.N_rwg), collect(conv_df.N_rwg)],
+    [100 .* collect(conv_df.refl_frac_opt), 100 .* collect(conv_df.abs_frac_opt),
+     100 .* collect(conv_df.trans_frac_opt), 100 .* collect(conv_df.resid_frac_opt)];
+    mode=["lines+markers", "lines+markers", "lines+markers", "lines+markers"],
+    legend=["Reflected (%)", "Absorbed (%)", "Transmitted (%)", "Residual (%)"],
+    color=["#1f77b4", "#d62728", "#2ca02c", "#9467bd"],
+    dash=["solid", "dash", "dashdot", "dot"],
+    marker_size=[8, 8, 8, 8],
     xlabel="RWG edges (N)",
     ylabel="Power fraction (% of incident power)",
     title="Mesh convergence of optimized power-balance fractions (supplementary)",
@@ -264,5 +272,6 @@ println("  J reduction spread across sweep: $(round(maximum(conv_df.J_reduction_
 println("  |R00| amplitude-dB spread across sweep: $(round(maximum(conv_df.R00_amp_dB)-minimum(conv_df.R00_amp_dB), digits=3)) dB")
 println("  Max |Δ(refl)| vs finest: $(round(maximum(abs.(conv_df.refl_delta_pctpt)), digits=3)) pct-pt")
 println("  Max |Δ(abs)|  vs finest: $(round(maximum(abs.(conv_df.abs_delta_pctpt)), digits=3)) pct-pt")
+println("  Max |Δ(trans)| vs finest: $(round(maximum(abs.(conv_df.trans_delta_pctpt)), digits=3)) pct-pt")
 println("  Max |Δ(resid)| vs finest: $(round(maximum(abs.(conv_df.resid_delta_pctpt)), digits=3)) pct-pt")
 println("=" ^ 70)

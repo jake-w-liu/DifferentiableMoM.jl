@@ -358,19 +358,21 @@ for m in 1:Nedges
 end
 ```
 
-Although this naïve double loop has $O(N^2)$ complexity, the actual implementation in `DifferentiableMoM.jl` uses optimized quadrature routines that reuse geometric data and exploit symmetry where possible.
+Although this naïve double loop has $O(N^2)$ complexity, the implementation in `DifferentiableMoM.jl` keeps the same asymptotic cost but reduces overhead by caching triangle quadrature points/areas and per-basis RWG values.
 
 ### 4.3 Mapping to the Code: `vec_part - scl_part`
 
-In the file `src/assembly/EFIE.jl`, the matrix assembly is performed by functions that explicitly separate the vector and scalar contributions. The key line reads
+In the file `src/assembly/EFIE.jl`, the matrix assembly explicitly separates vector and scalar contributions. The core update is
 
 ```julia
-integrand = vec_part - scl_part
+vec_part = dot(fm, fn) * G
+scl_part = dvm * dvn * G / (cache.k^2)
+val += (vec_part - scl_part) * weight
 ```
 
 where
-- `vec_part` corresponds to $-i\omega\mu_0\,V_{mn}$,
-- `scl_part` corresponds to $-i\omega\mu_0\,(1/k^2)S_{mn}$.
+- `vec_part` is the vector-potential integrand contribution inside the bracketed term,
+- `scl_part` is the scalar-potential integrand contribution inside the bracketed term.
 
 The subtraction reflects the minus sign in the formula $Z_{mn}= -i\omega\mu_0[V_{mn}-k^{-2}S_{mn}]$. The factor $-i\omega\mu_0$ is factored out of both terms, so the integrand computed at each quadrature pair is precisely $\mathbf{f}_m\cdot\mathbf{f}_n\,G - k^{-2}(\nabla_s\cdot\mathbf{f}_m)(\nabla_s'\cdot\mathbf{f}_n)G$.
 
@@ -381,7 +383,7 @@ The subtraction reflects the minus sign in the formula $Z_{mn}= -i\omega\mu_0[V_
 - **RWG evaluation**: `eval_rwg(rwg, n, r, tidx)` and `div_rwg(rwg, n, tidx)` from `src/basis/RWG.jl`.
 - **Green’s function**: `greens(r, rp, k)` defined in `src/basis/Greens.jl`.
 
-The assembly loops are written in a vectorized style that processes multiple quadrature points simultaneously, improving performance on modern CPUs.
+The assembly is implemented with explicit nested loops (`m`, `n`, support triangles, quadrature points) plus precomputed cache data. There is no symmetry-based half-matrix reduction in the dense assembler; all entries are evaluated directly.
 
 ### 4.4 Complexity and Sparsity Considerations
 
@@ -391,7 +393,7 @@ However, the **local support** of RWG basis functions still provides important b
 
 1. **Compact quadrature loops**: Each matrix entry involves at most four triangle pairs, keeping the inner‑loop geometry simple.
 2. **Efficient geometric queries**: The mesh connectivity needed for assembly is limited to the two triangles per basis function.
-3. **Facilitates fast‑multipole acceleration**: The low‑rank nature of the Green’s function at large separations can be exploited by hierarchical algorithms (FMM), which are planned for future releases of the package.
+3. **Compatible with fast methods**: The same RWG discretization can be used with the package’s fast/operator-based pathways (e.g., matrix-free and MLFMA components) when dense assembly is too expensive.
 
 For moderate problems ($N \lesssim 10^4$), the direct $O(N^2)$ assembly is feasible and is the method implemented in the current version of `DifferentiableMoM.jl`.
 
@@ -477,14 +479,14 @@ The function `mesh_quality_report(mesh)` scans the mesh and returns a structured
 
 | Check | Description | Typical cause |
 |-------|-------------|---------------|
-| `triangle_index_range` | All triangle vertex indices lie within `1 … nvertices`. | Off‑by‑one errors in mesh generation. |
-| `duplicate_triangles` | No two triangles have identical vertex indices (order‑insensitive). | Duplicate faces due to merging operations. |
-| `degenerate_triangles` | All triangle areas exceed a small tolerance (default `1e‑12`). | Collapsed triangles in CAD export. |
-| `non_manifold_edges` | Every interior edge is shared by exactly two triangles. | Non‑watertight geometries, T‑junctions. |
-| `orientation_conflicts` | For each interior edge, the two adjacent triangles have consistent outward normals. | Inconsistent winding order during mesh generation. |
-| `closed_surface` | (Optional) Every edge is an interior edge (no boundary). | Expected for closed PEC scatterers. |
+| `n_invalid_triangles` + `invalid_triangles` | Triangle has out-of-range indices or repeated vertices. | Off-by-one indexing, corrupt connectivity. |
+| `n_degenerate_triangles` + `degenerate_triangles` | Triangle area is below tolerance (`area_tol_abs`). | Collapsed/near-collapsed elements. |
+| `n_nonmanifold_edges` | An edge has more than two incident triangles. | Non-manifold topology, T-junction style defects. |
+| `n_orientation_conflicts` | Interior-edge orientation is inconsistent. | Mixed triangle winding conventions. |
+| `n_boundary_edges` | Edges with one incident triangle (open boundary). | Open surfaces or missing facets. |
+| `n_edges_total`, `n_interior_edges` | Topology summary counts. | Mesh-connectivity diagnostics. |
 
-The report also includes quantitative statistics such as min/max triangle area, edge‑length ratios, and dihedral angles, which can be used to assess numerical stability even when the mesh passes the basic topological checks.
+The report also includes `area_tol_abs`, which is the absolute area threshold derived from `area_tol_rel` and mesh scale.
 
 ### 6.3 Using `mesh_quality_report` and `mesh_quality_ok`
 
@@ -498,7 +500,7 @@ report = mesh_quality_report(mesh)
 println(report)
 ```
 
-The printed report lists each check, its status (`OK`, `WARNING`, or `ERROR`), and details about any failures. To obtain a simple pass/fail verdict, use
+`mesh_quality_report` returns a named tuple of counts and index lists. To obtain a simple pass/fail verdict, use
 
 ```julia
 ok = mesh_quality_ok(report; allow_boundary=true, require_closed=false)
@@ -508,7 +510,7 @@ The keyword arguments control whether boundary edges (edges belonging to only on
 
 ### 6.4 Automatic Precheck in `build_rwg`
 
-By default, `build_rwg(mesh; precheck=true)` calls `mesh_quality_report` internally and throws an informative error if any critical defect is found. This prevents silent failures later during matrix assembly. If you are confident that your mesh is valid (e.g., it comes from a trusted meshing tool), you can disable the precheck with `precheck=false` for a slight speed gain.
+By default, `build_rwg(mesh; precheck=true)` calls `assert_mesh_quality`, which internally computes `mesh_quality_report` and throws an informative error if hard checks fail. This prevents silent failures later during matrix assembly. If you are confident that your mesh is valid (e.g., from a trusted meshing tool), you can disable the precheck with `precheck=false` for a slight speed gain.
 
 **Code location**: The mesh‑quality routines are implemented in `src/geometry/Mesh.jl` (notably `mesh_quality_report`, `mesh_quality_ok`, and `assert_mesh_quality`). The RWG constructor `build_rwg` in `src/basis/RWG.jl` calls these checks when `precheck=true`.
 

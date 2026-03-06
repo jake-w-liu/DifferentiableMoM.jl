@@ -19,7 +19,7 @@ After this chapter, you should be able to:
 5. Describe the per-$m$ spectral filter implementation and why separated filters fail for $m \neq 0$ modes.
 6. Use `build_mlfma_operator` and `solve_scattering` with MLFMA in practice.
 7. Choose `leaf_lambda` with an accuracy-cost sweep (default in code: `leaf_lambda=0.25`).
-8. Configure reordered-ILU preconditioning for fast convergence.
+8. Configure MLFMA preconditioning paths used by the workflow and optional reordered variants.
 
 ---
 
@@ -33,7 +33,7 @@ After this chapter, you should be able to:
 | ACA H-matrix | $O(N \log^2 N)$ | $O(N \log^2 N)$ | $O(N \log^2 N)$ | $2{,}000 < N < 50{,}000$ |
 | **MLFMA** | **$O(N \log N)$** | **$O(N \log N)$** | **$O(N \log N)$** | **$N > 50{,}000$** |
 
-For a 1λ-resolution aircraft ($\sim$14λ wingspan), $N \approx 30{,}000$ unknowns. Dense assembly would require 14.7 GB of storage; MLFMA reduces this to ~7 GB (47% near-field fill at `leaf_lambda=1.0`).
+In practice, the exact memory and runtime depend strongly on geometry, frequency, and parameter choices (`leaf_lambda`, `precision`, quadrature order, and preconditioner settings). Treat performance numbers as problem-specific and benchmark on your target case.
 
 ### 1.2 The MLFMA Idea
 
@@ -53,7 +53,8 @@ By organizing basis functions into a spatial octree hierarchy, MLFMA performs th
 MLFMA builds an octree by recursively subdividing a bounding cube into $8$ children until leaf boxes contain a small number of basis functions. The tree depth is determined by the `leaf_lambda` parameter:
 
 ```math
-\text{leaf edge} = \text{leaf\_lambda} \times \lambda, \quad \text{nLevels} = \lceil \log_2(\text{domain size} / \text{leaf edge}) \rceil + 1.
+\text{leaf edge} = \text{leaf\_lambda}\,\lambda,\qquad
+\text{nLevels} = \max\!\left(2,\left\lceil \log_2\!\left(\frac{\text{domain size}}{\text{leaf edge}}\right)\right\rceil + 1\right).
 ```
 
 **Example**: For a 14λ aircraft with `leaf_lambda=1.0`:
@@ -152,62 +153,55 @@ The `_apply_disagg_filter` function implements the rigorous approach:
    ```
 3. **IDFT synthesis**: Reconstruct at target $\phi$ points
 
-This correctly handles all $m$ modes and improves accuracy by 5-12× over separated filters at 4-5 octree levels.
+This correctly handles all $m$ modes; in contrast, separated filters can produce significant errors when nonzero azimuthal modes dominate.
 
 ---
 
 ## 6. Accuracy and Convergence
 
-### 6.1 Tested Accuracy (February 2026)
+### 6.1 Practical Verification Procedure
 
-| `leaf_lambda` | Octree Levels | Matvec Error | Status |
-|---------------|---------------|--------------|--------|
-| 3.0 | 4 | 0.0007% | Excellent ✓ |
-| 2.0 | 4 | 0.0036% | Good ✓ |
-| **1.0** | **5** | **0.15%** | **Acceptable ✓ RECOMMENDED** |
-| 0.75 | 6 | 11% | Unstable ✗ |
+Accuracy is problem-dependent. A reliable workflow is:
 
-In practice, accuracy depends on geometry, frequency, and tolerance settings.
-Treat `leaf_lambda` as a tunable parameter and validate against a trusted
-reference (dense or ACA) on a smaller test case.
+1. Pick a smaller case where dense or ACA reference matvecs are feasible.
+2. Sweep `leaf_lambda` and compare `norm(A_mlfma*x - A_ref*x) / norm(A_ref*x)`.
+3. Check final observables (for example RCS cuts) in addition to raw matvec error.
 
-### 6.2 Why 6+ Levels Fail
+### 6.2 Deep-Tree Stability Risk
 
-At 6 levels (`leaf_lambda=0.75`), the truncation order $L$ exceeds $kr_{\min}$ (minimum box separation):
-- Leaf level: $L = 15$, $kr_{\min} = 9.42$ → $L/kr = 1.59$
-- Spherical Hankel $h_l^{(2)}(kr)$ grows exponentially for $l > kr$ (evanescent region)
-- Translation sum requires exact cancellation of large terms → numerical instability
+Very small `leaf_lambda` values can create deep trees where high-order spherical terms become numerically delicate. If you observe instability or stagnation:
 
-This behavior is a numerical-stability issue in deep trees with aggressive
-sampling/truncation choices. A practical fix is to increase leaf size, adjust
-precision/truncation settings, and validate matvec error against a reference.
+1. Increase `leaf_lambda` (fewer levels),
+2. Adjust `precision`,
+3. Re-validate against a trusted reference.
 
-### 6.3 Octree Completeness
+### 6.3 Coverage of Near/Far Decomposition
 
-The octree decomposition has been verified to be **complete**: every pair of basis functions is accounted for either in the near-field matrix or in an interaction list at some level (zero missing pairs).
+The octree neighbor and interaction-list construction is designed so each basis-function pair is treated either by near-field sparse entries or by far-field translations at some level.
 
 ---
 
 ## 7. Near-Field Preconditioning
 
-### 7.1 Reordered-ILU Preconditioner
+### 7.1 Workflow Path (`solve_scattering`)
 
-For $N = 30{,}000$ with `leaf_lambda=1.0`:
-- Near-field: 47% fill = 6.9 GB sparse matrix
-- Direct ILU($\tau$) on natural ordering: **slow** (matrix is not block-banded)
-- **Reordered-ILU**: Permute $\mathbf{Z}_{\text{near}}$ to MLFMA ordering (basis functions sorted by leaf box) → block-banded structure → 10-20× faster ILU factorization
+For `method=:mlfma`, the current workflow builds the preconditioner from the near-field sparse matrix stored inside the operator:
 
 ```julia
-P_nf = build_mlfma_preconditioner(A; factorization=:ilu, ilu_tau=1e-3)
+P_nf = build_nearfield_preconditioner(A_mlfma.Z_near; factorization=:ilu)
 ```
 
-Build time: ~4 minutes for $N=30k$ (vs. hours with natural ordering).
+`preconditioner=:auto` maps to `:ilu` in this branch.
 
-### 7.2 Iteration Counts
+### 7.2 Optional Reordered Preconditioner
 
-With reordered-ILU:
-- $N = 7{,}584$: 20 GMRES iterations to $10^{-6}$ tolerance
-- $N = 30{,}000$: ~20-30 iterations (iteration count grows slowly with $N$)
+The codebase also provides `build_mlfma_preconditioner`, which reorders `Z_near` to octree ordering before ILU/LU:
+
+```julia
+P_nf = build_mlfma_preconditioner(A_mlfma; factorization=:ilu, ilu_tau=1e-2)
+```
+
+This can improve factorization behavior for some large cases and is useful for manual tuning.
 
 ---
 
@@ -220,6 +214,7 @@ using DifferentiableMoM
 
 mesh = read_obj_mesh("aircraft.obj")
 freq = 3e8  # 0.3 GHz
+k = 2pi * freq / 299792458.0
 pw = make_plane_wave(Vec3(0.0, 0.0, -k), 1.0, Vec3(1.0, 0.0, 0.0))
 
 # Auto-selects MLFMA for N > 50,000
@@ -237,7 +232,7 @@ A = build_mlfma_operator(mesh, rwg, k;
                           leaf_lambda=0.25,
                           verbose=true)
 
-# Build reordered-ILU preconditioner
+# Optional: build reordered-ILU preconditioner
 P_nf = build_mlfma_preconditioner(A; factorization=:ilu, ilu_tau=1e-3)
 
 # Assemble excitation and solve
@@ -279,30 +274,24 @@ result = solve_scattering(mesh, freq, pw;
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `factorization` | `:lu` | One of `:lu`, `:ilu`, `:diag` |
-| `ilu_tau` | 1e-3 | ILU drop tolerance (smaller = more fill, better preconditioner) |
+| `factorization` | `:ilu` | One of `:ilu`, `:lu` |
+| `ilu_tau` | 1e-2 | ILU drop tolerance (smaller = more fill, better preconditioner) |
+
+### 9.3 `solve_scattering` MLFMA Path
+
+`solve_scattering(...; method=:mlfma)` currently calls `build_mlfma_operator(mesh, rwg, k; quad_order, verbose)` and does not expose `leaf_lambda`/`precision` keywords directly. Use manual MLFMA construction when you need to tune those parameters.
 
 ---
 
-## 10. Performance Data
+## 10. Benchmarking Guidance
 
-### 10.1 Scalability (0.3 GHz aircraft, `leaf_lambda=1.0`)
+Because performance is highly geometry- and parameter-dependent, use a reproducible benchmark script for your own case. At minimum, record:
 
-| $N$ | Octree Build | NF Assembly | ILU Precond | GMRES Iters | Total Time |
-|-----|--------------|-------------|-------------|-------------|------------|
-| 7,584 (4λ) | 0.0s | 29s | 197s | 20 | ~7 min |
-| 30,336 (1λ) | 0.03s | 717s | 238s | ~20-30 | ~20 min |
-
-### 10.2 Memory Footprint ($N = 30{,}336$)
-
-| Component | Memory |
-|-----------|--------|
-| Near-field $\mathbf{Z}_{\text{near}}$ (47% fill) | 6.9 GB |
-| Radiation patterns (4 × $n_{\text{pts}}$ × $N$) | ~0.6 GB |
-| ILU factors (~85% fill) | ~6.2 GB |
-| **Total peak** | **~14 GB** |
-
-Fits comfortably on 24 GB RAM (tested on Mac M3).
+1. `N`, octree levels, and near-field `nnz` ratio,
+2. operator build time,
+3. preconditioner build time,
+4. GMRES iterations and residual,
+5. peak memory.
 
 ---
 
@@ -317,7 +306,8 @@ Fits comfortably on 24 GB RAM (tested on Mac M3).
 | Per-$m$ spectral filters | `src/fast/MLFMA.jl` | `_apply_disagg_filter`, `_build_theta_filter_m` |
 | Spherical sampling | `src/fast/MLFMA.jl` | `make_sphere_sampling`, `SphereSampling` |
 | Matvec | `src/fast/MLFMA.jl` | `mul!(y, A::MLFMAOperator, x)` |
-| Reordered preconditioner | `src/solver/NearFieldPreconditioner.jl` | `build_mlfma_preconditioner` |
+| Workflow preconditioner path | `src/solver/NearFieldPreconditioner.jl` | `build_nearfield_preconditioner(A_mlfma.Z_near; ...)` |
+| Optional reordered preconditioner | `src/solver/NearFieldPreconditioner.jl` | `build_mlfma_preconditioner` |
 | Workflow integration | `src/Workflow.jl` | `solve_scattering(...; method=:mlfma)` |
 
 ---
@@ -334,9 +324,9 @@ matvec or RCS error against a trusted baseline before production runs.
 
 ### 12.2 Natural-Order ILU
 
-**Problem**: ILU factorization on $\mathbf{Z}_{\text{near}}$ in natural RWG ordering is extremely slow (hours for $N=30k$).
+**Problem**: ILU quality/time can degrade on some large problems if ordering is unfavorable.
 
-**Solution**: Use `build_mlfma_preconditioner` which automatically reorders to MLFMA (box-ordered) structure before ILU.
+**Solution**: Try `build_mlfma_preconditioner` (reordered path) and compare against the workflow default.
 
 ### 12.3 Under-Resolved Meshes
 
@@ -389,7 +379,7 @@ Implement a frequency sweep (0.1--1.0 GHz) with MLFMA. At each frequency, rebuil
 - [ ] Describe aggregation, translation, and disaggregation in the multi-level algorithm.
 - [ ] Understand per-$m$ spectral filters and why separated filters fail.
 - [ ] Calibrate `leaf_lambda` for your geometry with a documented error/cost sweep.
-- [ ] Use `build_mlfma_operator` and reordered-ILU preconditioning.
+- [ ] Use `build_mlfma_operator` and understand both preconditioning paths (`build_nearfield_preconditioner(A.Z_near; ...)` and optional reordered `build_mlfma_preconditioner`).
 - [ ] Integrate MLFMA into `solve_scattering` with auto-selection or forced method.
 - [ ] Recognize translation operator instability at deep octree levels.
 

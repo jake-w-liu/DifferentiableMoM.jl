@@ -88,13 +88,13 @@ where $\eta_0 \approx 376.73\;\Omega$ is the free-space impedance and $\hat{\mat
 
 ### 2.2 Illumination Test
 
-A triangle with outward unit normal $\hat{\mathbf{n}}_t$ is illuminated when the incident wave arrives from the normal side. Geometrically, this means:
+A triangle with outward unit normal $\hat{\mathbf{n}}_t$ is illuminated when the incident wave arrives from the normal side. In the implementation, this is:
 
 ```math
-\hat{\mathbf{k}} \cdot \hat{\mathbf{n}}_t < 0
+\hat{\mathbf{k}} \cdot \hat{\mathbf{n}}_t \le 0
 ```
 
-The wave propagation direction $\hat{\mathbf{k}}$ points toward the surface when the angle between $\hat{\mathbf{k}}$ and $\hat{\mathbf{n}}_t$ is obtuse. Triangles where $\hat{\mathbf{k}} \cdot \hat{\mathbf{n}}_t \geq 0$ are in shadow and carry no PO current.
+The wave propagation direction $\hat{\mathbf{k}}$ points toward the surface when the angle between $\hat{\mathbf{k}}$ and $\hat{\mathbf{n}}_t$ is obtuse. Triangles where $\hat{\mathbf{k}} \cdot \hat{\mathbf{n}}_t > 0$ are in shadow and carry no PO current.
 
 ### 2.3 PO Current on an Illuminated Triangle
 
@@ -144,13 +144,13 @@ This cancellation of $\eta_0$ is a useful simplification in the implementation.
 
 ### 3.3 Per-Triangle Phase Integral
 
-For each illuminated triangle $T_t$ with area $A_t$, the phase integral is evaluated with numerical quadrature:
+For each illuminated triangle $T_t$ with area $A_t$, the code evaluates
 
 ```math
-I_t = 2A_t \sum_{q=1}^{N_q} w_q \, \exp\!\left(ik(\hat{\mathbf{r}} - \hat{\mathbf{k}}) \cdot \mathbf{r}'_q\right)
+I_t = \int_{T_t}\exp\!\left(ik(\hat{\mathbf{r}}-\hat{\mathbf{k}})\cdot \mathbf{r}'\right)\,dS'
 ```
 
-where $\{w_q, \mathbf{r}'_q\}$ are the quadrature weights and points on the triangle. The factor $2A_t$ converts from the reference triangle (area 1/2) to the physical triangle.
+using the analytical triangle formula implemented in `_phase_integral_analytical(...)` (POFacets-style with stable special-case branches for small phase differences), not numerical quadrature.
 
 ### 3.4 Vector Cross-Product Identity
 
@@ -183,7 +183,6 @@ The PO solver is implemented as a single function with the following signature:
 ```julia
 solve_po(mesh::TriMesh, freq_hz::Real, excitation::PlaneWaveExcitation;
          grid::SphGrid = make_sph_grid(36, 72),
-         quad_order::Int = 3,
          c0::Float64 = 299792458.0,
          eta0::Float64 = 376.730313668)
 ```
@@ -194,7 +193,6 @@ solve_po(mesh::TriMesh, freq_hz::Real, excitation::PlaneWaveExcitation;
 - `freq_hz` -- operating frequency in Hz.
 - `excitation::PlaneWaveExcitation` -- the incident plane wave (wave vector, amplitude, polarization).
 - `grid::SphGrid` -- spherical observation grid for far-field evaluation.
-- `quad_order` -- triangle quadrature order (default 3-point rule for phase integration).
 
 ### 4.2 The `POResult` Struct
 
@@ -215,11 +213,11 @@ The fields store the scattered far-field (3 Cartesian components per observation
 
 ### 4.3 Phase 1: Illumination and Current Computation
 
-The first phase loops over all triangles, tests $\hat{\mathbf{k}} \cdot \hat{\mathbf{n}} < 0$, and computes $\mathbf{V}_t$ for illuminated triangles. Shadow triangles get zero current and zero vector factor. The centroid current `J_s[t]` is stored for diagnostics; the far-field integration uses full quadrature.
+The first phase loops over all triangles, tests $\hat{\mathbf{k}} \cdot \hat{\mathbf{n}} \le 0$, and computes $\mathbf{V}_t$ for illuminated triangles. Shadow triangles get zero current and zero vector factor. The centroid current `J_s[t]` is stored for diagnostics.
 
 ### 4.4 Phase 2: Far-Field Integration
 
-The second phase is a double loop over observation directions ($N_\Omega$) and illuminated triangles ($N_t$). For each pair, it computes the phase integral $I_t$ via quadrature, applies the transverse projection $(\hat{\mathbf{r}} \cdot \mathbf{V}_t)\hat{\mathbf{r}} - \mathbf{V}_t$, and accumulates with the prefactor $-ikE_0/(2\pi)$:
+The second phase is a double loop over observation directions ($N_\Omega$) and illuminated triangles ($N_t$). For each pair, it computes the analytical phase integral `I_t`, applies the transverse projection $(\hat{\mathbf{r}} \cdot \mathbf{V}_t)\hat{\mathbf{r}} - \mathbf{V}_t$, and accumulates with the prefactor $-ikE_0/(2\pi)$:
 
 ```julia
 prefactor = -1im * k * E0 / (2pi)
@@ -230,10 +228,9 @@ for q in 1:N_omega
 
     for t in 1:Nt
         !illuminated[t] && continue
-        A_t = triangle_area(mesh, t)
-        pts = tri_quad_points(mesh, t, xi)
-        phase_sum = sum(wq[qp] * exp(1im * k * dot(delta_k, pts[qp])) for qp in 1:Nq)
-        I_t = 2.0 * A_t * phase_sum
+        I_t = _phase_integral_analytical(
+            k, delta_k, tri_v1[t], tri_v2[t], tri_v3[t], tri_area[t]
+        )
         proj = r_hat * dot(r_hat, V_t[t]) - V_t[t]
         E_q += CVec3(complex.(prefactor * proj * I_t))
     end
@@ -242,7 +239,7 @@ end
 
 ### 4.5 Computational Complexity
 
-The PO solver has complexity $O(N_t \times N_\Omega \times N_q)$, where $N_t$ is the number of illuminated triangles, $N_\Omega$ is the number of observation directions, and $N_q$ is the number of quadrature points per triangle. There is no $O(N^2)$ matrix assembly and no $O(N^3)$ factorization.
+The PO solver has complexity $O(N_t \times N_\Omega)$, where $N_t$ is the number of illuminated triangles and $N_\Omega$ is the number of observation directions. There is no $O(N^2)$ matrix assembly and no $O(N^3)$ factorization.
 
 ---
 
@@ -324,7 +321,6 @@ When comparing PO and MoM RCS patterns, the specular peak should agree within 1-
 |------|------|
 | `src/postprocessing/PhysicalOptics.jl` | PO solver: `solve_po`, `POResult` struct |
 | `src/geometry/Mesh.jl` | Triangle mesh I/O: `read_obj_mesh`, `triangle_normal`, `triangle_area`, `triangle_center` |
-| `src/basis/Quadrature.jl` | Triangle quadrature: `tri_quad_rule`, `tri_quad_points` |
 | `src/assembly/Excitation.jl` | Plane wave construction: `make_plane_wave`, `PlaneWaveExcitation` |
 | `src/postprocessing/FarField.jl` | Far-field utilities: `compute_farfield`, `radiation_vectors`, `SphGrid`, `make_sph_grid` |
 | `src/postprocessing/Diagnostics.jl` | RCS utilities: `bistatic_rcs` |
@@ -365,7 +361,7 @@ po_result = solve_po(mesh, freq, pw; grid=grid)
 # Compare with MoM result...
 ```
 
-5. **Quadrature convergence**: Run `solve_po` with `quad_order=1` (centroid rule), `quad_order=3`, and `quad_order=7`. Compare the far-field results. At what frequency (relative to mesh size) does the centroid rule become inaccurate?
+5. **Angular-grid convergence**: Run `solve_po` with progressively finer observation grids (for example `make_sph_grid(31, 61)`, `make_sph_grid(61, 121)`, `make_sph_grid(121, 241)`). Compare bistatic-RCS cuts and identify when the angular sampling is converged.
 
 6. **Illumination fraction**: For a sphere mesh, compute the fraction of triangles marked as illuminated by `solve_po`. Verify that it approaches 50% as the mesh becomes finer.
 
@@ -382,9 +378,9 @@ po_result = solve_po(mesh, freq, pw; grid=grid)
 Before proceeding, ensure you understand:
 
 - [ ] The PO approximation: $\mathbf{J}_s = 2(\hat{\mathbf{n}} \times \mathbf{H}^{\text{inc}})$ on illuminated faces, $\mathbf{J}_s = \mathbf{0}$ on shadow faces.
-- [ ] The illumination test: a triangle is illuminated when $\hat{\mathbf{k}} \cdot \hat{\mathbf{n}} < 0$.
+- [ ] The illumination test used in code: a triangle is illuminated when $\hat{\mathbf{k}} \cdot \hat{\mathbf{n}} \le 0$.
 - [ ] The far-field radiation integral and its prefactor simplification to $-ikE_0/(2\pi)$.
-- [ ] The per-triangle phase integral $I_t$ evaluated with quadrature.
+- [ ] The per-triangle phase integral $I_t$ is evaluated analytically by `_phase_integral_analytical`.
 - [ ] The vector identity $\hat{\mathbf{r}} \times (\hat{\mathbf{r}} \times \mathbf{V}) = (\hat{\mathbf{r}} \cdot \mathbf{V})\hat{\mathbf{r}} - \mathbf{V}$.
 - [ ] That PO requires no RWG basis functions and no linear system solve.
 - [ ] The computational complexity: $O(N_t \times N_\Omega)$ versus MoM's $O(N^2)$ assembly + $O(N^3)$ solve.

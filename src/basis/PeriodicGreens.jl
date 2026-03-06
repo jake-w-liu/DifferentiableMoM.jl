@@ -21,6 +21,12 @@
 # propagating Floquet modes plus evanescent convergence margin.
 #
 # Convention: exp(+iωt), G_0 = exp(-ikR)/(4πR)
+#
+# NOTE:
+# The current Ewald correction path is implemented for coplanar periodic surfaces
+# (z = const over the unit cell), which is the use case in this repository's
+# periodic topology workflows. Non-coplanar source/observation offsets are
+# rejected at runtime to avoid silently returning non-physical values.
 
 export greens_periodic_correction, PeriodicLattice
 
@@ -199,6 +205,13 @@ function greens_periodic_correction(r::SVector{3}, rp::SVector{3}, k,
     drho_x = r[1] - rp[1]
     drho_y = r[2] - rp[2]
     drho_z = r[3] - rp[3]
+
+    if abs(drho_z) > 1e-12
+        throw(ArgumentError(
+            "greens_periodic_correction currently supports coplanar points only " *
+            "(|z-z'| <= 1e-12). Got |z-z'|=$(abs(drho_z))."
+        ))
+    end
 
     # ── 1. Self-correction: (m=0, n=0) term ──
     R_self = sqrt(drho_x^2 + drho_y^2 + drho_z^2)

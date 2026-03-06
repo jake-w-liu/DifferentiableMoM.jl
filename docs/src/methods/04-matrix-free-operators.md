@@ -204,10 +204,11 @@ z_mn = A[m, n]                # standard indexing
 |----------|----------|---------|-------------|
 | $N < 5\,000$, need LU | `assemble_Z_efie` (dense) | $O(N^2)$ | $O(N^2)$ |
 | $N > 5\,000$, memory-limited | `matrixfree_efie_operator` + GMRES | $O(N)$ | $O(N^2)$ per iter |
-| $N > 10\,000$ | `build_aca_operator` (ACA H-matrix) | $O(N \log^2 N)$ | $O(N \log^2 N)$ per iter |
+| $10\,000 < N \le 50\,000$ | `build_aca_operator` (ACA H-matrix) | $O(N \log^2 N)$ | $O(N \log^2 N)$ per iter |
+| $N > 50\,000$ | `build_mlfma_operator` (MLFMA) | sparse near-field + hierarchical data | $O(N \log N)$ per iter |
 | Need adjoint solve | All three support adjoint | --- | --- |
 
-The `solve_scattering` high-level API selects automatically: dense-direct for $N \le 2\,000$, dense-GMRES for $N \le 10\,000$, and ACA-GMRES for $N > 10\,000$.
+The `solve_scattering` high-level API selects automatically: dense-direct for $N \le 2\,000$, dense-GMRES for $N \le 10\,000$, ACA-GMRES for $10\,000 < N \le 50\,000$, and MLFMA for larger problems.
 
 ---
 

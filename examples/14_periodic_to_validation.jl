@@ -25,6 +25,7 @@ using Random
 using CSV, DataFrames
 using PlotlySupply
 using PlotlyKaleido
+import PlotlySupply: savefig
 PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(42)
@@ -186,7 +187,11 @@ mesh_pe = make_rect_plate(0.5*lambda, 0.5*lambda, 4, 4)
 rwg_pe  = build_rwg(mesh_pe; precheck=false)
 Z_free  = assemble_Z_efie(mesh_pe, rwg_pe, k; mesh_precheck=false)
 
-alphas_efie = [0.5, 1.5, 2.5, 5.5, 10.5, 20.5, 50.5]
+# Use d/λ > 0.5 so the fixed 0.5λ plate stays strictly inside the unit-cell
+# boundary and the non-periodic RWG basis remains valid for this spacing sweep.
+# Keep this list moderate to avoid prohibitively expensive very-large-period
+# matrix assemblies in routine reruns.
+alphas_efie = [0.55, 1.5, 2.5, 5.5, 10.5, 20.5]
 results_efie = DataFrame(d_over_lambda=Float64[], rel_diff_efie=Float64[], has_nan=Bool[])
 
 for alpha in alphas_efie

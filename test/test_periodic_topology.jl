@@ -142,6 +142,14 @@ println("\n── Test 37: PeriodicGreens (Helmholtz-Ewald) ──")
         @test abs(dG) > 0  # should be nonzero for typical parameters
     end
 
+    # ── E: Non-coplanar point pairs are rejected ──
+    @testset "E: Non-coplanar unsupported" begin
+        lat = PeriodicLattice(dx, dy, 0.0, 0.0, k)
+        r  = SVector(0.0, 0.0, 1e-3)
+        rp = SVector(0.0, 0.0, 0.0)
+        @test_throws ArgumentError greens_periodic_correction(r, rp, k, lat)
+    end
+
     # ── C: Large-period Ewald convergence (d up to 100λ) ──
     @testset "C: Large-period Ewald convergence" begin
         # Use non-integer d/λ to avoid exact Wood anomaly (kz=0 singularity).
@@ -555,15 +563,63 @@ println("\n── Test 41: PeriodicEFIE ──")
     lambda_pe = 0.03; k_pe = 2π / lambda_pe
     dx_pe = 0.5 * lambda_pe; dy_pe = 0.5 * lambda_pe
     mesh_pe = make_rect_plate(dx_pe, dy_pe, 4, 4)
-    rwg_pe = build_rwg(mesh_pe; precheck=false)
+    lat_pe = PeriodicLattice(dx_pe, dy_pe, 0.0, 0.0, k_pe; N_spatial=2, N_spectral=2)
+    rwg_pe = build_rwg_periodic(mesh_pe, lat_pe; precheck=false)
     N_pe = rwg_pe.nedges
 
     # ── A: Output dimensions ──
     @testset "A: Output dimensions" begin
-        lat = PeriodicLattice(dx_pe, dy_pe, 0.0, 0.0, k_pe; N_spatial=2, N_spectral=2)
-        Z_per = assemble_Z_efie_periodic(mesh_pe, rwg_pe, k_pe, lat)
+        Z_per = assemble_Z_efie_periodic(mesh_pe, rwg_pe, k_pe, lat_pe)
         @test size(Z_per) == (N_pe, N_pe)
         @test eltype(Z_per) == ComplexF64
+    end
+
+    # ── A: Bloch-paired RWG required for boundary-touching periodic meshes ──
+    @testset "A: Bloch-paired RWG required + full-PEC sanity" begin
+        dx_fp = 1.2 * lambda_pe
+        dy_fp = 1.2 * lambda_pe
+        mesh_fp = make_rect_plate(dx_fp, dy_fp, 4, 4)
+        lat_fp = PeriodicLattice(dx_fp, dy_fp, 0.0, 0.0, k_pe; N_spatial=2, N_spectral=2)
+
+        rwg_nonbloch = build_rwg(mesh_fp; precheck=false)
+        rwg_bloch = build_rwg_periodic(mesh_fp, lat_fp; precheck=false)
+        @test rwg_bloch.has_periodic_bloch
+        @test rwg_bloch.nedges > rwg_nonbloch.nedges
+
+        function solve_modes(mesh, rwg, lat)
+            Z = assemble_Z_efie_periodic(mesh, rwg, k_pe, lat; quad_order=3)
+            pw = make_plane_wave(Vec3(0.0, 0.0, -k_pe), 1.0, Vec3(1.0, 0.0, 0.0))
+            v = assemble_excitation(mesh, rwg, pw; quad_order=3)
+            I = Z \ v
+            return reflection_coefficients(mesh, rwg, Vector{ComplexF64}(I), k_pe, lat;
+                                           N_orders=2, E0=1.0, pol=SVector(1.0, 0.0, 0.0))
+        end
+
+        @test_throws ArgumentError solve_modes(mesh_fp, rwg_nonbloch, lat_fp)
+        modes_b, R_b = solve_modes(mesh_fp, rwg_bloch, lat_fp)
+        idx00_b = findfirst(m -> (m.m == 0 && m.n == 0), modes_b)
+        @test idx00_b !== nothing
+
+        idxm10_b = findfirst(m -> (m.m == -1 && m.n == 0), modes_b)
+        idxp10_b = findfirst(m -> (m.m == 1 && m.n == 0), modes_b)
+        @test idxm10_b !== nothing && idxp10_b !== nothing
+
+        pord_b = abs2(R_b[idxm10_b]) * real(modes_b[idxm10_b].kz) / k_pe +
+                 abs2(R_b[idxp10_b]) * real(modes_b[idxp10_b].kz) / k_pe
+
+        @test abs(R_b[idx00_b]) > 0.99
+        @test pord_b < 1e-8
+    end
+
+    # ── A: Oblique incidence yields nontrivial Bloch phase in paired RWG coefficients ──
+    @testset "A: Bloch coefficient phase (oblique)" begin
+        dx_fp = 1.2 * lambda_pe
+        dy_fp = 1.2 * lambda_pe
+        mesh_fp = make_rect_plate(dx_fp, dy_fp, 4, 4)
+        lat_obl = PeriodicLattice(dx_fp, dy_fp, π/6, 0.0, k_pe; N_spatial=2, N_spectral=2)
+        rwg_bloch = build_rwg_periodic(mesh_fp, lat_obl; precheck=false)
+        @test rwg_bloch.has_periodic_bloch
+        @test any(abs.(imag.(rwg_bloch.coeff_minus)) .> 1e-8)
     end
 
     # ── A: Large period → Z_per approaches Z_free ──
@@ -601,6 +657,24 @@ println("\n── Test 41: PeriodicEFIE ──")
         Z_per = assemble_Z_efie_periodic(mesh_pe, rwg_pe, k_pe, lat)
         @test !any(isnan, Z_per)
         @test !any(isinf, Z_per)
+    end
+
+    # ── D: Boundary-touching mesh requires Bloch-paired RWG ──
+    @testset "D: Boundary-touching non-Bloch rejected" begin
+        mesh_w = make_rect_plate(dx_pe, dy_pe, 2, 2)
+        rwg_w = build_rwg(mesh_w; precheck=false)
+        lat_w = PeriodicLattice(dx_pe, dy_pe, 0.0, 0.0, k_pe; N_spatial=2, N_spectral=2)
+        @test_throws ArgumentError assemble_Z_efie_periodic(mesh_w, rwg_w, k_pe, lat_w)
+    end
+
+    # ── E: Non-coplanar meshes are rejected ──
+    @testset "E: Non-coplanar mesh rejected" begin
+        xyz_bad = copy(mesh_pe.xyz)
+        xyz_bad[3, 1] += 1e-4
+        mesh_bad = TriMesh(xyz_bad, mesh_pe.tri)
+        rwg_bad = build_rwg(mesh_bad; precheck=false)
+        lat = PeriodicLattice(dx_pe, dy_pe, 0.0, 0.0, k_pe; N_spatial=2, N_spectral=2)
+        @test_throws ArgumentError assemble_Z_efie_periodic(mesh_bad, rwg_bad, k_pe, lat)
     end
 end
 println("  PASS ✓")
@@ -754,6 +828,25 @@ println("\n── Test 42: PeriodicMetrics ──")
 
         @test_throws ErrorException specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
                                                            polarization=:y)
+    end
+
+    # ── E: Non-coplanar meshes are rejected for reflection coefficients ──
+    @testset "E: Non-coplanar reflection mesh rejected" begin
+        mesh_q = make_rect_plate(dx_pm, dy_pm, 2, 2)
+        xyz_bad = copy(mesh_q.xyz)
+        xyz_bad[3, 1] += 1e-4
+        mesh_bad = TriMesh(xyz_bad, mesh_q.tri)
+        rwg_bad = build_rwg(mesh_bad; precheck=false)
+        I_zero = zeros(ComplexF64, rwg_bad.nedges)
+        @test_throws ArgumentError reflection_coefficients(mesh_bad, rwg_bad, I_zero, k_pm, lat_pm)
+    end
+
+    # ── D: Reflection extraction requires Bloch-paired RWG on touching boundaries ──
+    @testset "D: Reflection boundary-touching non-Bloch rejected" begin
+        mesh_w = make_rect_plate(dx_pm, dy_pm, 2, 2)
+        rwg_w = build_rwg(mesh_w; precheck=false)
+        I_zero = zeros(ComplexF64, rwg_w.nedges)
+        @test_throws ArgumentError reflection_coefficients(mesh_w, rwg_w, I_zero, k_pm, lat_pm)
     end
 end
 println("  PASS ✓")

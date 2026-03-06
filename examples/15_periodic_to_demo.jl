@@ -46,12 +46,11 @@ println("  Unit cell: $(round(dx_cell*1e3, digits=2)) × $(round(dy_cell*1e3, di
 
 Nx, Ny = 10, 10
 mesh = make_rect_plate(dx_cell, dy_cell, Nx, Ny)
-rwg  = build_rwg(mesh; precheck=false)
+lattice = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k)
+rwg  = build_rwg_periodic(mesh, lattice; precheck=false)
 Nt = ntriangles(mesh)
 N  = rwg.nedges
 println("  Mesh: $(Nx)×$(Ny) → $(Nt) triangles, $(N) RWG edges")
-
-lattice = PeriodicLattice(dx_cell, dy_cell, 0.0, 0.0, k)
 
 println("  Computing Z_per (one-time)...")
 Z_per = Matrix{ComplexF64}(assemble_Z_efie_periodic(mesh, rwg, k, lattice))
@@ -102,10 +101,10 @@ for i in prop_idx_pec
     println("    ($(m.m),$(m.n)): R = $(round(R_pec[i], sigdigits=4)), |R| = $(round(abs(R_pec[i]), sigdigits=4))")
 end
 
-# Power balance for PEC (closure-based transmission estimate)
+# Power balance for PEC with explicit Floquet transmission extraction
 Z_pen_pec = assemble_Z_penalty(Mt, rho_bar_pec, config)
 pb_pec = power_balance(Vector{ComplexF64}(I_pec), Z_pen_pec, dx_cell * dy_cell, k, modes_pec, R_pec;
-                       transmission=:closure)
+                       transmission=:floquet)
 println("  Power balance (PEC): P_refl/P_inc=$(round(100*pb_pec.refl_frac, digits=1))%, " *
         "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%, " *
         "P_trans/P_inc=$(round(100*pb_pec.trans_frac, digits=1))%, " *
@@ -380,7 +379,7 @@ println("  ✓ Saved: data/results_r00_angle_sweep.csv")
 
 println("\n▸ Power Balance Analysis")
 pb_opt = power_balance(Vector{ComplexF64}(I_opt), Z_pen_opt, dx_cell * dy_cell, k, modes_opt, R_opt;
-                       transmission=:closure)
+                       transmission=:floquet)
 
 println("  PEC:       P_refl/P_inc=$(round(100*pb_pec.refl_frac, digits=1))%, " *
         "P_abs/P_inc=$(round(100*pb_pec.abs_frac, digits=1))%, " *
@@ -677,7 +676,7 @@ println("  Reflected:   PEC=$(round(100*pb_pec.refl_frac, digits=1))%, opt=$(rou
 println("  Absorbed:    PEC=$(round(100*pb_pec.abs_frac, digits=1))%, opt=$(round(100*pb_opt.abs_frac, digits=1))%")
 println("  Transmitted: PEC=$(round(100*pb_pec.trans_frac, digits=1))%, opt=$(round(100*pb_opt.trans_frac, digits=1))%")
 println("  Residual*:   PEC=$(round(100*pb_pec.resid_frac, digits=2))%, opt=$(round(100*pb_opt.resid_frac, digits=2))%")
-println("    *Residual = 1 - reflected - absorbed - transmitted (numerical closure error)")
+println("    *Residual = 1 - reflected - absorbed - transmitted (power-balance closure residual)")
 println("  Final volume fraction:  $(round(mean(rho_bar_final), digits=3))")
 println("  Binary fraction:        $(round(100*count(x -> x < 0.05 || x > 0.95, rho_bar_final)/Nt, digits=1))%")
 println("  Gradient max rel error: $(round(maximum(rel_err_gv), sigdigits=3))")

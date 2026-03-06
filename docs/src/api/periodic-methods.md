@@ -61,6 +61,12 @@ DeltaG(r,rp) = G_per(r,rp) - G_0(r,rp)
 
 using Helmholtz-Ewald decomposition (self-correction + spatial images + spectral sum).
 
+Current implementation scope:
+- Intended for coplanar periodic unit-cell surfaces (`z = const`).
+- Non-coplanar point pairs (`|z-z'| > 1e-12`) are rejected at runtime.
+- For periodic EFIE/Floquet postprocessing with boundary-touching conductors, use
+  `build_rwg_periodic(mesh, lattice; ...)`; non-Bloch RWG input is rejected.
+
 **Parameters:**
 
 | Parameter | Type | Description |
@@ -178,8 +184,9 @@ Compute complex reflection coefficients for propagating Floquet modes by integra
 Convert reflection amplitudes to transmitted Floquet amplitudes for the free-standing sheet model used by this module.
 
 Convention:
-- Incident order `(m,n) = incident_order`: `T = 1 - R`.
-- Other orders: `T = -R`.
+- Incident order `(m,n) = incident_order`: evaluates both `1 + R` and `1 - R`
+  and keeps the lower-amplitude branch (passive convention under sign/phase ambiguity).
+- Other orders: `T = R`.
 
 **Parameters:**
 
@@ -232,6 +239,8 @@ Compute periodic-cell power accounting:
 
 ```julia
 lattice = PeriodicLattice(dx, dy, theta_inc, phi_inc, k)
+rwg = build_rwg_periodic(mesh, lattice;
+                         precheck=true, allow_boundary=true, require_closed=false)
 
 Z_per = assemble_Z_efie_periodic(mesh, rwg, k, lattice)
 I = solve_forward(Z_per, v)
@@ -250,6 +259,7 @@ Q_spec = specular_rcs_objective(mesh, rwg, grid, k, lattice; half_angle=pi/18)
 - `reflection_coefficients`/`power_balance` assume consistent normalization (`E0`, `eta0`, and unit-cell area) across all calls.
 - `transmission_coefficients` applies the free-standing sheet convention used in this module; use explicit `T_coeffs` in `power_balance(...; transmission=:floquet)` when a different transmission model is required.
 - In `power_balance`, `transmission=:closure` is an energy-closure estimate, not a mode-resolved transmission decomposition.
+- For meshes with conductor edges on unit-cell boundaries, periodic EFIE and reflection extraction require Bloch-paired RWG data from `build_rwg_periodic(mesh, lattice; ...)`; non-Bloch RWG input is rejected with `ArgumentError`.
 
 ---
 

@@ -49,6 +49,7 @@ This documentation is intentionally structured for readers with basic electromag
   - [Gradient Verification](validation/02-gradient-verification.md)
   - [Bempp Cross-Validation](validation/03-bempp-cross-validation.md)
   - [Sphere-vs-Mie Benchmark](validation/04-sphere-mie-benchmark.md)
+  - [Meep Open-Source Cross-Validation](validation/05-meep-cross-validation.md)
 - **Part VI — Advanced Workflows**
   - [Complex OBJ Platforms](advanced/01-complex-obj-platforms.md)
   - [Large-Problem Strategy](advanced/02-large-problem-strategy.md)

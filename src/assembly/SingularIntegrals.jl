@@ -85,9 +85,9 @@ function self_cell_contribution(
     mesh::TriMesh, rwg::RWGData,
     n::Int, tm::Int,
     quad_pts_tm::Vector{Vec3},
-    rwg_vals_m::Vector{Vec3},
-    rwg_vals_n::Vector{Vec3},
-    div_m::Float64, div_n::Float64,
+    rwg_vals_m::Vector{<:SVector{3,<:Number}},
+    rwg_vals_n::Vector{<:SVector{3,<:Number}},
+    div_m::Number, div_n::Number,
     Am::Float64, wq, k)
 
     Nq = length(wq)
@@ -108,7 +108,7 @@ function self_cell_contribution(
 
             Gs = greens_smooth(rm, rn, k)
             vec_part = dot(fm, fn) * Gs
-            scl_part = div_m * div_n * Gs / (k^2)
+            scl_part = conj(div_m) * div_n * Gs / (k^2)
             weight = wq[qm] * wq[qn] * (2 * Am) * (2 * Am)
             val_smooth += (vec_part - scl_part) * weight
         end
@@ -134,7 +134,7 @@ function self_cell_contribution(
         inner_scalar = inv4pi * S
 
         # Scalar potential singular part
-        scl_sing = div_m * div_n * inner_scalar / (k^2)
+        scl_sing = conj(div_m) * div_n * inner_scalar / (k^2)
 
         # Vector potential singular part: leading term
         fn_at_rm = eval_rwg(rwg, n, rm, tm)

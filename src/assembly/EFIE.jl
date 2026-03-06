@@ -11,7 +11,7 @@ export MatrixFreeEFIEOperator, MatrixFreeEFIEAdjointOperator
 export matrixfree_efie_operator, matrixfree_efie_adjoint_operator
 export efie_entry
 
-struct EFIEApplyCache{TK, Tω}
+struct EFIEApplyCache{TK, Tω, TD, TV}
     mesh::TriMesh
     rwg::RWGData
     k::TK
@@ -21,14 +21,16 @@ struct EFIEApplyCache{TK, Tω}
     quad_pts::Vector{Vector{Vec3}}
     areas::Vector{Float64}
     tri_ids::Matrix{Int}                 # (2, N)
-    div_vals::Matrix{Float64}            # (2, N)
-    rwg_vals::Vector{NTuple{2,Vector{Vec3}}}
+    div_vals::Matrix{TD}                 # (2, N)
+    rwg_vals::Vector{NTuple{2,Vector{TV}}}
 end
 
 function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
                            quad_order::Int=3, eta0::Float64=376.730313668)
     N = rwg.nedges
     Nt = ntriangles(mesh)
+    Tcoef = promote_type(eltype(rwg.coeff_plus), eltype(rwg.coeff_minus))
+    TVec = SVector{3,Tcoef}
 
     omega_mu0 = k * eta0   # ωμ₀ = k η₀
 
@@ -44,8 +46,8 @@ function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
     end
 
     tri_ids = zeros(Int, 2, N)
-    div_vals = zeros(Float64, 2, N)
-    rwg_vals = Vector{NTuple{2,Vector{Vec3}}}(undef, N)
+    div_vals = zeros(Tcoef, 2, N)
+    rwg_vals = Vector{NTuple{2,Vector{TVec}}}(undef, N)
 
     for n in 1:N
         tp = rwg.tplus[n]
@@ -105,7 +107,7 @@ end
                         G = greens(rm, rn, cache.k)
 
                         vec_part = dot(fm, fn) * G
-                        scl_part = dvm * dvn * G / (cache.k^2)
+                        scl_part = conj(dvm) * dvn * G / (cache.k^2)
                         weight = cache.wq[qm] * cache.wq[qn] * (2 * Am) * (2 * An)
 
                         val += (vec_part - scl_part) * weight

@@ -623,9 +623,9 @@ With the matrix assembled, solve for the surface current coefficients:
 
 ```julia
 # Plane‑wave excitation
-E0 = [1.0, 0.0, 0.0]           # x‑polarized
-k_vec = [0.0, 0.0, k]          # propagating in +z direction
-pol = [1.0, 0.0, 0.0]          # polarization
+E0 = 1.0                        # amplitude (V/m)
+k_vec = Vec3(0.0, 0.0, k)       # propagating in +z direction
+pol = Vec3(1.0, 0.0, 0.0)       # x-polarization
 pw = make_plane_wave(k_vec, E0, pol)
 V = assemble_excitation(mesh, rwg, pw)   # right‑hand side
 
@@ -673,11 +673,10 @@ function check_pec_limit()
     k = 2π / 0.1  # λ = 0.1 m
     Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 
-    partition = PatchPartition(mesh)
+    partition = assign_patches_grid(mesh; nx=2, ny=2, nz=1)
     P = partition.P  # number of patches
     theta = zeros(ComplexF64, P)
     Mp = precompute_patch_mass(mesh, rwg, partition)
-    Z_efie = assemble_Z_efie(mesh, rwg, k; quad_order=3)
     Z_full = assemble_full_Z(Z_efie, Mp, theta)
     
     return norm(Z_full - Z_efie) / norm(Z_efie)
