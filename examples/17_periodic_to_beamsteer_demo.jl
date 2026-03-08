@@ -36,10 +36,10 @@ k = 2π / lambda
 dx_cell = 1.2 * lambda
 dy_cell = 1.2 * lambda
 
-Nx = parse(Int, get(ENV, "DMOM_BS_NX", "12"))
+Nx = parse(Int, get(ENV, "DMOM_BS_NX", "14"))
 Ny = parse(Int, get(ENV, "DMOM_BS_NY", string(Nx)))
-iters_per_beta = parse(Int, get(ENV, "DMOM_BS_ITERS_PER_BETA", "12"))
-betas = [1.0, 2.0, 4.0, 8.0, 16.0]
+iters_per_beta = parse(Int, get(ENV, "DMOM_BS_ITERS_PER_BETA", "40"))
+betas = [1.0, 2.0, 4.0, 8.0, 16.0, 32.0]
 
 println("  Frequency: $(freq/1e9) GHz")
 println("  Unit cell: $(round(dx_cell/lambda, digits=2))λ × $(round(dy_cell/lambda, digits=2))λ")
@@ -63,8 +63,9 @@ W, w_sum = build_filter_weights(mesh, r_min)
 pw = make_plane_wave(Vec3(0.0, 0.0, -k), 1.0, Vec3(1.0, 0.0, 0.0))
 v = Vector{ComplexF64}(assemble_excitation(mesh, rwg, pw))
 
-config = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5)
+config = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5, reactive=true)
 alpha_vf = 0.1
+alpha_bin = 0.01
 
 # Target direction: propagating Floquet order (m,n) = (1,0)
 all_modes = floquet_modes(k, lattice; N_orders=2)
@@ -126,6 +127,7 @@ function run_optimization_beamsteer(Z_per::Matrix{ComplexF64}, Mt, v, Q_target,
                                     config, W, w_sum, rho0;
                                     betas=[1.0, 2.0, 4.0, 8.0, 16.0],
                                     iters_per_beta=8, alpha_vf=0.1,
+                                    alpha_bin=0.0,
                                     m_lbfgs=10, verbose=true)
     Nt_loc = length(rho0)
     rho = copy(rho0)
@@ -156,12 +158,15 @@ function run_optimization_beamsteer(Z_per::Matrix{ComplexF64}, Mt, v, Q_target,
             J_target = real(dot(I_c, QI))
             vf_cur = mean(rho_bar)
             J_vf = alpha_vf * (vf_cur - vf_target)^2
+            J_bin = alpha_bin * sum(rho_bar[t] * (1 - rho_bar[t]) for t in 1:Nt_loc) / Nt_loc
             # Minimize negative target power to maximize steering efficiency.
-            J_total = -J_target + J_vf
+            J_total = -J_target + J_vf + J_bin
 
             lam = F' \ (-QI)
             g_rb = gradient_density(Mt, Vector{ComplexF64}(I_c), Vector{ComplexF64}(lam), rho_bar, config)
             g_rb .+= alpha_vf * 2.0 * (vf_cur - vf_target) / Nt_loc
+            # Binarization gradient: ∂/∂ρ̄_t [ρ̄_t(1-ρ̄_t)] = 1 - 2ρ̄_t
+            g_rb .+= alpha_bin .* (1.0 .- 2.0 .* rho_bar) ./ Nt_loc
             g = gradient_chain_rule(g_rb, rho_tilde, W, w_sum, beta)
 
             gnorm = norm(g)
@@ -207,7 +212,8 @@ function run_optimization_beamsteer(Z_per::Matrix{ComplexF64}, Mt, v, Q_target,
                 rho_trial = project!(rho_old .+ alpha_ls .* d)
                 _, rb = filter_and_project(W, w_sum, rho_trial, beta)
                 I_t = (Z_per + assemble_Z_penalty(Mt, rb, config)) \ v
-                Jt = -real(dot(I_t, Q_target * I_t)) + alpha_vf * (mean(rb) - vf_target)^2
+                Jt = -real(dot(I_t, Q_target * I_t)) + alpha_vf * (mean(rb) - vf_target)^2 +
+                     alpha_bin * sum(rb[tt] * (1 - rb[tt]) for tt in 1:Nt_loc) / Nt_loc
                 if Jt <= J_total + 1e-4 * alpha_ls * dot(g, d)
                     rho .= rho_trial
                     accepted = true
@@ -236,10 +242,13 @@ rho_phase .= clamp.(rho_phase .- mean(rho_phase) .+ 0.5, 0.0, 1.0)
 res_phase = evaluate_design(rho_phase, 64.0, Z_per, Mt, v, Q_target,
                             W, w_sum, config, mesh, rwg, k, lattice)
 
-println("\n▸ Running beam-steering optimization")
+# Initialize from phase-ramp baseline (uniform ρ=0.5 has zero target-mode
+# power with reactive Z_max, producing zero gradients).
+println("\n▸ Running beam-steering optimization (init from phase-ramp)")
 rho_opt, trace = run_optimization_beamsteer(
-    Z_per, Mt, v, Q_target, config, W, w_sum, fill(0.5, Nt);
-    betas=betas, iters_per_beta=iters_per_beta, alpha_vf=alpha_vf, verbose=true)
+    Z_per, Mt, v, Q_target, config, W, w_sum, copy(rho_phase);
+    betas=betas, iters_per_beta=iters_per_beta, alpha_vf=alpha_vf,
+    alpha_bin=alpha_bin, verbose=true)
 res_opt = evaluate_design(rho_opt, 64.0, Z_per, Mt, v, Q_target,
                           W, w_sum, config, mesh, rwg, k, lattice)
 
@@ -310,16 +319,216 @@ fig_trace = plot_scatter(
 set_legend!(fig_trace; position=:topright)
 savefig(fig_trace, joinpath(FIG_DIR, "fig_results_beamsteer_convergence.pdf"))
 
+# Save final density field
+rho_tilde_opt, rho_bar_opt = filter_and_project(W, w_sum, rho_opt, 64.0)
+CSV.write(joinpath(DATA_DIR, "results_beamsteer_rho_final.csv"),
+          DataFrame(triangle=1:Nt, rho_raw=rho_opt, rho_bar=rho_bar_opt))
+
+# Topology figure: heatmap of optimized rho_bar on unit-cell mesh
+cx = [triangle_center(mesh, t)[1] for t in 1:Nt]
+cy = [triangle_center(mesh, t)[2] for t in 1:Nt]
+# Map to grid for heatmap
+x_unique = sort(unique(round.(cx, digits=10)))
+y_unique = sort(unique(round.(cy, digits=10)))
+Ngx, Ngy = length(x_unique), length(y_unique)
+Z_opt = fill(NaN, Ngy, Ngx)
+Z_phase = fill(NaN, Ngy, Ngx)
+_, rho_bar_phase = filter_and_project(W, w_sum, rho_phase, 64.0)
+for t in 1:Nt
+    ix = searchsortedfirst(x_unique, round(cx[t], digits=10))
+    iy = searchsortedfirst(y_unique, round(cy[t], digits=10))
+    if ix <= Ngx && iy <= Ngy
+        Z_opt[iy, ix] = rho_bar_opt[t]
+        Z_phase[iy, ix] = rho_bar_phase[t]
+    end
+end
+
+fig_topo_opt = plot_heatmap(
+    collect(x_unique) .* 1e3, collect(y_unique) .* 1e3, Z_opt;
+    xlabel="x [mm]", ylabel="y [mm]",
+    title="Optimized topology",
+    colorscale="Greys", width=504, height=420)
+savefig(fig_topo_opt, joinpath(FIG_DIR, "fig_results_beamsteer_topology_opt.pdf"))
+
+fig_topo_phase = plot_heatmap(
+    collect(x_unique) .* 1e3, collect(y_unique) .* 1e3, Z_phase;
+    xlabel="x [mm]", ylabel="y [mm]",
+    title="Phase-ramp baseline",
+    colorscale="Greys", width=504, height=420)
+savefig(fig_topo_phase, joinpath(FIG_DIR, "fig_results_beamsteer_topology_phase.pdf"))
+
 println("\n  ✓ Saved: data/results_beamsteer_summary.csv")
 println("  ✓ Saved: data/results_beamsteer_floquet.csv")
 println("  ✓ Saved: data/results_beamsteer_optimization_trace.csv")
+println("  ✓ Saved: data/results_beamsteer_rho_final.csv")
 println("  ✓ Saved: figures/fig_results_beamsteer_modes.pdf")
 println("  ✓ Saved: figures/fig_results_beamsteer_convergence.pdf")
+println("  ✓ Saved: figures/fig_results_beamsteer_topology_opt.pdf")
+println("  ✓ Saved: figures/fig_results_beamsteer_topology_phase.pdf")
 
 println("\n" * "=" ^ 70)
-println("  Beam-Steering Demo Summary")
+println("  Beam-Steering Demo Summary (Single Target)")
 println("=" ^ 70)
 println("  Target mode: (1,0), θ=$(round(mode_target.theta_r * 180 / π, digits=2))°")
 println("  Baseline -> optimized target power: $(round(100*res_phase.target_pfrac, digits=2))% -> $(round(100*res_opt.target_pfrac, digits=2))%")
 println("  Baseline -> optimized |R10| change: $(round(20*log10(max(res_opt.target_amp,1e-30)/max(res_phase.target_amp,1e-30)), digits=2)) dB")
+println("=" ^ 70)
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Section 2: Weighted Dual-Beam Steering [(1,0) + (0,1)]
+# ═══════════════════════════════════════════════════════════════════════════
+# A phase ramp along x targets (1,0) but not (0,1); along y the reverse.
+# Neither 1D ramp can simultaneously steer to both diagonal modes.
+# TO should discover a 2D pattern that splits power between both.
+
+println("\n\n" * "=" ^ 70)
+println("  Weighted Dual-Beam Steering Demo: (1,0) + (0,1)")
+println("=" ^ 70)
+
+idx_target_01 = findfirst(m -> m.m == 0 && m.n == 1, all_modes)
+idx_target_01 === nothing && error("(0,1) Floquet mode not found")
+mode_target_01 = all_modes[idx_target_01]
+mode_target_01.propagating || error("Target (0,1) mode is not propagating")
+
+println("  Second target: (0,1), θ≈$(round(mode_target_01.theta_r * 180 / π, digits=2))°, φ≈$(round(mode_target_01.phi_r * 180 / π, digits=2))°")
+
+# Build Q for mode (0,1)
+target_dir_01 = Vec3(
+    sin(mode_target_01.theta_r) * cos(mode_target_01.phi_r),
+    sin(mode_target_01.theta_r) * sin(mode_target_01.phi_r),
+    cos(mode_target_01.theta_r),
+)
+mask_target_01 = direction_mask(grid_ff, target_dir_01; half_angle=8 * π / 180)
+Q_target_01 = Matrix{ComplexF64}(build_Q(G_mat, grid_ff, pol; mask=mask_target_01))
+
+# Combined objective: equal weight on both modes
+Q_dual = Q_target + Q_target_01
+
+function evaluate_dual(rho_raw::Vector{Float64}, beta_eval::Float64)
+    rho_tilde, rho_bar = filter_and_project(W, w_sum, rho_raw, beta_eval)
+    Z = Z_per + assemble_Z_penalty(Mt, rho_bar, config)
+    I = Z \ v
+    J_10 = real(dot(I, Q_target * I))
+    J_01 = real(dot(I, Q_target_01 * I))
+    J_dual = real(dot(I, Q_dual * I))
+
+    modes_e, R_e = reflection_coefficients(mesh, rwg, Vector{ComplexF64}(I), k, lattice;
+                                           N_orders=2, pol=SVector(1.0, 0.0, 0.0), E0=1.0)
+    idx10 = findfirst(m -> m.m == 1 && m.n == 0, modes_e)
+    idx01 = findfirst(m -> m.m == 0 && m.n == 1, modes_e)
+    idx00 = findfirst(m -> m.m == 0 && m.n == 0, modes_e)
+    (idx10 === nothing || idx01 === nothing || idx00 === nothing) && error("Missing mode")
+
+    pfrac_10 = mode_power_fraction(modes_e[idx10], R_e[idx10], k)
+    pfrac_01 = mode_power_fraction(modes_e[idx01], R_e[idx01], k)
+    combined_pfrac = pfrac_10 + pfrac_01
+    vf = mean(rho_bar)
+    bin_pct = 100 * count(x -> x < 0.05 || x > 0.95, rho_bar) / length(rho_bar)
+
+    return (J_10=J_10, J_01=J_01, J_dual=J_dual,
+            amp_10=abs(R_e[idx10]), amp_01=abs(R_e[idx01]), amp_00=abs(R_e[idx00]),
+            pfrac_10=pfrac_10, pfrac_01=pfrac_01, combined_pfrac=combined_pfrac,
+            vf=vf, binary_pct=bin_pct, modes=modes_e, R=R_e)
+end
+
+# Baselines: phase ramp along x (targets (1,0) only) and along y (targets (0,1) only)
+yvals = [c[2] for c in centroids]
+yspan = max(maximum(yvals) - minimum(yvals), eps())
+rho_phase_y = 0.5 .+ 0.45 .* sin.(2π .* ((yvals .- minimum(yvals)) ./ yspan))
+rho_phase_y .= clamp.(rho_phase_y .- mean(rho_phase_y) .+ 0.5, 0.0, 1.0)
+
+res_dual_phase_x = evaluate_dual(rho_phase, 64.0)
+res_dual_phase_y = evaluate_dual(rho_phase_y, 64.0)
+res_dual_uniform = evaluate_dual(rho_uniform, 64.0)
+
+println("  Phase-ramp x: (1,0)=$(round(100*res_dual_phase_x.pfrac_10, digits=2))%, (0,1)=$(round(100*res_dual_phase_x.pfrac_01, digits=2))%, combined=$(round(100*res_dual_phase_x.combined_pfrac, digits=2))%")
+println("  Phase-ramp y: (1,0)=$(round(100*res_dual_phase_y.pfrac_10, digits=2))%, (0,1)=$(round(100*res_dual_phase_y.pfrac_01, digits=2))%, combined=$(round(100*res_dual_phase_y.combined_pfrac, digits=2))%")
+
+# Initialize dual-beam from a 2D phase-ramp that couples to both (1,0) and (0,1).
+# Average of x- and y-ramps ensures both targets have non-zero initial power.
+rho_dual_init = 0.5 .* (rho_phase .+ rho_phase_y)
+rho_dual_init .= clamp.(rho_dual_init .- mean(rho_dual_init) .+ 0.5, 0.0, 1.0)
+println("\n▸ Running dual-beam optimization (init from 2D ramp)")
+rho_dual_opt, trace_dual = run_optimization_beamsteer(
+    Z_per, Mt, v, Q_dual, config, W, w_sum, copy(rho_dual_init);
+    betas=betas, iters_per_beta=iters_per_beta, alpha_vf=alpha_vf,
+    alpha_bin=alpha_bin, verbose=true)
+res_dual_opt = evaluate_dual(rho_dual_opt, 64.0)
+
+println("\n  Dual-beam results:")
+println("    Uniform:      combined=$(round(100*res_dual_uniform.combined_pfrac, digits=2))%  (1,0)=$(round(100*res_dual_uniform.pfrac_10, digits=2))%, (0,1)=$(round(100*res_dual_uniform.pfrac_01, digits=2))%")
+println("    Phase-ramp x: combined=$(round(100*res_dual_phase_x.combined_pfrac, digits=2))%  (1,0)=$(round(100*res_dual_phase_x.pfrac_10, digits=2))%, (0,1)=$(round(100*res_dual_phase_x.pfrac_01, digits=2))%")
+println("    Phase-ramp y: combined=$(round(100*res_dual_phase_y.combined_pfrac, digits=2))%  (1,0)=$(round(100*res_dual_phase_y.pfrac_10, digits=2))%, (0,1)=$(round(100*res_dual_phase_y.pfrac_01, digits=2))%")
+println("    Optimized:    combined=$(round(100*res_dual_opt.combined_pfrac, digits=2))%  (1,0)=$(round(100*res_dual_opt.pfrac_10, digits=2))%, (0,1)=$(round(100*res_dual_opt.pfrac_01, digits=2))%")
+
+# Best baseline = max combined of the two ramps
+best_baseline_combined = max(res_dual_phase_x.combined_pfrac, res_dual_phase_y.combined_pfrac)
+advantage_dB = 10 * log10(max(res_dual_opt.combined_pfrac, 1e-30) / max(best_baseline_combined, 1e-30))
+println("    TO advantage over best ramp: $(round(advantage_dB, digits=2)) dB")
+
+# Save weighted results
+summary_w = DataFrame(
+    case=["uniform", "phase_ramp_x", "phase_ramp_y", "optimized_dual"],
+    J_dual=[res_dual_uniform.J_dual, res_dual_phase_x.J_dual, res_dual_phase_y.J_dual, res_dual_opt.J_dual],
+    pfrac_10=[res_dual_uniform.pfrac_10, res_dual_phase_x.pfrac_10, res_dual_phase_y.pfrac_10, res_dual_opt.pfrac_10],
+    pfrac_01=[res_dual_uniform.pfrac_01, res_dual_phase_x.pfrac_01, res_dual_phase_y.pfrac_01, res_dual_opt.pfrac_01],
+    combined_pfrac=[res_dual_uniform.combined_pfrac, res_dual_phase_x.combined_pfrac, res_dual_phase_y.combined_pfrac, res_dual_opt.combined_pfrac],
+    amp_10=[res_dual_uniform.amp_10, res_dual_phase_x.amp_10, res_dual_phase_y.amp_10, res_dual_opt.amp_10],
+    amp_01=[res_dual_uniform.amp_01, res_dual_phase_x.amp_01, res_dual_phase_y.amp_01, res_dual_opt.amp_01],
+    amp_00=[res_dual_uniform.amp_00, res_dual_phase_x.amp_00, res_dual_phase_y.amp_00, res_dual_opt.amp_00],
+    binary_pct=[res_dual_uniform.binary_pct, res_dual_phase_x.binary_pct, res_dual_phase_y.binary_pct, res_dual_opt.binary_pct],
+)
+CSV.write(joinpath(DATA_DIR, "results_beamsteer_weighted_summary.csv"), summary_w)
+CSV.write(joinpath(DATA_DIR, "results_beamsteer_weighted_trace.csv"), trace_dual)
+
+# Floquet mode comparison figure for weighted case
+prop_idx_w = findall(m -> m.propagating, res_dual_opt.modes)
+prop_sorted_w = sort(prop_idx_w; by=i -> (res_dual_opt.modes[i].m == 0 && res_dual_opt.modes[i].n == 0 ? -1 : 0,
+                                          abs(res_dual_opt.modes[i].m) + abs(res_dual_opt.modes[i].n),
+                                          res_dual_opt.modes[i].m, res_dual_opt.modes[i].n))
+mode_labels_w = ["($(res_dual_opt.modes[i].m),$(res_dual_opt.modes[i].n))" for i in prop_sorted_w]
+mode_w_df = DataFrame(
+    mode_index=1:length(prop_sorted_w),
+    mode_label=mode_labels_w,
+    R_phase_x_abs=[abs(res_dual_phase_x.R[i]) for i in prop_sorted_w],
+    R_phase_y_abs=[abs(res_dual_phase_y.R[i]) for i in prop_sorted_w],
+    R_opt_abs=[abs(res_dual_opt.R[i]) for i in prop_sorted_w],
+)
+CSV.write(joinpath(DATA_DIR, "results_beamsteer_weighted_floquet.csv"), mode_w_df)
+
+fig_w = plot_scatter(
+    [collect(mode_w_df.mode_index), collect(mode_w_df.mode_index), collect(mode_w_df.mode_index)],
+    [collect(mode_w_df.R_phase_x_abs), collect(mode_w_df.R_phase_y_abs), collect(mode_w_df.R_opt_abs)];
+    mode=["lines+markers", "lines+markers", "lines+markers"],
+    legend=["Phase-ramp x", "Phase-ramp y", "Optimized (dual)"],
+    color=["#0072B2", "#D55E00", "#009E73"],
+    dash=["dash", "dashdot", "solid"],
+    marker_size=[8, 8, 8],
+    xlabel="Propagating mode index",
+    ylabel="Floquet reflection amplitude |R_mn|",
+    title="Weighted dual-beam: propagating Floquet amplitudes",
+    width=620, height=420, fontsize=14)
+set_legend!(fig_w; position=:topright)
+savefig(fig_w, joinpath(FIG_DIR, "fig_results_beamsteer_weighted_modes.pdf"))
+
+fig_w_trace = plot_scatter(
+    collect(trace_dual.iter), collect(trace_dual.J_target);
+    mode="lines+markers", legend="Dual-beam objective", color="#0072B2",
+    dash="solid", marker_size=6,
+    xlabel="Iteration", ylabel="J_dual",
+    title="Weighted dual-beam optimization convergence",
+    width=560, height=400, fontsize=14)
+set_legend!(fig_w_trace; position=:topright)
+savefig(fig_w_trace, joinpath(FIG_DIR, "fig_results_beamsteer_weighted_trace.pdf"))
+
+println("\n  ✓ Saved: data/results_beamsteer_weighted_*.csv")
+println("  ✓ Saved: figures/fig_results_beamsteer_weighted_*.pdf")
+
+println("\n" * "=" ^ 70)
+println("  Weighted Dual-Beam Summary")
+println("=" ^ 70)
+println("  Targets: (1,0) + (0,1)")
+println("  Best ramp combined: $(round(100*best_baseline_combined, digits=2))%")
+println("  Optimized combined: $(round(100*res_dual_opt.combined_pfrac, digits=2))%")
+println("  TO advantage: $(round(advantage_dB, digits=2)) dB")
 println("=" ^ 70)

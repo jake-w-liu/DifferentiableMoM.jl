@@ -71,7 +71,7 @@ grid_ff = make_sph_grid(Ntheta_ff, Nphi_ff)
 Q_spec  = Matrix{ComplexF64}(specular_rcs_objective(
     mesh, rwg, grid_ff, k, lattice; half_angle=spec_half_angle, polarization=:x))
 
-config  = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5)
+config  = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5, reactive=true)
 alpha_vf = 0.1
 println("  SIMP: p=$(config.p), Z_max=$(round(config.Z_max, sigdigits=4)), α_vf=$(alpha_vf)")
 println("  Objective: Q_spec on $(Ntheta_ff)×$(Nphi_ff) spherical grid, x-pol, " *
@@ -555,8 +555,8 @@ println("  ✓ Fig 3: Convergence")
 function density_to_grid(rho_bar_vec, cents, nx, ny, dxc, dyc)
     grid_rho = zeros(ny, nx)
     grid_cnt = zeros(Int, ny, nx)
-    xs = [c[1] for c in cents]; ys = [c[2] for c in cents]
-    x0, y0 = minimum(xs), minimum(ys)
+    # Use physical cell bounds, not centroid minima, to avoid empty-bin artifacts.
+    x0, y0 = -0.5 * dxc, -0.5 * dyc
     dxg, dyg = dxc / nx, dyc / ny
     for t in eachindex(rho_bar_vec)
         ix = clamp(floor(Int, (cents[t][1] - x0) / dxg) + 1, 1, nx)

@@ -23,18 +23,22 @@ Configuration for density-based topology optimization.
 """
 struct DensityConfig
     p::Float64          # SIMP penalization power (typically 3)
-    Z_max::Float64      # void penalty impedance, real (large, e.g. 1000*eta0)
+    Z_max::ComplexF64   # void penalty impedance (real = resistive, imaginary = reactive)
     vf_target::Float64  # target volume fraction (metal fraction)
 end
 
 """
-    DensityConfig(; p=3.0, Z_max_factor=1000.0, eta0=376.730313668, vf_target=0.5)
+    DensityConfig(; p=3.0, Z_max_factor=1000.0, eta0=376.730313668, vf_target=0.5, reactive=false)
 
 Construct DensityConfig with default parameters.
+If `reactive=true`, Z_max is purely imaginary (jX penalty), preserving power conservation.
+If `reactive=false` (default), Z_max is real (resistive penalty, introduces artificial absorption).
 """
 function DensityConfig(; p::Float64=3.0, Z_max_factor::Float64=1000.0,
-                       eta0::Float64=376.730313668, vf_target::Float64=0.5)
-    return DensityConfig(p, Z_max_factor * eta0, vf_target)
+                       eta0::Float64=376.730313668, vf_target::Float64=0.5,
+                       reactive::Bool=false)
+    Z_max = reactive ? im * Z_max_factor * eta0 : ComplexF64(Z_max_factor * eta0)
+    return DensityConfig(p, Z_max, vf_target)
 end
 
 """

@@ -215,7 +215,7 @@ println("\n── Test 38: DensityInterpolation ──")
 
     # ── A: DensityConfig ──
     @testset "A: DensityConfig values" begin
-        @test real(config.Z_max) ≈ 1000.0 * eta0 rtol=1e-12
+        @test abs(config.Z_max) ≈ 1000.0 * eta0 rtol=1e-12
         @test config.p ≈ 3.0
         @test config.vf_target ≈ 0.5
     end

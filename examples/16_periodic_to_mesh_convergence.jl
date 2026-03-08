@@ -120,7 +120,7 @@ function evaluate_mesh_case(Nx::Int, Ny::Int, rho_ref::Vector{Float64};
                                                        half_angle=10 * π / 180,
                                                        polarization=:x))
 
-    config = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5)
+    config = DensityConfig(; p=3.0, Z_max_factor=10.0, vf_target=0.5, reactive=true)
 
     # Mapped final optimized density and PEC reference on the same discretization.
     rho_bar_opt = map_density_to_structured_mesh(mesh, rho_ref, dx_cell, dy_cell, Nx_ref, Ny_ref)
