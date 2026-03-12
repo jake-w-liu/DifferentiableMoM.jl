@@ -142,6 +142,11 @@ exc = ImportedExcitation(source_func; kind=:electric_field, ...)
 
 For rigorous imported sources, compute `E_inc(r)` externally and use `kind=:electric_field`.
 
+For total-field observation via `compute_total_field`, only
+`ImportedExcitation(kind=:electric_field)` is supported. The
+`:surface_current_density` mode remains a local RHS approximation and is
+intentionally excluded from v1 total-field evaluation.
+
 ---
 
 ### `PatternFeedExcitation`
@@ -473,6 +478,10 @@ All excitations are compatible with the adjoint gradient computation. The excita
 ### Practical
 1. Set up a two-port excitation and solve for currents. Compute the input impedance at each port.
 2. Combine plane wave and dipole excitations with weights 0.6 and 0.4 using `MultiExcitation`.
+
+### `compute_total_field` compatibility
+- Supported: `PlaneWaveExcitation`, `DipoleExcitation`, `LoopExcitation`, `PatternFeedExcitation`, `ImportedExcitation(kind=:electric_field)`, and `MultiExcitation` composed only of those supported source types.
+- Not supported: `PortExcitation`, `DeltaGapExcitation`, and `ImportedExcitation(kind=:surface_current_density)`.
 
 ### Advanced
 1. Write a function that imports field data from a CSV file and creates an `ImportedExcitation`. Compare the RHS against a plane-wave reference.

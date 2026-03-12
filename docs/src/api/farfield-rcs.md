@@ -82,6 +82,126 @@ Compute the far-field pattern `E_inf(r_hat_q) = sum_n I_n * g_n(r_hat_q)` at all
 
 ---
 
+## Near-Field Evaluation
+
+### `compute_nearfield(mesh, rwg, I_coeffs, observation_points, k; quad_order=3, eta0=376.730313668, check_surface=true, surface_tol=nothing)`
+
+Compute the scattered electric field at arbitrary observation points from the
+solved RWG current coefficients.
+
+**Supported observation-point inputs:**
+
+- A single `Vec3` point
+- A `Vector{Vec3}` of points
+- A real matrix of size `(3, Nobs)`
+
+**Returns:**
+
+- Single-point input: `CVec3`
+- Multi-point input: `Matrix{ComplexF64}` of size `(3, Nobs)`
+
+**Formula:**
+
+```math
+\mathbf E^{\mathrm{sca}}(\mathbf r)
+=
+-i k \eta_0 \int_\Gamma \mathbf J(\mathbf r') G(\mathbf r,\mathbf r')\, dS'
+-i \frac{\eta_0}{k} \int_\Gamma \big(\nabla'\cdot\mathbf J(\mathbf r')\big)\, \nabla G(\mathbf r,\mathbf r')\, dS'.
+```
+
+This is the mixed-potential scattered-field representation consistent with the
+package's `exp(+i\omega t)` convention and the EFIE assembly sign convention.
+
+**Important limitations:**
+
+- Observation points on the surface are rejected when `check_surface=true`.
+- Very near-surface points may require higher `quad_order`.
+- Dedicated near-singular quadrature is not implemented yet, so this routine is
+  intended for points separated from the surface by a nonzero distance.
+
+**Example:**
+
+```julia
+mesh = make_rect_plate(0.1, 0.1, 6, 6)
+rwg = build_rwg(mesh)
+k = 2pi / 0.1
+Z = assemble_Z_efie(mesh, rwg, k)
+v = assemble_v_plane_wave(mesh, rwg, Vec3(0, 0, -k), 1.0, Vec3(1, 0, 0))
+I = Z \ v
+
+obs = [Vec3(0.0, 0.0, 0.2), Vec3(0.02, 0.01, 0.25)]
+E_nf = compute_nearfield(mesh, rwg, I, obs, k)
+```
+
+---
+
+### `compute_total_field(mesh, rwg, I_coeffs, excitation, observation_points, k; quad_order=3, eta0=376.730313668, check_surface=true, surface_tol=nothing)`
+
+Compute the total electric field at arbitrary observation points:
+
+```math
+\mathbf E^{\mathrm{tot}}(\mathbf r) =
+\mathbf E^{\mathrm{inc}}(\mathbf r) + \mathbf E^{\mathrm{sca}}(\mathbf r).
+```
+
+The scattered term `E_sca` is the same mixed-potential EFIE field used by
+`compute_nearfield`, while `E_inc` is evaluated pointwise from the supplied
+excitation model.
+
+**Supported observation-point inputs:**
+
+- A single `Vec3` point
+- A `Vector{Vec3}` of points
+- A real matrix of size `(3, Nobs)`
+
+**Returns:**
+
+- Single-point input: `CVec3`
+- Multi-point input: `Matrix{ComplexF64}` of size `(3, Nobs)`
+
+**Supported excitation models:**
+
+- `PlaneWaveExcitation`
+- `DipoleExcitation`
+- `LoopExcitation`
+- `PatternFeedExcitation`
+- `ImportedExcitation(kind=:electric_field)`
+- `MultiExcitation` composed only of the supported pointwise incident-field models above
+
+**Not supported in v1:**
+
+- `PortExcitation`
+- `DeltaGapExcitation`
+- `ImportedExcitation(kind=:surface_current_density)`
+
+These excluded source types currently define excitation-vector or local RHS
+models, not rigorous observation-point incident electric fields.
+
+**Important limitations:**
+
+- Observation points on the surface are rejected when `check_surface=true`.
+- Very near-surface points may require higher `quad_order`.
+- Dedicated near-singular quadrature is not implemented yet.
+- For analytic source models, the supplied `k` must match the excitation's own
+  free-space wavenumber.
+
+**Example:**
+
+```julia
+mesh = make_rect_plate(0.1, 0.1, 6, 6)
+rwg = build_rwg(mesh)
+k = 2pi / 0.1
+pw = make_plane_wave(Vec3(0, 0, -k), 1.0, Vec3(1, 0, 0))
+Z = assemble_Z_efie(mesh, rwg, k)
+v = assemble_excitation(mesh, rwg, pw)
+I = Z \ v
+
+obs = [Vec3(0.0, 0.0, 0.2), Vec3(0.02, 0.01, 0.25)]
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k)
+```
+
+---
+
 ## Q-Matrix Helpers
 
 The Q-matrix formulation converts far-field pattern objectives into quadratic forms `J = Re(I' Q I)`, which are differentiable via the adjoint method. This is the bridge between far-field pattern shaping and gradient-based optimization.

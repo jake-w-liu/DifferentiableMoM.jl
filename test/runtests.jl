@@ -565,6 +565,236 @@ bs = backscatter_rcs(E_ff, grid, Vec3(0.0, 0.0, -1.0); E0=1.0)
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 6b: Scattered Near-Field Evaluation
+# ─────────────────────────────────────────────────
+println("\n── Test 6b: Scattered near-field evaluation ──")
+
+obs_points = [
+    Vec3(0.00, 0.00, 0.15),
+    Vec3(0.02, -0.03, 0.18),
+]
+E_nf = compute_nearfield(mesh, rwg, I_pec, obs_points, k; quad_order=3, eta0=eta0)
+@assert size(E_nf) == (3, length(obs_points))
+@assert all(isfinite, real.(E_nf))
+@assert all(isfinite, imag.(E_nf))
+
+obs_mat = hcat(obs_points...)
+E_nf_mat = compute_nearfield(mesh, rwg, I_pec, obs_mat, k; quad_order=3, eta0=eta0)
+@assert norm(E_nf - E_nf_mat) < 1e-12 * max(norm(E_nf), 1.0)
+
+E_nf_pt = compute_nearfield(mesh, rwg, I_pec, obs_points[1], k; quad_order=3, eta0=eta0)
+@assert norm(E_nf_pt - CVec3(E_nf[:, 1])) < 1e-12 * max(norm(E_nf_pt), 1.0)
+
+I_nf_a = ComplexF64.(randn(N) .+ 1im .* randn(N))
+I_nf_b = ComplexF64.(randn(N) .+ 1im .* randn(N))
+E_nf_a = compute_nearfield(mesh, rwg, I_nf_a, obs_points, k; quad_order=3, eta0=eta0)
+E_nf_b = compute_nearfield(mesh, rwg, I_nf_b, obs_points, k; quad_order=3, eta0=eta0)
+E_nf_ab = compute_nearfield(mesh, rwg, I_nf_a .+ I_nf_b, obs_points, k; quad_order=3, eta0=eta0)
+rel_nf_lin = norm(E_nf_ab - (E_nf_a + E_nf_b)) / max(norm(E_nf_ab), 1e-30)
+println("  Near-field linearity rel. error: $rel_nf_lin")
+@assert rel_nf_lin < 1e-12
+
+surface_err = try
+    compute_nearfield(mesh, rwg, I_pec, triangle_center(mesh, 1), k; quad_order=3, eta0=eta0)
+    false
+catch
+    true
+end
+@assert surface_err
+
+grid_nf = make_sph_grid(10, 20)
+q_nf = 37
+G_nf_far = radiation_vectors(mesh, rwg, grid_nf, k; quad_order=7, eta0=eta0)
+E_ff_nf = compute_farfield(G_nf_far, I_pec, length(grid_nf.w))
+rhat_nf = Vec3(grid_nf.rhat[:, q_nf])
+R_nf = 40.0 * lambda0
+obs_far = R_nf * rhat_nf
+E_nf_far = compute_nearfield(mesh, rwg, I_pec, obs_far, k; quad_order=7, eta0=eta0)
+E_nf_ref = CVec3(E_ff_nf[:, q_nf]) * exp(-1im * k * R_nf) / R_nf
+rel_nf_far = norm(E_nf_far - E_nf_ref) / max(norm(E_nf_ref), 1e-30)
+println("  Near-field far-zone rel. error: $rel_nf_far")
+@assert rel_nf_far < 0.08
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 6c: Total Electric Field Evaluation
+# ─────────────────────────────────────────────────
+println("\n── Test 6c: Total electric-field evaluation ──")
+
+pw_total = make_plane_wave(k_vec, E0, pol)
+I_zero = zeros(ComplexF64, N)
+
+function stack_fields(field_func, points)
+    E = zeros(ComplexF64, 3, length(points))
+    for i in eachindex(points)
+        E[:, i] .= field_func(points[i])
+    end
+    return E
+end
+
+E_tf = compute_total_field(mesh, rwg, I_pec, pw_total, obs_points, k; quad_order=3, eta0=eta0)
+@assert size(E_tf) == (3, length(obs_points))
+@assert all(isfinite, real.(E_tf))
+@assert all(isfinite, imag.(E_tf))
+
+E_tf_mat = compute_total_field(mesh, rwg, I_pec, pw_total, obs_mat, k; quad_order=3, eta0=eta0)
+@assert norm(E_tf - E_tf_mat) < 1e-12 * max(norm(E_tf), 1.0)
+
+E_tf_pt = compute_total_field(mesh, rwg, I_pec, pw_total, obs_points[1], k; quad_order=3, eta0=eta0)
+@assert E_tf_pt isa CVec3
+@assert norm(E_tf_pt - CVec3(E_tf[:, 1])) < 1e-12 * max(norm(E_tf_pt), 1.0)
+
+E_pw_ref = stack_fields(obs_points) do r
+    plane_wave_field(r, k_vec, E0, pol)
+end
+E_tf_zero_pw = compute_total_field(mesh, rwg, I_zero, pw_total, obs_points, k; quad_order=3, eta0=eta0)
+@assert norm(E_tf_zero_pw - E_pw_ref) < 1e-12 * max(norm(E_pw_ref), 1.0)
+
+dip_total = make_dipole(Vec3(0.03, -0.02, 0.12),
+                        CVec3(0.0 + 0im, 0.0 + 0im, 1.5e-9 + 0.4e-9im),
+                        Vec3(0.0, 0.0, 1.0),
+                        :electric,
+                        freq)
+E_dip_ref = stack_fields(obs_points) do r
+    DifferentiableMoM.dipole_incident_field(r, dip_total)
+end
+E_tf_zero_dip = compute_total_field(mesh, rwg, I_zero, dip_total, obs_points, k; quad_order=3, eta0=eta0)
+@assert norm(E_tf_zero_dip - E_dip_ref) < 1e-12 * max(norm(E_dip_ref), 1.0)
+
+loop_total = make_loop(Vec3(-0.04, 0.01, 0.14),
+                       Vec3(0.0, 1.0, 0.0),
+                       0.012,
+                       1.0 + 0.35im,
+                       freq)
+E_loop_ref = stack_fields(obs_points) do r
+    DifferentiableMoM.loop_incident_field(r, loop_total)
+end
+E_tf_zero_loop = compute_total_field(mesh, rwg, I_zero, loop_total, obs_points, k; quad_order=3, eta0=eta0)
+@assert norm(E_tf_zero_loop - E_loop_ref) < 1e-12 * max(norm(E_loop_ref), 1.0)
+
+theta_pat = collect(range(0.0, stop=π, length=9))
+phi_pat = collect(range(0.0, stop=2π - 2π / 12, length=12))
+pat_total = make_analytic_dipole_pattern_feed(dip_total, theta_pat, phi_pat;
+                                              phase_center=dip_total.position,
+                                              convention=:exp_plus_iwt)
+E_pat_ref = stack_fields(obs_points) do r
+    pattern_feed_field(r, pat_total)
+end
+E_tf_zero_pat = compute_total_field(mesh, rwg, I_zero, pat_total, obs_points, k; quad_order=3, eta0=eta0)
+@assert norm(E_tf_zero_pat - E_pat_ref) < 1e-12 * max(norm(E_pat_ref), 1.0)
+
+imp_total = ImportedExcitation(
+    r -> CVec3(0.3 + 0.1im * r[1], -0.2 + 0.05im * r[2], 0.1 - 0.08im * r[3]);
+    kind=:electric_field,
+    min_quad_order=3,
+)
+E_imp_ref = stack_fields(obs_points) do r
+    imp_total.source_func(r)
+end
+E_tf_zero_imp = compute_total_field(mesh, rwg, I_zero, imp_total, obs_points, k; quad_order=3, eta0=eta0)
+@assert norm(E_tf_zero_imp - E_imp_ref) < 1e-12 * max(norm(E_imp_ref), 1.0)
+
+E_inc_from_total = E_tf - E_nf
+rel_tf_inc = norm(E_inc_from_total - E_pw_ref) / max(norm(E_pw_ref), 1e-30)
+println("  Total minus scattered rel. error: $rel_tf_inc")
+@assert rel_tf_inc < 1e-12
+
+E_tf_far = compute_total_field(mesh, rwg, I_pec, pw_total, obs_far, k; quad_order=7, eta0=eta0)
+E_tf_ref = plane_wave_field(obs_far, k_vec, E0, pol) + E_nf_ref
+rel_tf_far = norm(E_tf_far - E_tf_ref) / max(norm(E_tf_ref), 1e-30)
+println("  Total-field far-zone rel. error: $rel_tf_far")
+@assert rel_tf_far < 0.08
+
+v_dip_total = assemble_excitation(mesh, rwg, dip_total; quad_order=3)
+I_dip_total = Z_efie \ v_dip_total
+w_pw = 0.7 - 0.15im
+w_dip = -0.25 + 0.5im
+multi_total = make_multi_excitation([pw_total, dip_total], [w_pw, w_dip])
+I_combo = w_pw .* I_pec .+ w_dip .* I_dip_total
+E_tf_multi = compute_total_field(mesh, rwg, I_combo, multi_total, obs_points, k; quad_order=3, eta0=eta0)
+E_tf_multi_ref =
+    w_pw .* compute_total_field(mesh, rwg, I_pec, pw_total, obs_points, k; quad_order=3, eta0=eta0) .+
+    w_dip .* compute_total_field(mesh, rwg, I_dip_total, dip_total, obs_points, k; quad_order=3, eta0=eta0)
+rel_tf_multi = norm(E_tf_multi - E_tf_multi_ref) / max(norm(E_tf_multi_ref), 1e-30)
+println("  MultiExcitation total-field rel. error: $rel_tf_multi")
+@assert rel_tf_multi < 1e-12
+
+port_total = PortExcitation([1, 2], 1.0 + 0im, 50.0 + 0im)
+port_err = try
+    compute_total_field(mesh, rwg, I_zero, port_total, obs_points, k; quad_order=3, eta0=eta0)
+    false
+catch err
+    occursin("PortExcitation", sprint(showerror, err))
+end
+@assert port_err
+
+gap_total = make_delta_gap(1, 1.0 + 0im, 0.01)
+gap_err = try
+    compute_total_field(mesh, rwg, I_zero, gap_total, obs_points, k; quad_order=3, eta0=eta0)
+    false
+catch err
+    occursin("DeltaGapExcitation", sprint(showerror, err))
+end
+@assert gap_err
+
+imp_js_total = ImportedExcitation(r -> CVec3(1.0 + 0im, 0.0 + 0im, 0.0 + 0im);
+                                  kind=:surface_current_density,
+                                  eta_equiv=eta0 + 0im,
+                                  min_quad_order=3)
+imp_js_err = try
+    compute_total_field(mesh, rwg, I_zero, imp_js_total, obs_points, k; quad_order=3, eta0=eta0)
+    false
+catch err
+    occursin("surface_current_density", sprint(showerror, err))
+end
+@assert imp_js_err
+
+multi_bad = make_multi_excitation([pw_total, gap_total], [1.0 + 0im, 0.25 + 0im])
+multi_bad_err = try
+    compute_total_field(mesh, rwg, I_zero, multi_bad, obs_points, k; quad_order=3, eta0=eta0)
+    false
+catch err
+    msg = sprint(showerror, err)
+    occursin("child 2", msg) && occursin("DeltaGapExcitation", msg)
+end
+@assert multi_bad_err
+
+pw_k_err = try
+    compute_total_field(mesh, rwg, I_zero, pw_total, obs_points, 1.01 * k; quad_order=3, eta0=eta0)
+    false
+catch err
+    occursin("PlaneWaveExcitation", sprint(showerror, err))
+end
+@assert pw_k_err
+
+dip_k_err = try
+    compute_total_field(mesh, rwg, I_zero, dip_total, obs_points, 0.99 * k; quad_order=3, eta0=eta0)
+    false
+catch err
+    occursin("DipoleExcitation", sprint(showerror, err))
+end
+@assert dip_k_err
+
+pat_k_err = try
+    compute_total_field(mesh, rwg, I_zero, pat_total, obs_points, 1.02 * k; quad_order=3, eta0=eta0)
+    false
+catch err
+    occursin("PatternFeedExcitation", sprint(showerror, err))
+end
+@assert pat_k_err
+
+surface_total_err = try
+    compute_total_field(mesh, rwg, I_zero, pw_total, triangle_center(mesh, 1), k; quad_order=3, eta0=eta0)
+    false
+catch
+    true
+end
+@assert surface_total_err
+
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Test 7: Adjoint Gradient Verification
 # ─────────────────────────────────────────────────
 println("\n── Test 7: Adjoint gradient verification (CRITICAL) ──")

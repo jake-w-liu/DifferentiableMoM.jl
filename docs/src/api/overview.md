@@ -108,6 +108,11 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
 - **Far-field computation:** `make_sph_grid`, `radiation_vectors`, `compute_farfield`
   Sample the far-field radiation pattern on a spherical grid.
 
+- **Near-field computation:** `compute_nearfield`, `compute_total_field`
+  Evaluate the scattered electric field, or the total electric field
+  `E_total = E_inc + E_sca`, at arbitrary observation points away from the
+  surface using the mixed-potential EFIE representation for `E_sca`.
+
 - **Objective (Q-matrix) helpers:** `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`, `direction_mask`
   Build Hermitian PSD matrices for quadratic far-field objectives used in optimization. `direction_mask` generalizes `cap_mask` to arbitrary directions for multi-angle RCS optimization.
 
@@ -212,5 +217,3 @@ For a first read-through of the API documentation, follow this order:
 
 - All exported function names and signatures listed here are stable for current tutorial and validation workflows.
 - Internal helper methods in `src/` may evolve; rely on the exported API for forward compatibility.
-
-

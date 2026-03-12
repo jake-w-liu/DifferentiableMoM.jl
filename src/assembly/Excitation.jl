@@ -538,6 +538,152 @@ function loop_incident_field(r::Vec3, loop::LoopExcitation)
     return dipole_incident_field(r, dip)
 end
 
+@inline function _supported_incident_wavenumber_abs(k)
+    tol_im = max(1e-10 * max(abs(real(k)), 1.0), 1e-12)
+    abs(imag(k)) <= tol_im ||
+        error("compute_total_field: analytic incident-field models require a real free-space wavenumber; got k=$k.")
+    return abs(real(k))
+end
+
+@inline function _incident_wavenumber_match_tol(k)
+    return max(1e-8 * max(abs(real(k)), 1.0), 1e-12)
+end
+
+@inline function _check_incident_wavenumber_match(k_model::Real, k, label::AbstractString)
+    k_abs = _supported_incident_wavenumber_abs(k)
+    tol = _incident_wavenumber_match_tol(k)
+    abs(k_model - k_abs) <= tol ||
+        error("compute_total_field: $label expects |k|=$k_model, got $(abs(real(k))) (tol=$tol).")
+    return nothing
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::AbstractExcitation, k)
+    error("compute_total_field: incident-field evaluation is not implemented for $(typeof(excitation)).")
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::PlaneWaveExcitation, k)
+    return _check_incident_wavenumber_match(norm(excitation.k_vec), k, "PlaneWaveExcitation")
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::DipoleExcitation, k)
+    excitation.frequency > 0 || error("Dipole frequency must be positive.")
+    k_model = 2π * excitation.frequency / _C0
+    return _check_incident_wavenumber_match(k_model, k, "DipoleExcitation")
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::LoopExcitation, k)
+    excitation.frequency > 0 || error("Loop frequency must be positive.")
+    k_model = 2π * excitation.frequency / _C0
+    return _check_incident_wavenumber_match(k_model, k, "LoopExcitation")
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::PatternFeedExcitation, k)
+    excitation.frequency > 0 || error("Pattern feed frequency must be positive.")
+    k_model = 2π * excitation.frequency / _C0
+    return _check_incident_wavenumber_match(k_model, k, "PatternFeedExcitation")
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::ImportedExcitation, k)
+    if excitation.kind == :electric_field
+        return nothing
+    end
+    error(
+        "compute_total_field: ImportedExcitation(kind=:surface_current_density) is RHS-only " *
+        "and does not define a rigorous observation-point incident electric field."
+    )
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::PortExcitation, k)
+    error(
+        "compute_total_field: PortExcitation is an excitation-vector surrogate, not a " *
+        "pointwise incident-field model."
+    )
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::DeltaGapExcitation, k)
+    error(
+        "compute_total_field: DeltaGapExcitation is an excitation-vector surrogate, not a " *
+        "pointwise incident-field model."
+    )
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::MultiExcitation, k)
+    length(excitation.excitations) == length(excitation.weights) ||
+        error("compute_total_field: MultiExcitation has mismatched excitation/weight lengths.")
+    for (i, exc) in enumerate(excitation.excitations)
+        try
+            _validate_incident_electric_field_wavenumber(exc, k)
+        catch err
+            error(
+                "compute_total_field: MultiExcitation child $i of type $(typeof(exc)) " *
+                "failed incident-field validation: $(sprint(showerror, err))"
+            )
+        end
+    end
+    return nothing
+end
+
+function _incident_electric_field(excitation::AbstractExcitation, r::Vec3, k)
+    error("compute_total_field: incident-field evaluation is not implemented for $(typeof(excitation)).")
+end
+
+function _incident_electric_field(excitation::PlaneWaveExcitation, r::Vec3, k)
+    return plane_wave_field(r, excitation.k_vec, excitation.E0, excitation.pol)
+end
+
+function _incident_electric_field(excitation::DipoleExcitation, r::Vec3, k)
+    return dipole_incident_field(r, excitation)
+end
+
+function _incident_electric_field(excitation::LoopExcitation, r::Vec3, k)
+    return loop_incident_field(r, excitation)
+end
+
+function _incident_electric_field(excitation::PatternFeedExcitation, r::Vec3, k)
+    return pattern_feed_field(r, excitation)
+end
+
+function _incident_electric_field(excitation::ImportedExcitation, r::Vec3, k)
+    if excitation.kind == :electric_field
+        return _to_cvec3(excitation.source_func(r), "ImportedExcitation source function")
+    end
+    error(
+        "compute_total_field: ImportedExcitation(kind=:surface_current_density) is RHS-only " *
+        "and does not define a rigorous observation-point incident electric field."
+    )
+end
+
+function _incident_electric_field(excitation::PortExcitation, r::Vec3, k)
+    error(
+        "compute_total_field: PortExcitation is an excitation-vector surrogate, not a " *
+        "pointwise incident-field model."
+    )
+end
+
+function _incident_electric_field(excitation::DeltaGapExcitation, r::Vec3, k)
+    error(
+        "compute_total_field: DeltaGapExcitation is an excitation-vector surrogate, not a " *
+        "pointwise incident-field model."
+    )
+end
+
+function _incident_electric_field(excitation::MultiExcitation, r::Vec3, k)
+    length(excitation.excitations) == length(excitation.weights) ||
+        error("compute_total_field: MultiExcitation has mismatched excitation/weight lengths.")
+    E = CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+    for (i, (exc, w)) in enumerate(zip(excitation.excitations, excitation.weights))
+        try
+            E += w * _incident_electric_field(exc, r, k)
+        catch err
+            error(
+                "compute_total_field: MultiExcitation child $i of type $(typeof(exc)) " *
+                "failed incident-field evaluation: $(sprint(showerror, err))"
+            )
+        end
+    end
+    return E
+end
+
 """
     assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol; quad_order=3)
 

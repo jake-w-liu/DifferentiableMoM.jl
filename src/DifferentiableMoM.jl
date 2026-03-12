@@ -37,6 +37,7 @@ include("fast/MLFMA.jl")
 
 # Post-processing (FarField needed by QMatrix)
 include("postprocessing/FarField.jl")
+include("postprocessing/NearField.jl")
 
 # Optimization objectives
 include("optimization/QMatrix.jl")
