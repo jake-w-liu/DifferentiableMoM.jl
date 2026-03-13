@@ -4,6 +4,11 @@
 
 Establish confidence in the solver's correctness through self-consistent checks that require no external references. These diagnostics verify that the discrete EFIE formulation, far-field computation, and objective assembly are mathematically and physically consistent. For a lossless PEC structure, energy conservation must hold; for any structure, the linear system residual must be small, and quadratic-form objectives must match direct angular integration.
 
+These checks are necessary but not sufficient for validating observation-space
+fields. For analytical validation of `compute_nearfield` and
+`compute_total_field`, follow this chapter with
+[validation/06-near-total-field-rayleigh-sphere.md](06-near-total-field-rayleigh-sphere.md).
+
 ---
 
 ## Learning Goals
@@ -279,6 +284,7 @@ end
 - **Convergence study**: `examples/01_pec_plate_basics.jl`
 - **Paper consistency aggregation**: `validation/paper/generate_consistency_report.jl`
 - **Sphere benchmark**: `examples/02_pec_sphere_mie.jl`
+- **Near-/total-field benchmark**: `examples/21_near_total_field_rayleigh_sphere.jl`
 
 ---
 

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Provide a complete mathematical and computational description of the forward scattering solution pipeline: from geometry and excitation definition to surface current solution. This chapter covers EFIE operator assembly, impedance loading, numerical solution strategies, preconditioning, and validation diagnostics. Understanding this pipeline is essential for both forward analysis and gradient-based optimization.
+Provide a complete mathematical and computational description of the forward scattering solution pipeline: from geometry and excitation definition to surface current solution, then onward to field postprocessing. This chapter covers EFIE operator assembly, impedance loading, numerical solution strategies, preconditioning, and validation diagnostics. Understanding this pipeline is essential for both forward analysis and gradient-based optimization.
 
 ---
 
@@ -15,8 +15,9 @@ After this chapter, you should be able to:
 3. Incorporate surface impedance contributions via patch-wise mass matrices.
 4. Select appropriate solution strategies (direct vs. iterative) based on problem characteristics.
 5. Apply preconditioning to improve numerical conditioning.
-6. Validate forward solutions through residual checks, energy conservation, and condition diagnostics.
-7. Troubleshoot common assembly and solution errors.
+6. Postprocess solved currents into scattered near fields, total electric fields, and far-field observables.
+7. Validate forward solutions through residual checks, energy conservation, and condition diagnostics.
+8. Troubleshoot common assembly and solution errors.
 
 ---
 
@@ -79,7 +80,7 @@ The EFIE matrix $\mathbf{Z}$ is complex symmetric (for reciprocal media) and den
 The forward solution follows this sequence:
 
 ```math
-\text{Mesh} \rightarrow \text{RWG basis} \rightarrow \text{EFIE matrix} \rightarrow \text{Impedance terms} \rightarrow \text{Excitation} \rightarrow \text{Solve} \rightarrow \text{Diagnostics}
+\text{Mesh} \rightarrow \text{RWG basis} \rightarrow \text{EFIE matrix} \rightarrow \text{Impedance terms} \rightarrow \text{Excitation} \rightarrow \text{Solve} \rightarrow \text{Field Postprocessing} \rightarrow \text{Diagnostics}
 ```
 
 ### 2.2 Core Functions and Data Flow
@@ -98,12 +99,18 @@ Mp = precompute_patch_mass(mesh, rwg, partition; quad_order=3)
 Z_full = assemble_full_Z(Z_efie, Mp, theta; reactive=true)
 
 # 4. Excitation
-v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
+pw = make_plane_wave(k_vec, E0, pol_inc)
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 
 # 5. Solution
 I = solve_forward(Z_full, v)
 
-# 6. Diagnostics
+# 6. Field postprocessing
+obs = [Vec3(0.0, 0.0, 0.15)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
+
+# 7. Diagnostics
 cond_info = condition_diagnostics(Z_full)
 residual = norm(Z_full * I - v) / norm(v)
 ```
@@ -176,7 +183,8 @@ v_n = \int_\Gamma \mathbf{f}_n(\mathbf{r}) \cdot \mathbf{p} e^{-i\mathbf{k}\cdot
 **Implementation:**
 
 ```julia
-v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
+pw = make_plane_wave(k_vec, E0, pol_inc)
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 ```
 
 **Supported excitation types (8 total):**
@@ -211,6 +219,24 @@ the Krylov.jl wrapper. Both left and right preconditioning are supported.
 For automatic method selection based on problem size, use `solve_scattering`
 in `src/Workflow.jl`, which selects dense direct, dense GMRES, or ACA GMRES
 depending on the number of unknowns.
+
+After any solve, the current vector can be postprocessed into local or
+asymptotic observables:
+
+```julia
+pw = make_plane_wave(k_vec, E0, pol_inc)
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.0, 0.18)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
+
+grid = make_sph_grid(16, 32)
+G_mat = radiation_vectors(mesh, rwg, grid, k; quad_order=3, eta0=η0)
+E_ff = compute_farfield(G_mat, I, length(grid.w))
+```
+
+This is the recommended post-solve workflow for observation-space fields:
+`compute_nearfield` for scattered field only, `compute_total_field` for
+`E_inc + E_sca`, and `compute_farfield` for radiation and RCS quantities.
 
 ### 2.7 Preconditioning and Conditioning
 
@@ -290,10 +316,16 @@ Z = assemble_Z_efie(mesh, rwg, k; quad_order=3, eta0=η0)
 k_vec = Vec3(0.0, 0.0, -k)  # Propagating in -z direction
 E0 = 1.0
 pol_inc = Vec3(1.0, 0.0, 0.0)
-v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol_inc; quad_order=3)
+pw = make_plane_wave(k_vec, E0, pol_inc)
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 
 # Solve
 I = solve_forward(Z, v)
+
+# Optional local field samples
+obs = [Vec3(0.0, 0.0, 0.15)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
 
 # Diagnostics
 println("RWG unknowns: $(rwg.nedges)")
@@ -464,11 +496,14 @@ Combine with other techniques:
   - `precompute_patch_mass`, `assemble_Z_impedance`, `assemble_full_Z`
 
 - **Excitation assembly**: `src/assembly/Excitation.jl`
-  - `assemble_v_plane_wave`, incident field integration
+  - `make_plane_wave`, `assemble_excitation`, incident field integration
 
 - **Linear algebra solvers**: `src/solver/Solve.jl`
   - `solve_forward`, `solve_system`
   - `select_preconditioner`, `prepare_conditioned_system`
+
+- **Field postprocessing**: `src/postprocessing/NearField.jl`, `src/postprocessing/FarField.jl`
+  - `compute_nearfield`, `compute_total_field`, `compute_farfield`
 
 - **Diagnostics**: `src/postprocessing/Diagnostics.jl`
   - `condition_diagnostics`, `energy_ratio`, residual checks
@@ -483,6 +518,7 @@ Combine with other techniques:
 
 - **Forward solve / convergence**: `examples/01_pec_plate_basics.jl`
 - **Beam objective workflow**: `examples/04_beam_steering.jl`
+- **Near-/total-field validation**: `examples/21_near_total_field_rayleigh_sphere.jl`
 - **Complex mesh forward solve**: `examples/06_aircraft_rcs.jl`
 
 ---

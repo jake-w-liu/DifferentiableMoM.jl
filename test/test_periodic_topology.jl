@@ -826,8 +826,41 @@ println("\n── Test 42: PeriodicMetrics ──")
                                           half_angle=5π/180, polarization=:x)
         @test size(Q_narrow) == size(Q_default)
 
-        @test_throws ErrorException specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
-                                                           polarization=:y)
+        pol_x = pol_linear_x(grid_q)
+        pol_y = pol_linear_y(grid_q)
+        @test size(pol_y) == size(pol_x)
+        for q in eachindex(grid_q.w)
+            rhat_q = Vec3(grid_q.rhat[:, q])
+            @test abs(dot(rhat_q, pol_x[:, q])) < 1e-12
+            @test abs(dot(rhat_q, pol_y[:, q])) < 1e-12
+            @test abs(dot(pol_x[:, q], pol_y[:, q])) < 1e-12
+            @test norm(pol_y[:, q]) ≈ 1.0 atol=1e-12
+        end
+
+        Q_y = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                     polarization=:y)
+        Q_phi = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                       polarization=:phi)
+        Q_te = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                      polarization=:te)
+        Q_theta = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                         polarization=:theta)
+        Q_tm = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                      polarization=:tm)
+        Q_custom = specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                          polarization=pol_y)
+
+        @test size(Q_y) == size(Q_default)
+        @test Q_phi ≈ Q_y rtol=1e-13 atol=1e-13
+        @test Q_te ≈ Q_y rtol=1e-13 atol=1e-13
+        @test Q_theta ≈ Q_default rtol=1e-13 atol=1e-13
+        @test Q_tm ≈ Q_default rtol=1e-13 atol=1e-13
+        @test Q_custom ≈ Q_y rtol=1e-13 atol=1e-13
+
+        @test_throws ArgumentError specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                                          polarization=:circular)
+        @test_throws DimensionMismatch specular_rcs_objective(mesh_q, rwg_q, grid_q, k_pm, lat_pm;
+                                                              polarization=zeros(ComplexF64, 2, length(grid_q.w)))
     end
 
     # ── E: Non-coplanar meshes are rejected for reflection coefficients ──

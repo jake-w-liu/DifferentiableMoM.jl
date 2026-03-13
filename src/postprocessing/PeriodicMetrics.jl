@@ -19,6 +19,33 @@ export floquet_modes, reflection_coefficients, transmission_coefficients, specul
 export power_balance
 export FloquetMode
 
+function _specular_objective_polarization(grid::SphGrid, polarization)
+    if polarization isa Symbol
+        if polarization in (:x, :theta, :tm)
+            return pol_linear_x(grid)
+        elseif polarization in (:y, :phi, :te)
+            return pol_linear_y(grid)
+        else
+            throw(ArgumentError(
+                "Unsupported polarization=$polarization " *
+                "(expected :x/:theta/:tm, :y/:phi/:te, or a (3, NΩ) polarization matrix)."
+            ))
+        end
+    elseif polarization isa AbstractMatrix
+        NΩ = length(grid.w)
+        size(polarization) == (3, NΩ) ||
+            throw(DimensionMismatch(
+                "Custom polarization matrix must have size (3, $NΩ); got $(size(polarization))."
+            ))
+        return ComplexF64.(Matrix(polarization))
+    else
+        throw(ArgumentError(
+            "Unsupported polarization input of type $(typeof(polarization)). " *
+            "Pass a supported Symbol or a (3, NΩ) polarization matrix."
+        ))
+    end
+end
+
 function _assert_coplanar_periodic_metrics_mesh(mesh::TriMesh; atol::Float64=1e-12)
     zvals = @view mesh.xyz[3, :]
     zmin = minimum(zvals)
@@ -312,7 +339,12 @@ For normal incidence: specular = broadside (θ=0).
 For oblique incidence: specular direction from Snell's law.
 
 `half_angle` sets the cone half-angle (radians) around the specular direction.
-`polarization` selects the projection polarization (`:x` currently supported).
+`polarization` selects the projection polarization. Supported symbols:
+
+- `:x`, `:theta`, `:tm` → `pol_linear_x(grid)` (`θ̂` basis)
+- `:y`, `:phi`, `:te` → `pol_linear_y(grid)` (`φ̂` basis)
+
+You may also pass a custom polarization matrix of size `(3, NΩ)`.
 
 Returns Q ∈ C^{N×N} such that J = Re(I† Q I) measures cone-integrated
 specular scattered power in the chosen polarization.
@@ -322,7 +354,7 @@ function specular_rcs_objective(mesh::TriMesh, rwg::RWGData,
                                 lattice::PeriodicLattice;
                                 quad_order::Int=3,
                                 half_angle::Float64=π/18,
-                                polarization::Symbol=:x)
+                                polarization=:x)
     # Specular direction: θ_r = θ_inc, φ_r = φ_inc + π
     theta_spec = asin(clamp(sqrt(lattice.kx_bloch^2 + lattice.ky_bloch^2) / k, 0.0, 1.0))
     phi_spec = atan(lattice.ky_bloch, lattice.kx_bloch) + π
@@ -335,11 +367,7 @@ function specular_rcs_objective(mesh::TriMesh, rwg::RWGData,
 
     # Build radiation vectors and Q matrix
     G_mat = radiation_vectors(mesh, rwg, grid, k; quad_order=quad_order)
-    pol = if polarization == :x
-        pol_linear_x(grid)
-    else
-        error("Unsupported polarization=$polarization (currently only :x is implemented).")
-    end
+    pol = _specular_objective_polarization(grid, polarization)
     Q = build_Q(G_mat, grid, pol; mask=mask)
 
     return Q

@@ -1,8 +1,8 @@
-# Chapter 3: Far-Field, Q Matrix, and RCS Computation
+# Chapter 3: Field Postprocessing, Q Matrix, and RCS Computation
 
 ## Purpose
 
-Transform surface current solutions into physically interpretable radiation metrics: far-field patterns, directional power objectives via $\mathbf{Q}$ matrices, and radar cross section (RCS) quantities. This chapter establishes the mathematical relationships between MoM currents and observable radiation, provides efficient computational algorithms, and demonstrates practical workflows for beam-steering objectives and scattering analysis.
+Transform surface current solutions into physically interpretable observables: scattered near fields, total electric fields, far-field patterns, directional power objectives via $\mathbf{Q}$ matrices, and radar cross section (RCS) quantities. This chapter establishes the mathematical relationships between MoM currents and field observables, provides efficient computational algorithms, and demonstrates practical workflows for scattering analysis and beam-steering objectives.
 
 ---
 
@@ -11,12 +11,14 @@ Transform surface current solutions into physically interpretable radiation metr
 After this chapter, you should be able to:
 
 1. Derive the far-field radiation from RWG basis functions and surface currents.
-2. Construct $\mathbf{Q}$ matrices for arbitrary directional and polarization objectives.
-3. Compute bistatic and monostatic RCS with proper normalization and units.
-4. Design spherical sampling grids for accurate power integration.
-5. Implement beam-centric analysis for antenna and metasurface applications.
-6. Validate far-field computations against analytical benchmarks.
-7. Optimize computational performance for large-scale radiation problems.
+2. Understand the mixed-potential scattered electric field used for near-field evaluation.
+3. Interpret total electric field evaluation as `E_inc + E_sca` for supported excitation models.
+4. Construct $\mathbf{Q}$ matrices for arbitrary directional and polarization objectives.
+5. Compute bistatic and monostatic RCS with proper normalization and units.
+6. Design spherical sampling grids for accurate power integration.
+7. Implement beam-centric analysis for antenna and metasurface applications.
+8. Validate field postprocessing against analytical benchmarks.
+9. Optimize computational performance for large-scale radiation problems.
 
 ---
 
@@ -124,7 +126,38 @@ The bistatic RCS for incident plane wave $\mathbf{E}^{\text{inc}}$ is:
 
 For backscatter ($\hat{\mathbf{r}} = -\hat{\mathbf{k}}_{\text{inc}}$), this becomes monostatic RCS.
 
-### 1.7 Adjoint Gradient for Q Matrix
+### 1.7 Scattered Near-Field from Surface Currents
+
+Away from the surface, the solved RWG current coefficients also define the
+scattered electric field at arbitrary observation points:
+
+```math
+\mathbf E^{\mathrm{sca}}(\mathbf r)
+=
+-i k \eta_0 \int_\Gamma \mathbf J(\mathbf r') G(\mathbf r,\mathbf r')\, dS'
+-i \frac{\eta_0}{k} \int_\Gamma \big(\nabla'\cdot\mathbf J(\mathbf r')\big)\, \nabla G(\mathbf r,\mathbf r')\, dS'.
+```
+
+This mixed-potential representation is the same physical field model used by
+the EFIE. In `DifferentiableMoM.jl`, `compute_nearfield` evaluates this
+expression numerically for any off-surface observation point.
+
+### 1.8 Total Electric Field
+
+For supported excitation models, the total electric field is defined pointwise by
+
+```math
+\mathbf E^{\mathrm{tot}}(\mathbf r) = \mathbf E^{\mathrm{inc}}(\mathbf r) + \mathbf E^{\mathrm{sca}}(\mathbf r).
+```
+
+The package computes `E_inc` from the supplied `AbstractExcitation` object.
+This is available for pointwise source models such as plane waves, dipoles,
+loops, pattern feeds, imported electric fields, and supported
+`MultiExcitation` combinations. Edge-localized feed surrogates such as ports
+and delta-gap excitations are intentionally excluded from total-field
+observation.
+
+### 1.9 Adjoint Gradient for Q Matrix
 
 The gradient of a quadratic objective $\Phi = \mathbf{I}^\dagger \mathbf{Q} \mathbf{I}$ with respect to design parameters $\boldsymbol{\theta}$ follows from the adjoint method derived in Part III. For a single quadratic objective, the adjoint variable $\boldsymbol{\lambda}$ solves
 
@@ -319,11 +352,30 @@ mask_custom = [abs(φ) < π/4 && θ > π/6 for (θ, φ) in zip(grid.theta, grid.
 mask_combined = mask_cone .& mask_custom
 ```
 
+### 2.8 Near-Field and Total-Field Evaluation
+
+Postprocess the solved currents at arbitrary off-surface points:
+
+```julia
+pw = make_plane_wave(Vec3(0, 0, -k), 1.0, Vec3(1, 0, 0))
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.0, 0.18)]
+
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
+```
+
+`compute_nearfield` evaluates only the scattered field. `compute_total_field`
+adds the pointwise incident field from the supplied excitation object, so the
+excitation must be one of the supported observation-space source models.
+
+Implementation lives in `src/postprocessing/NearField.jl` and complements the
+far-field operator path in `src/postprocessing/FarField.jl`.
+
 ---
 
 ## 3) Practical Workflow Examples
 
-### 3.1 Complete Far-Field Analysis
+### 3.1 Complete Field Postprocessing Analysis
 
 ```julia
 using DifferentiableMoM
@@ -334,8 +386,16 @@ rwg = build_rwg(mesh)
 f = 3e9
 k = 2π * f / 299792458.0
 Z = assemble_Z_efie(mesh, rwg, k)
-v = assemble_v_plane_wave(mesh, rwg, Vec3(0,0,-k), 1.0, Vec3(1,0,0))
+pw = make_plane_wave(Vec3(0,0,-k), 1.0, Vec3(1,0,0))
+v = assemble_excitation(mesh, rwg, pw)
 I = solve_forward(Z, v)
+
+# 1b. Sample local fields
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.0, 0.18)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k)
+println("First scattered-field sample: ", E_sca[:, 1])
+println("First total-field sample: ", E_tot[:, 1])
 
 # 2. Create spherical grid
 grid = make_sph_grid(90, 180)  # 90×180 = 16,200 directions
@@ -443,7 +503,9 @@ println("Sidelobe level: $(stats.sll) dB")
 
 ### 3.4 Validation Against Analytical Solution
 
-**Reference:** The full sphere‑vs‑Mie benchmark is presented in Part IV, Chapter 4 (Sphere‑vs‑Mie Benchmark). That chapter provides detailed error metrics, convergence studies, and validation against the analytical Mie series.
+**Far-field / RCS reference:** The full sphere‑vs‑Mie benchmark is presented in Part V, Chapter 4 (Sphere‑vs‑Mie Benchmark). That chapter provides detailed error metrics, convergence studies, and validation against the analytical Mie series.
+
+**Near-field / total-field reference:** The [Rayleigh small-sphere benchmark](../validation/06-near-total-field-rayleigh-sphere.md) validates `compute_nearfield` and `compute_total_field` against an analytical dipole-limit reference. Use that benchmark, not physical optics, when validating local electric fields in the electrically small regime.
 
 ```julia
 # Compare with Mie theory for PEC sphere (functions available via the package)
@@ -637,7 +699,7 @@ Establish validation protocol for far-field computations:
 
 1. **Power conservation**: $\mathbf{I}^\dagger \mathbf{Q}_{\text{total}} \mathbf{I} \approx P_{\text{rad}}$ from Poynting integration
 2. **Reciprocity**: Far-field pattern should match for swapped source/observation
-3. **Analytical benchmarks**: Sphere vs. Mie, plate vs. physical optics
+3. **Analytical benchmarks**: Sphere vs. Mie for far field / RCS, Rayleigh small-sphere for near / total fields, plate vs. physical optics for high-frequency approximation studies
 4. **Grid convergence**: Monitor objective value with increasing $N_\theta$, $N_\phi$
 5. **Polarization purity**: Verify orthogonal polarizations yield zero cross-power
 
@@ -652,16 +714,30 @@ Establish validation protocol for far-field computations:
 
 ## 6) Advanced Topics
 
-### 6.1 Near-Field to Far-Field Transformation
+### 6.1 Near-Field and Total-Field Evaluation
 
-Extend to near-field computations:
+For local field probes, use the dedicated postprocessing routines:
 
 ```julia
-function near_field(mesh, rwg, k, I, observation_points)
-    # Compute electric field at arbitrary points in space
-    # Uses same radiation vector concept with different Green's function
-end
+pw = make_plane_wave(Vec3(0, 0, -k), 1.0, Vec3(1, 0, 0))
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.0, 0.18)]
+
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
 ```
+
+Use `compute_nearfield` when you want the scattered field alone, such as for
+field cancellation or equivalence-principle checks. Use `compute_total_field`
+when you want the observable electric field in space:
+`E_total = E_inc + E_sca`.
+
+Current limitations:
+
+- Observation points must be off the surface.
+- Near-singular quadrature is not implemented yet, so very near-surface probes
+  may require higher `quad_order`.
+- `compute_total_field` supports only source models with a well-defined
+  pointwise `E_inc(r)`.
 
 ### 6.2 Bistatic RCS for Multiple Incidences
 
@@ -704,6 +780,9 @@ end
 - **Far-field grid and radiation vectors**: `src/postprocessing/FarField.jl`
   - `make_sph_grid`, `radiation_vectors`, `compute_farfield`
 
+- **Near-field and total-field evaluation**: `src/postprocessing/NearField.jl`
+  - `compute_nearfield`, `compute_total_field`
+
 - **Q matrix construction**: `src/optimization/QMatrix.jl`
   - `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`
 
@@ -713,10 +792,14 @@ end
 - **Mie theory reference**: `src/postprocessing/Mie.jl`
   - `mie_bistatic_rcs_pec`, analytical validation
 
+- **Incident-field models for total-field evaluation**: `src/assembly/Excitation.jl`
+  - `make_plane_wave`, `assemble_excitation`, supported excitation dispatch
+
 ### 7.2 Example Scripts
 
 - **Sphere benchmark**: `examples/02_pec_sphere_mie.jl`
 - **Beam steering optimization**: `examples/04_beam_steering.jl`
+- **Near-/total-field Rayleigh benchmark**: `examples/21_near_total_field_rayleigh_sphere.jl`
 - **Platform RCS**: `examples/06_aircraft_rcs.jl`
 
 ### 7.3 Supporting Utilities
@@ -740,27 +823,31 @@ end
    - Build Q matrix for broadside cone ($\theta < 30^\circ$)
    - Compare `I† Q I` with direct angular integration
    - Verify Hermitian and PSD properties numerically
+3. **Incident-field recovery**:
+   - Evaluate `E_sca` and `E_tot` at a few off-surface points
+   - Verify numerically that `E_tot - E_sca` matches the incident field
+   - Repeat with higher `quad_order` for points closer to the surface
 
 ### 8.2 Intermediate Level
 
-3. **RCS accuracy study**:
+4. **RCS accuracy study**:
    - Compute sphere RCS with increasing angular resolution
    - Plot error vs. grid size (convergence analysis)
    - Determine minimum grid for < 0.5 dB error
 
-4. **Polarization analysis**:
+5. **Polarization analysis**:
    - Compute co-polar and cross-polar patterns
    - Verify polarization purity for linear/circular cases
    - Analyze polarization mismatch loss
 
 ### 8.3 Advanced Level
 
-5. **Beam synthesis**:
+6. **Beam synthesis**:
    - Design Q matrix for shaped beam (cosecant, flat-top)
    - Optimize currents to match target pattern
    - Evaluate realizability with passive impedance sheets
 
-6. **Computational optimization**:
+7. **Computational optimization**:
    - Implement block-based far-field computation
    - Compare performance (memory, time) for different strategies
    - Propose hybrid approach for large-scale problems
@@ -769,9 +856,10 @@ end
 
 ## 9) Chapter Checklist
 
-Before using far-field quantities for design optimization, ensure you can:
+Before using field postprocessing quantities for design optimization, ensure you can:
 
 - [ ] Compute accurate far-field patterns from surface currents
+- [ ] Compute scattered near-field and total-field samples away from the surface
 - [ ] Construct Q matrices for arbitrary directional objectives
 - [ ] Calculate RCS with proper normalization and units
 - [ ] Validate results against analytical benchmarks

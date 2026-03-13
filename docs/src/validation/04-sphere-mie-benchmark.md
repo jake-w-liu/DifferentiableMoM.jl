@@ -4,6 +4,11 @@
 
 Validate the complete far-field and RCS computation pipeline against an analytical reference: Mie theory for a perfect electric conductor (PEC) sphere. Unlike cross-solver validation (Bempp-cl), the sphere-Mie benchmark provides a **ground truth** with machine-precision accuracy, isolating implementation errors from solver-to-solver convention differences. This benchmark is essential for verifying radiation pattern correctness, RCS scaling, and angular dependence.
 
+Related validation: this chapter is the exact benchmark for far-field and RCS
+quantities. For analytical validation of local observation-space fields
+(`compute_nearfield` and `compute_total_field`), use
+[validation/06-near-total-field-rayleigh-sphere.md](06-near-total-field-rayleigh-sphere.md).
+
 ---
 
 ## Learning Goals

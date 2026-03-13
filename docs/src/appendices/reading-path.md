@@ -8,8 +8,9 @@
 2. Part I — Foundations (all chapters, including fundamentals/06 Excitation Theory)
 3. Part II — Package Fundamentals
 4. Tutorial 01 (First PEC Plate)
-5. Tutorial 04 (Sphere–Mie benchmark)
-6. methods/01 (GMRES & Preconditioning)
+5. validation/06 (Near/Total-Field Rayleigh Sphere)
+6. Tutorial 04 (Sphere–Mie benchmark)
+7. methods/01 (GMRES & Preconditioning)
 
 Goal: build numerical intuition before optimization.
 
@@ -45,7 +46,7 @@ Goal: robust imported-mesh simulation with realistic resource limits.
 
 1. API Overview
 2. API Types, Mesh, RWG
-3. API Assembly/Solve + Far-Field/RCS
+3. API Assembly/Solve + Fields/RCS
 4. API Adjoint/Optimization + Verification
 5. API Excitation + ACA Workflow
 6. fundamentals/06 (Excitation Theory)
@@ -60,7 +61,8 @@ Goal: implement custom workflows quickly.
 
 1. Part V — Validation
 2. Tutorial 04 (Sphere–Mie)
-3. Tutorial 03 (Beam steering)
-4. API Verification
+3. validation/06 (Near/Total-Field Rayleigh Sphere)
+4. Tutorial 03 (Beam steering)
+5. API Verification
 
 Goal: reproduce consistency gates and benchmark evidence.

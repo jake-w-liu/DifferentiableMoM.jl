@@ -3,7 +3,7 @@
 # Q_mn = Σ_q w_q (p†·g_m)* (p†·g_n)
 # J(θ) = I† Q I  (radiated power in selected direction/polarization)
 
-export build_Q, apply_Q, pol_linear_x, cap_mask, direction_mask
+export build_Q, apply_Q, pol_linear_x, pol_linear_y, cap_mask, direction_mask
 
 """
     build_Q(G_mat, grid, pol; mask=nothing)
@@ -110,6 +110,25 @@ function pol_linear_x(grid::SphGrid)
         # θ̂ unit vector
         theta_hat = Vec3(cos(θ) * cos(φ), cos(θ) * sin(φ), -sin(θ))
         pol[:, q] = theta_hat
+    end
+    return pol
+end
+
+"""
+    pol_linear_y(grid)
+
+Generate the orthogonal far-field polarization vectors (`φ̂` component), which
+correspond to y-polarized broadside radiation and the TE/s-polarized basis for
+the common `φ = 0` incidence plane in periodic workflows.
+Returns `(3, NΩ)` complex matrix.
+"""
+function pol_linear_y(grid::SphGrid)
+    NΩ = length(grid.w)
+    pol = zeros(ComplexF64, 3, NΩ)
+    for q in 1:NΩ
+        φ = grid.phi[q]
+        phi_hat = Vec3(-sin(φ), cos(φ), 0.0)
+        pol[:, q] = phi_hat
     end
     return pol
 end

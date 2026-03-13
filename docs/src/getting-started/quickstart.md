@@ -3,7 +3,7 @@
 ## Purpose
 
 Run a minimal end-to-end workflow in a few minutes:
-mesh → RWG basis → EFIE solve → far field → objective.
+mesh → RWG basis → EFIE solve → field postprocessing → objective.
 
 ---
 
@@ -12,8 +12,9 @@ mesh → RWG basis → EFIE solve → far field → objective.
 After this chapter, you should be able to:
 
 1. Run a small PEC forward solve on a plate.
-2. Compute far-field quantities and energy diagnostics.
-3. Understand where to go next for optimization and validation.
+2. Compute scattered near-field and total electric field samples at off-surface points.
+3. Compute far-field quantities and energy diagnostics.
+4. Understand where to go next for optimization and validation.
 
 ---
 
@@ -37,7 +38,8 @@ k  = 2π / λ0
 Z = assemble_Z_efie(mesh, rwg, k; quad_order=3, eta0=η0)
 k_vec = Vec3(0.0, 0.0, -k)
 pol   = Vec3(1.0, 0.0, 0.0)
-v = assemble_v_plane_wave(mesh, rwg, k_vec, 1.0, pol; quad_order=3)
+pw = make_plane_wave(k_vec, 1.0, pol)
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 
 # Solve currents
 I = solve_forward(Z, v)
@@ -45,7 +47,26 @@ I = solve_forward(Z, v)
 
 ---
 
-## 2) Far Field and Energy Check
+## 2) Near Field and Total Field Samples
+
+```julia
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.00, 0.18)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
+
+println("Scattered field at obs[1] = ", E_sca[:, 1])
+println("Total field at obs[1]     = ", E_tot[:, 1])
+```
+
+`compute_nearfield` returns the scattered electric field only. `compute_total_field`
+adds the pointwise incident field from the supplied excitation object, so it
+requires a supported `AbstractExcitation` such as `PlaneWaveExcitation`.
+For an analytical benchmark of this workflow, see the
+[Near/Total-Field Rayleigh Sphere chapter](../validation/06-near-total-field-rayleigh-sphere.md).
+
+---
+
+## 3) Far Field and Energy Check
 
 ```julia
 grid  = make_sph_grid(36, 72)
@@ -62,7 +83,7 @@ quadrature error).
 
 ---
 
-## 3) Build a Directional Objective Quickly
+## 4) Build a Directional Objective Quickly
 
 ```julia
 pol_ff = pol_linear_x(grid)
@@ -76,20 +97,21 @@ This is the same `Q`-matrix objective form used by adjoint optimization.
 
 ---
 
-## 4) Where to Go Next
+## 5) Where to Go Next
 
 - **Forward/mesh fundamentals**: Part II.
 - **Adjoint + optimization**: Part III.
-- **Validation and benchmarks**: Part IV.
+- **Validation and benchmarks**: Part V.
 - **Runnable full workflows**: Tutorials section.
 
 ---
 
-## 5) High-Value Example Commands
+## 6) High-Value Example Commands
 
 ```bash
 julia --project=. examples/04_beam_steering.jl
 julia --project=. examples/02_pec_sphere_mie.jl
+julia --project=. examples/21_near_total_field_rayleigh_sphere.jl
 julia --project=. examples/06_aircraft_rcs.jl
 ```
 
@@ -98,7 +120,7 @@ julia --project=. examples/06_aircraft_rcs.jl
 ## Code Mapping
 
 - Forward assembly: `src/assembly/EFIE.jl`, `src/assembly/Excitation.jl`, `src/solver/Solve.jl`
-- Far-field and objectives: `src/postprocessing/FarField.jl`, `src/optimization/QMatrix.jl`, `src/postprocessing/Diagnostics.jl`
+- Field postprocessing and objectives: `src/postprocessing/NearField.jl`, `src/postprocessing/FarField.jl`, `src/optimization/QMatrix.jl`, `src/postprocessing/Diagnostics.jl`
 - Example implementations: `examples/04_beam_steering.jl`, `examples/01_pec_plate_basics.jl`
 
 ---
@@ -106,5 +128,6 @@ julia --project=. examples/06_aircraft_rcs.jl
 ## Exercises
 
 - Basic: double `Ntheta`/`Nphi` and observe the energy-ratio change.
+- Field check: verify numerically that `E_tot[:,1] - E_sca[:,1]` matches `plane_wave_field(obs[1], k_vec, 1.0, pol)`.
 - Challenge: replace the PEC solve by an impedance-loaded solve using
   `assemble_full_Z` with a nonzero `theta` vector.

@@ -7,9 +7,9 @@ the scattered field from a perfectly electrically conducting (PEC) plate
 illuminated by a plane wave. This tutorial introduces the core workflow:
 
 1. Geometry creation and RWG basis construction.
-2. EFIE matrix assembly and excitation vector.
+2. EFIE matrix assembly and excitation definition.
 3. Direct solve and residual check.
-4. Far‑field computation and energy‑balance validation.
+4. Optional near-/total-field sampling plus far‑field computation and energy‑balance validation.
 
 By the end, you will have verified that the basic MoM pipeline works correctly
 on your system and produces results that pass fundamental sanity checks.
@@ -21,12 +21,13 @@ on your system and produces results that pass fundamental sanity checks.
 After this tutorial, you should be able to:
 
 1. Create a simple plate mesh using `make_rect_plate` and build RWG basis functions.
-2. Assemble the EFIE impedance matrix `Z` and plane‑wave excitation vector `v`.
+2. Assemble the EFIE impedance matrix `Z` and plane‑wave excitation object / vector.
 3. Solve the linear system `Z I = v` and compute the relative residual.
-4. Compute the far‑field pattern and verify power conservation via `energy_ratio`.
-5. Interpret the output numbers to identify potential issues (mesh defects, unit
+4. Sample the scattered near field and total electric field at off-surface points.
+5. Compute the far‑field pattern and verify power conservation via `energy_ratio`.
+6. Interpret the output numbers to identify potential issues (mesh defects, unit
    mistakes, insufficient quadrature).
-6. Modify the script to change frequency, plate size, or discretization.
+7. Modify the script to change frequency, plate size, or discretization.
 
 ---
 
@@ -130,12 +131,13 @@ This forms the dense `N×N` impedance matrix using Gaussian quadrature of order
 3 (default). Assembly time scales as `O(N²)`.
 
 ```julia
-v = assemble_v_plane_wave(mesh, rwg, Vec3(0,0,-k), 1.0, Vec3(1,0,0); quad_order=3)
+pw = make_plane_wave(Vec3(0,0,-k), 1.0, Vec3(1,0,0))
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 ```
 
-The excitation vector corresponds to a plane wave propagating in the `-z`
-direction (`Vec3(0,0,-k)`) with amplitude 1 V/m and x‑polarization
-(`Vec3(1,0,0)`).
+The excitation object `pw` represents a plane wave propagating in the `-z`
+direction with amplitude 1 V/m and x‑polarization. Keeping the excitation
+object is useful later if you want total-field samples via `compute_total_field`.
 
 ### Step 2.6: Solve the Linear System
 
@@ -146,7 +148,25 @@ I = solve_forward(Z, v)
 The package uses a dense LU factorization (via `LinearAlgebra.lu!`) to solve
 `Z I = v`. The solution `I` is a complex vector of RWG coefficients.
 
-### Step 2.7: Compute Far‑Field Pattern
+### Step 2.7: Sample Near and Total Fields (Optional)
+
+```julia
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.0, 0.18)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
+
+println("Scattered field at obs[1] = ", E_sca[:, 1])
+println("Total field at obs[1]     = ", E_tot[:, 1])
+```
+
+This step is optional for a first run, but it is the recommended way to inspect
+local field values. Observation points must stay off the surface.
+
+For an analytical benchmark of these local-field routines, see the
+[Near/Total-Field Rayleigh Sphere chapter](../validation/06-near-total-field-rayleigh-sphere.md)
+and `examples/21_near_total_field_rayleigh_sphere.jl`.
+
+### Step 2.8: Compute Far‑Field Pattern
 
 ```julia
 grid = make_sph_grid(36, 72)      # 36 polar × 72 azimuth samples
@@ -158,7 +178,7 @@ E = compute_farfield(G, I, length(grid.w))
 `radiation_vectors` computes the mapping from surface currents to far‑field
 electric field. `compute_farfield` applies that mapping to the solution `I`.
 
-### Step 2.8: Validate Results
+### Step 2.9: Validate Results
 
 ```julia
 residual = norm(Z * I - v) / norm(v)
@@ -190,8 +210,13 @@ mesh = make_rect_plate(0.1, 0.1, 4, 4)
 rwg  = build_rwg(mesh)
 
 Z = assemble_Z_efie(mesh, rwg, k; quad_order=3, eta0=η0)
-v = assemble_v_plane_wave(mesh, rwg, Vec3(0,0,-k), 1.0, Vec3(1,0,0); quad_order=3)
+pw = make_plane_wave(Vec3(0,0,-k), 1.0, Vec3(1,0,0))
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 I = solve_forward(Z, v)
+
+obs = [Vec3(0.0, 0.0, 0.15), Vec3(0.02, 0.0, 0.18)]
+E_sca = compute_nearfield(mesh, rwg, I, obs, k; quad_order=3, eta0=η0)
+E_tot = compute_total_field(mesh, rwg, I, pw, obs, k; quad_order=3, eta0=η0)
 
 grid = make_sph_grid(36, 72)
 G = radiation_vectors(mesh, rwg, grid, k; quad_order=3, eta0=η0)
@@ -199,6 +224,7 @@ E = compute_farfield(G, I, length(grid.w))
 
 println("Relative residual = ", norm(Z*I - v) / norm(v))
 println("Energy ratio      = ", energy_ratio(I, v, E, grid; eta0=η0))
+println("E_tot - E_sca     = ", E_tot[:, 1] - E_sca[:, 1])
 ```
 
 ---
@@ -250,6 +276,14 @@ println("Condition estimate = ", diag.cond)
 
 For a plate of moderate electrical size (`L/λ ≈ 1`), the condition number may be
 `1e4–1e6`. If it exceeds `1e12`, the solve may become inaccurate.
+
+### Near‑Field and Total‑Field Samples
+
+For off-surface points, `compute_nearfield` gives the scattered field and
+`compute_total_field` returns `E_inc + E_sca`. A quick sanity check is that
+`E_tot - E_sca` should equal the incident plane wave at the same point. If it
+does not, first verify that you passed the same excitation object used to build
+the RHS.
 
 ### Far‑Field Pattern
 
@@ -327,8 +361,9 @@ systematic diagnostic order.
 | Mesh creation | `src/geometry/Mesh.jl` | `make_rect_plate` |
 | RWG basis | `src/basis/RWG.jl` | `build_rwg` |
 | EFIE assembly | `src/assembly/EFIE.jl` | `assemble_Z_efie` |
-| Excitation vector | `src/assembly/Excitation.jl` | `assemble_v_plane_wave` |
+| Excitation definition | `src/assembly/Excitation.jl` | `make_plane_wave`, `assemble_excitation` |
 | Linear solve | `src/solver/Solve.jl` | `solve_forward` |
+| Near-/total-field computation | `src/postprocessing/NearField.jl` | `compute_nearfield`, `compute_total_field` |
 | Far‑field computation | `src/postprocessing/FarField.jl` | `radiation_vectors`, `compute_farfield` |
 | Energy balance check | `src/postprocessing/Diagnostics.jl` | `energy_ratio` |
 | Example script | `examples/01_pec_plate_basics.jl` | Complete convergence study |
@@ -360,16 +395,18 @@ systematic diagnostic order.
 6. **Quadrature order impact**: Increase `quad_order` from 3 to 5 in both
    `assemble_Z_efie` and `radiation_vectors`. Compare the energy ratio and
    assembly time. Is the higher order worth the cost?
+7. **Field-recovery check**: Evaluate `E_sca` and `E_tot` at several off-surface
+   points. Verify that `E_tot - E_sca` matches the incident plane wave.
 
 ### Advanced
 
-7. **OBJ import**: Replace the plate with an OBJ file (e.g., a simple cube).
+8. **OBJ import**: Replace the plate with an OBJ file (e.g., a simple cube).
    Repair the mesh with `repair_mesh_for_simulation`, build RWG, and run the
    same validation. Does the energy ratio stay close to 1?
-8. **Memory estimation**: Write a function that, given a target maximum memory
+9. **Memory estimation**: Write a function that, given a target maximum memory
    (e.g., 2 GiB), returns the maximum `N` allowed. Test it with the plate mesh
    by increasing `Nx`, `Ny` until the estimate exceeds your limit.
- 9. **Convergence study script**: Extend `examples/01_pec_plate_basics.jl` to also
+10. **Convergence study script**: Extend `examples/01_pec_plate_basics.jl` to also
     record the far‑field directivity at broadside (θ = 0°). Plot directivity vs.
     mesh refinement and observe convergence.
 
@@ -391,10 +428,9 @@ Before moving to the next tutorial, verify you can:
 ## 8) Further Reading
 
 - **Paper `bare_jrnl.tex`**: Section 3.1 describes the EFIE discretization and RWG basis.
+- **Near-/total-field validation**: [validation/06-near-total-field-rayleigh-sphere.md](../validation/06-near-total-field-rayleigh-sphere.md) and `examples/21_near_total_field_rayleigh_sphere.jl`.
 - **Classic MoM Text**: *Field Computation by Moment Methods* (Harrington, 1993) – Chapter 4 introduces the EFIE for PEC surfaces.
 - **Julia for Scientific Computing**: *Julia Programming for Operations Research* (Chang, 2020) – good introduction to Julia syntax and performance.
 - **Plots.jl Documentation**: [http://docs.juliaplots.org/](http://docs.juliaplots.org/) – for visualizing far‑field patterns.
 
 ---
-
-

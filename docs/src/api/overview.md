@@ -85,9 +85,10 @@ Construct RWG basis functions on the mesh, then assemble the EFIE system matrix 
 - **Spatial patch assignment:** `assign_patches_grid`, `assign_patches_by_region`, `assign_patches_uniform`, `region_halfspace`, `region_sphere`, `region_box`
   Automatic spatial partitioning of mesh triangles into impedance design patches. See [spatial-patches.md](spatial-patches.md).
 
-### 3) Excitation, Solve, and Far Field
+### 3) Excitation, Solve, and Field Postprocessing
 
-Apply an incident field, solve for currents, and compute far-field radiation or scattering patterns.
+Apply an incident field, solve for currents, then compute scattered near-field,
+total electric field, or far-field observables.
 
 - **Excitation sources:** See [excitation.md](excitation.md) for the full excitation system.
   - Types: `AbstractExcitation`, `PlaneWaveExcitation`, `PortExcitation`, `DeltaGapExcitation`, `DipoleExcitation`, `LoopExcitation`, `ImportedExcitation`, `PatternFeedExcitation`, `MultiExcitation`
@@ -113,7 +114,7 @@ Apply an incident field, solve for currents, and compute far-field radiation or 
   `E_total = E_inc + E_sca`, at arbitrary observation points away from the
   surface using the mixed-potential EFIE representation for `E_sca`.
 
-- **Objective (Q-matrix) helpers:** `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`, `direction_mask`
+- **Objective (Q-matrix) helpers:** `build_Q`, `apply_Q`, `pol_linear_x`, `pol_linear_y`, `cap_mask`, `direction_mask`
   Build Hermitian PSD matrices for quadratic far-field objectives used in optimization. `direction_mask` generalizes `cap_mask` to arbitrary directions for multi-angle RCS optimization.
 
 ### 3b) Fast Methods and High-Level Workflow
@@ -201,7 +202,7 @@ For a first read-through of the API documentation, follow this order:
 3. **[assembly-solve.md](assembly-solve.md)** — EFIE assembly (dense and matrix-free), impedance loading, direct/GMRES solvers, and near-field preconditioning
 4. **[aca-workflow.md](aca-workflow.md)** — ACA H-matrix compression, cluster trees, and the `solve_scattering` high-level workflow
 5. **[octree.md](octree.md)** and **[mlfma.md](mlfma.md)** — Octree spatial decomposition and MLFMA O(N log N) fast solver
-6. **[farfield-rcs.md](farfield-rcs.md)** — Far-field patterns, Q-matrices, `direction_mask`, RCS, and Mie validation
+6. **[farfield-rcs.md](farfield-rcs.md)** — Near-field, total-field, far-field, Q-matrices, `direction_mask`, RCS, and analytical validation links
 7. **[periodic-methods.md](periodic-methods.md)** — `PeriodicLattice`, periodic EFIE assembly, Floquet metrics, and periodic power balance
 8. **[composite-operators.md](composite-operators.md)** — `ImpedanceLoadedOperator` for fast-operator optimization
 9. **[spatial-patches.md](spatial-patches.md)** — Automatic spatial patch assignment

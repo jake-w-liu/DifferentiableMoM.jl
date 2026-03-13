@@ -1,8 +1,10 @@
-# API: Far-Field and RCS
+# API: Fields and RCS
 
 ## Purpose
 
-Reference for far-field radiation pattern computation, objective matrix construction (Q-matrices), power diagnostics, and radar cross section (RCS) calculation. These functions transform MoM surface currents into observable quantities: radiation patterns, radiated power, directivity, and scattering cross sections.
+Reference for scattered near-field evaluation, total electric field evaluation, far-field radiation pattern computation, objective matrix construction (Q-matrices), power diagnostics, and radar cross section (RCS) calculation. These functions transform MoM surface currents into observable quantities: local electric fields, radiation patterns, radiated power, directivity, and scattering cross sections.
+
+For an analytical near-/total-field benchmark, see [validation/06-near-total-field-rayleigh-sphere.md](../validation/06-near-total-field-rayleigh-sphere.md).
 
 ---
 
@@ -209,6 +211,19 @@ The Q-matrix formulation converts far-field pattern objectives into quadratic fo
 ### `pol_linear_x(grid)`
 
 Generate x-polarized far-field polarization vectors. At each direction `(theta, phi)`, the polarization vector is `theta_hat(theta, phi)`, which corresponds to x-polarized radiation for broadside (+z direction) observation.
+
+**Parameters:** `grid::SphGrid`
+
+**Returns:** `Matrix{ComplexF64}` of shape `(3, N_omega)`.
+
+---
+
+### `pol_linear_y(grid)`
+
+Generate the orthogonal far-field polarization vectors. At each direction
+`(theta, phi)`, the polarization vector is `phi_hat(theta, phi)`, which
+corresponds to y-polarized broadside radiation and the TE/s-polarized basis for
+the common `phi = 0` incidence plane in periodic workflows.
 
 **Parameters:** `grid::SphGrid`
 

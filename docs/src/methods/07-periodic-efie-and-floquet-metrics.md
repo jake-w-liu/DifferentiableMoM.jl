@@ -227,10 +227,8 @@ Then:
 1. builds `spec_dir`,
 2. creates `mask = direction_mask(grid, spec_dir; half_angle=...)`,
 3. builds `G_mat = radiation_vectors(...)`,
-4. uses `pol_linear_x(grid)` when `polarization=:x`,
+4. uses `pol_linear_x(grid)` for `:x/:theta/:tm` and `pol_linear_y(grid)` for `:y/:phi/:te`,
 5. returns `Q = build_Q(G_mat, grid, pol; mask=mask)`.
-
-Only `:x` polarization is implemented in this function path.
 
 ---
 

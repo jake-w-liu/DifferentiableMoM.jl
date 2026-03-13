@@ -154,7 +154,7 @@ version = "1.9.1"
 
 [[deps.DifferentiableMoM]]
 deps = ["CSV", "DataFrames", "IncompleteLU", "JSON", "Krylov", "LinearAlgebra", "PlotlyKaleido", "PlotlySupply", "Random", "SparseArrays", "SpecialFunctions", "StaticArrays"]
-path = "/Users/jake/EMPIRE/projects/ongoing/2026_014/DifferentiableMoM.jl/docs/.."
+path = "/Users/jake/EMPIRE/codes/DifferentiableMoM.jl/docs/.."
 uuid = "23e8cd96-b521-4dc5-8732-25c09bc9e688"
 version = "0.1.0"
 

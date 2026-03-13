@@ -208,7 +208,10 @@ Implementation details:
 - Specular direction is derived from Bloch wavevector in `lattice`.
 - Uses `direction_mask` to define the cone.
 - Uses `radiation_vectors` + `build_Q`.
-- Currently supports `polarization=:x` only.
+- Supported symbol values:
+  - `:x`, `:theta`, `:tm` → `pol_linear_x(grid)` (`theta_hat` basis)
+  - `:y`, `:phi`, `:te` → `pol_linear_y(grid)` (`phi_hat` basis)
+- You may also pass a custom polarization matrix of size `(3, NΩ)`.
 
 **Returns:** `Matrix{ComplexF64}` objective matrix.
 

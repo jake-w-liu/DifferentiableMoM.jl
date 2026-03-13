@@ -33,7 +33,7 @@ makedocs(
         "Part II — Package Fundamentals" => [
             "Mesh Pipeline" => "package-basics/01-mesh-pipeline.md",
             "Forward Pipeline" => "package-basics/02-forward-pipeline.md",
-            "Far-Field, Q, and RCS" => "package-basics/03-farfield-q-rcs.md",
+            "Field Postprocessing, Q, and RCS" => "package-basics/03-farfield-q-rcs.md",
             "Visualization" => "package-basics/04-visualization.md",
         ],
         "Part III — Differentiable Design" => [
@@ -59,6 +59,7 @@ makedocs(
             "Bempp Cross-Validation" => "validation/03-bempp-cross-validation.md",
             "Sphere-vs-Mie Benchmark" => "validation/04-sphere-mie-benchmark.md",
             "Meep Open-Source Cross-Validation" => "validation/05-meep-cross-validation.md",
+            "Near/Total-Field Rayleigh Sphere" => "validation/06-near-total-field-rayleigh-sphere.md",
         ],
         "Part VI — Advanced Workflows" => [
             "Complex OBJ Platforms" => "advanced/01-complex-obj-platforms.md",
@@ -84,7 +85,7 @@ makedocs(
             "ACA Workflow" => "api/aca-workflow.md",
             "Octree" => "api/octree.md",
             "MLFMA" => "api/mlfma.md",
-            "Far-Field and RCS" => "api/farfield-rcs.md",
+            "Fields and RCS" => "api/farfield-rcs.md",
             "Periodic Methods" => "api/periodic-methods.md",
             "Composite Operators" => "api/composite-operators.md",
             "Spatial Patches" => "api/spatial-patches.md",

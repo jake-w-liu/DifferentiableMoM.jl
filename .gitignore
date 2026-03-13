@@ -26,4 +26,6 @@ docs/build/
 .juliaup_depot/
 
 *.md
-
+MISSING.md
+!docs/src/*.md
+!docs/src/**/*.md

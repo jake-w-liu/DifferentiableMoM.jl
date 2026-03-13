@@ -43,3 +43,10 @@ unknown count.
 
 Use internal consistency gates first, then gradient checks (if optimized), then
 external validation (e.g., Bempp or sphere-vs-Mie where applicable).
+
+## How do I validate near-field or total-field results?
+
+Start with the internal consistency checks in `validation/01`, then use the
+Rayleigh small-sphere benchmark in `validation/06` and
+`examples/21_near_total_field_rayleigh_sphere.jl` for an analytical
+near-/total-field reference.

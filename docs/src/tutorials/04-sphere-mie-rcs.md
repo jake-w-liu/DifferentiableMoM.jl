@@ -4,6 +4,12 @@
 
 Validation against analytical solutions is essential for building confidence in any computational electromagnetics code. This tutorial walks through a canonical benchmark: computing the radar cross‑section (RCS) of a perfect electric conductor (PEC) sphere using the method of moments and comparing it with the exact Mie series solution.
 
+This tutorial is intentionally focused on far-field / RCS validation. For
+analytical validation of `compute_nearfield` and `compute_total_field`, use the
+companion Rayleigh benchmark in
+[validation/06-near-total-field-rayleigh-sphere.md](../validation/06-near-total-field-rayleigh-sphere.md) and
+`examples/21_near_total_field_rayleigh_sphere.jl`.
+
 You will learn to:
 
 - **Generate sphere meshes** (icosphere fallback or imported OBJ) and compute MoM RCS.
@@ -90,12 +96,13 @@ println("Target ka = $ka_target → radius a = $(round(a*100, digits=2)) cm")
 
 ### 2) Generate or Import a Sphere Mesh
 
-The package includes a fallback icosphere generator (subdivided icosahedron). For reproducible research, you can also supply an externally generated OBJ file.
+The packaged benchmark script `examples/02_pec_sphere_mie.jl` includes a local
+fallback icosphere generator (subdivided icosahedron). For manual workflows, you
+can either reuse that helper or supply an externally generated OBJ file.
 
 ```julia
-# The package does not include a sphere mesh generator.
-# Provide your own sphere OBJ file (e.g., generate an icosphere in Blender
-# or another meshing tool, then export as OBJ).
+# For a manual workflow, provide an OBJ sphere mesh. The packaged example
+# includes a local fallback icosphere helper if you want an all-in-repo path.
 mesh_path = "sphere_ka10.obj"   # replace with your sphere mesh file
 mesh = read_obj_mesh(mesh_path)
 rwg = build_rwg(mesh)
@@ -133,7 +140,8 @@ Z = assemble_Z_efie(mesh, rwg, k; quad_order=3, eta0=η0)
 k_vec = Vec3(0.0, 0.0, -k)
 E0    = 1.0
 pol   = Vec3(1.0, 0.0, 0.0)   # x‑polarized
-v = assemble_v_plane_wave(mesh, rwg, k_vec, E0, pol; quad_order=3)
+pw = make_plane_wave(k_vec, E0, pol)
+v = assemble_excitation(mesh, rwg, pw; quad_order=3)
 
 I = solve_forward(Z, v)
 residual = norm(Z * I - v) / max(norm(v), 1e-30)
@@ -344,6 +352,7 @@ Before declaring your MoM implementation validated, complete these steps:
 ## Further Reading
 
 - **Paper Section 5.1** – Sphere benchmark as a validation gate.
+- **Companion local-field benchmark**: [validation/06-near-total-field-rayleigh-sphere.md](../validation/06-near-total-field-rayleigh-sphere.md) and `examples/21_near_total_field_rayleigh_sphere.jl`.
 - **`src/postprocessing/Mie.jl`** – Implementation of Mie series for PEC sphere.
 - **`src/postprocessing/Diagnostics.jl`** – RCS computation utilities.
 - **Tutorial 5: Airplane RCS** – Applying the validated MoM to a complex platform.

@@ -6,6 +6,13 @@ Reference for incident-field excitation assembly. The excitation system provides
 
 For full physics derivations and guidance on choosing between excitation types, see `fundamentals/06-excitation-theory-and-usage.md`.
 
+If you plan to call `compute_total_field`, prefer constructing an excitation
+object with `make_plane_wave`, `make_dipole`, `make_loop`, `make_pattern_feed`,
+or `make_imported_excitation(...; kind=:electric_field)` and assembling via
+`assemble_excitation(...)`. The legacy `assemble_v_plane_wave(...)` helper
+remains valid for RHS assembly, but it does not by itself retain the excitation
+object needed for total-field observation.
+
 ---
 
 ## Excitation Types

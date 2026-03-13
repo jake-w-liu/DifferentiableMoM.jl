@@ -3,6 +3,7 @@
 Welcome to the full user manual and API reference for `DifferentiableMoM.jl`.
 
 This documentation is intentionally structured for readers with basic electromagnetics background who are new to computational methods.
+It now covers scattered near-field, total-field, and far-field postprocessing workflows alongside the core EFIE solve.
 
 ## How to Use This Manual
 
@@ -28,7 +29,7 @@ This documentation is intentionally structured for readers with basic electromag
 - **Part II — Package Fundamentals**
   - [Mesh Pipeline](package-basics/01-mesh-pipeline.md)
   - [Forward Pipeline](package-basics/02-forward-pipeline.md)
-  - [Far-Field, Q, and RCS](package-basics/03-farfield-q-rcs.md)
+  - [Field Postprocessing, Q, and RCS](package-basics/03-farfield-q-rcs.md)
   - [Visualization](package-basics/04-visualization.md)
 - **Part III — Differentiable Design**
   - [Adjoint Method](differentiable-design/01-adjoint-method.md)
@@ -50,6 +51,7 @@ This documentation is intentionally structured for readers with basic electromag
   - [Bempp Cross-Validation](validation/03-bempp-cross-validation.md)
   - [Sphere-vs-Mie Benchmark](validation/04-sphere-mie-benchmark.md)
   - [Meep Open-Source Cross-Validation](validation/05-meep-cross-validation.md)
+  - [Near/Total-Field Rayleigh Sphere](validation/06-near-total-field-rayleigh-sphere.md)
 - **Part VI — Advanced Workflows**
   - [Complex OBJ Platforms](advanced/01-complex-obj-platforms.md)
   - [Large-Problem Strategy](advanced/02-large-problem-strategy.md)
@@ -68,7 +70,7 @@ This documentation is intentionally structured for readers with basic electromag
   - [Mesh Utilities](api/mesh.md)
   - [RWG Utilities](api/rwg.md)
   - [Assembly and Solve](api/assembly-solve.md)
-  - [Far-Field and RCS](api/farfield-rcs.md)
+  - [Fields and RCS](api/farfield-rcs.md)
   - [Adjoint and Optimization](api/adjoint-optimize.md)
   - [Verification](api/verification.md)
   - [Visualization](api/visualization.md)
