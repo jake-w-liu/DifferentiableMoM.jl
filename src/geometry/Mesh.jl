@@ -1,6 +1,6 @@
 # Mesh.jl — Simple mesh generation and geometry utilities
 
-export make_rect_plate, make_parabolic_reflector, read_obj_mesh, triangle_area, triangle_center, triangle_normal
+export make_rect_plate, make_rect_plate_graded, make_parabolic_reflector, read_obj_mesh, triangle_area, triangle_center, triangle_normal
 export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
 export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles
@@ -40,6 +40,91 @@ function make_rect_plate(Lx::Real, Ly::Real, Nx::Int, Ny::Int)
     vidx(ix, iy) = iy * (Nx + 1) + ix + 1
 
     # Triangulation: two triangles per grid cell
+    tidx = 0
+    for jy in 0:Ny-1
+        for jx in 0:Nx-1
+            v1 = vidx(jx,   jy)
+            v2 = vidx(jx+1, jy)
+            v3 = vidx(jx+1, jy+1)
+            v4 = vidx(jx,   jy+1)
+
+            tidx += 1
+            tri[1, tidx] = v1
+            tri[2, tidx] = v2
+            tri[3, tidx] = v3
+
+            tidx += 1
+            tri[1, tidx] = v1
+            tri[2, tidx] = v3
+            tri[3, tidx] = v4
+        end
+    end
+
+    return TriMesh(xyz, tri)
+end
+
+"""
+    _grade_1d(N, L, grading_factor)
+
+Map `N+1` uniform grid indices to graded physical coordinates on `[-L/2, L/2]`.
+Uses tanh-based grading that clusters points near the edges.
+
+`grading_factor > 0`: larger values → more clustering near edges.
+When `grading_factor → 0`, the mapping degenerates; use `grading_factor ≥ 0.1`.
+"""
+function _grade_1d(N::Int, L::Real, grading_factor::Real)
+    coords = Vector{Float64}(undef, N + 1)
+    inv_tanh_g = 1.0 / tanh(grading_factor)
+    half_L = L / 2
+    for j in 0:N
+        u = j / N                           # uniform parameter [0, 1]
+        s = 2u - 1                          # map to [-1, 1]
+        g = tanh(grading_factor * s) * inv_tanh_g  # graded [-1, 1]
+        coords[j + 1] = half_L * g          # physical coordinate
+    end
+    return coords
+end
+
+"""
+    make_rect_plate_graded(Lx, Ly, Nx, Ny; grading_factor=3.0)
+
+Generate a triangulated rectangular plate in the xy-plane with graded mesh
+density near the edges.  Same topology as `make_rect_plate` but vertex
+positions are redistributed using a tanh grading function.
+
+`grading_factor` controls edge clustering:
+- `1.0`: nearly uniform
+- `3.0` (default): ~5:1 edge-to-center density ratio
+- `5.0`: ~10:1 ratio
+
+Practical range: 1.0–5.0.  Values above 6 may create highly skewed
+center elements.
+"""
+function make_rect_plate_graded(Lx::Real, Ly::Real, Nx::Int, Ny::Int;
+                                 grading_factor::Real=3.0)
+    grading_factor > 0 || error("grading_factor must be positive, got $grading_factor")
+
+    xs = _grade_1d(Nx, Lx, grading_factor)
+    ys = _grade_1d(Ny, Ly, grading_factor)
+
+    Nv = (Nx + 1) * (Ny + 1)
+    Nt = 2 * Nx * Ny
+
+    xyz = zeros(3, Nv)
+    tri = zeros(Int, 3, Nt)
+
+    idx = 0
+    for jy in 0:Ny
+        for jx in 0:Nx
+            idx += 1
+            xyz[1, idx] = xs[jx + 1]
+            xyz[2, idx] = ys[jy + 1]
+            xyz[3, idx] = 0.0
+        end
+    end
+
+    vidx(ix, iy) = iy * (Nx + 1) + ix + 1
+
     tidx = 0
     for jy in 0:Ny-1
         for jx in 0:Nx-1

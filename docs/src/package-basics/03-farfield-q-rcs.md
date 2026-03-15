@@ -324,8 +324,11 @@ Finds direction closest to $-\hat{\mathbf{k}}_{\text{inc}}$ and returns RCS valu
 The package supports arbitrary polarization vectors:
 
 ```julia
-# Built-in linear-θ polarization
+# Built-in linear-θ polarization (x-pol / TM for φ=0 plane)
 pol_x = pol_linear_x(grid)
+
+# Built-in linear-φ polarization (y-pol / TE for φ=0 plane)
+pol_y = pol_linear_y(grid)
 
 # User-defined polarization matrix (3 × NΩ), column q = p(r̂_q)
 pol_custom = zeros(ComplexF64, 3, length(grid.w))
@@ -784,7 +787,7 @@ end
   - `compute_nearfield`, `compute_total_field`
 
 - **Q matrix construction**: `src/optimization/QMatrix.jl`
-  - `build_Q`, `apply_Q`, `pol_linear_x`, `cap_mask`
+  - `build_Q`, `apply_Q`, `pol_linear_x`, `pol_linear_y`, `cap_mask`, `direction_mask`
 
 - **RCS diagnostics**: `src/postprocessing/Diagnostics.jl`
   - `bistatic_rcs`, `backscatter_rcs`, `radiated_power`

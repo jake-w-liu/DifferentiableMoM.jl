@@ -274,6 +274,14 @@ function _fill_dense_block_batched!(data::Matrix{ComplexF64}, cache::EFIEApplyCa
                             cache.mesh, cache.rwg, n_idx, tm,
                             cache.quad_pts[tm], fm_vals, fn_vals,
                             dvm, dvn, Am, cache.wq, cache.k)
+                    elseif _is_adjacent(cache, tm, tn)
+                        val += adjacent_cell_contribution(
+                            cache.mesh, cache.rwg, m_idx, n_idx, tm, tn,
+                            cache.quad_pts[tm], cache.quad_pts[tn],
+                            fm_vals, fn_vals,
+                            dvm, dvn, Am, An,
+                            cache.wq, cache.k,
+                            cache.wq_hi, cache.quad_pts_hi[tm], cache.quad_pts_hi[tn])
                     else
                         G_mat = green_cache[(tm, tn)]
                         for qm in 1:Nq

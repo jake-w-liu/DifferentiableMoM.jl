@@ -23,6 +23,10 @@ struct EFIEApplyCache{TK, Tω, TD, TV}
     tri_ids::Matrix{Int}                 # (2, N)
     div_vals::Matrix{TD}                 # (2, N)
     rwg_vals::Vector{NTuple{2,Vector{TV}}}
+    # Adjacent-cell near-singular integration data
+    adjacent_pairs::Set{NTuple{2,Int}}   # set of (t1,t2) pairs sharing a mesh edge
+    wq_hi::Vector{Float64}              # high-order quadrature weights
+    quad_pts_hi::Vector{Vector{Vec3}}    # high-order quadrature points per triangle
 end
 
 function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
@@ -62,7 +66,47 @@ function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
         rwg_vals[n] = (vals_p, vals_m)
     end
 
-    return EFIEApplyCache(mesh, rwg, k, omega_mu0, wq, Nq, quad_pts, areas, tri_ids, div_vals, rwg_vals)
+    # Build triangle adjacency map from mesh connectivity
+    # Two triangles are adjacent if they share a mesh edge (pair of vertex indices)
+    adjacent_pairs = Set{NTuple{2,Int}}()
+    edge_to_tri = Dict{NTuple{2,Int}, Vector{Int}}()
+    for t in 1:Nt
+        v1 = mesh.tri[1, t]
+        v2 = mesh.tri[2, t]
+        v3 = mesh.tri[3, t]
+        for (va, vb) in ((v1, v2), (v2, v3), (v3, v1))
+            ekey = va < vb ? (va, vb) : (vb, va)
+            if haskey(edge_to_tri, ekey)
+                push!(edge_to_tri[ekey], t)
+            else
+                edge_to_tri[ekey] = [t]
+            end
+        end
+    end
+    for (_, tris) in edge_to_tri
+        for i in 1:length(tris)
+            for j in (i+1):length(tris)
+                t1, t2 = tris[i], tris[j]
+                push!(adjacent_pairs, (min(t1,t2), max(t1,t2)))
+            end
+        end
+    end
+
+    # High-order quadrature for inner integration of adjacent cells
+    xi_hi, wq_hi = tri_quad_rule(7)
+    quad_pts_hi = Vector{Vector{Vec3}}(undef, Nt)
+    for t in 1:Nt
+        quad_pts_hi[t] = tri_quad_points(mesh, t, xi_hi)
+    end
+
+    return EFIEApplyCache(mesh, rwg, k, omega_mu0, wq, Nq, quad_pts, areas,
+                          tri_ids, div_vals, rwg_vals,
+                          adjacent_pairs, wq_hi, quad_pts_hi)
+end
+
+@inline function _is_adjacent(cache::EFIEApplyCache, t1::Int, t2::Int)
+    key = t1 < t2 ? (t1, t2) : (t2, t1)
+    return key in cache.adjacent_pairs
 end
 
 @inline function _efie_entry(cache::EFIEApplyCache, m::Int, n::Int)
@@ -94,8 +138,21 @@ end
                     cache.wq,
                     cache.k,
                 )
+            elseif _is_adjacent(cache, tm, tn)
+                # Adjacent-cell near-singular integration
+                val += adjacent_cell_contribution(
+                    cache.mesh, cache.rwg, m, n, tm, tn,
+                    cache.quad_pts[tm],
+                    cache.quad_pts[tn],
+                    fm_vals,
+                    fn_vals,
+                    dvm, dvn,
+                    Am, An,
+                    cache.wq, cache.k,
+                    cache.wq_hi, cache.quad_pts_hi[tm], cache.quad_pts_hi[tn],
+                )
             else
-                # Non-self product quadrature
+                # Non-adjacent: standard product quadrature
                 for qm in 1:cache.Nq
                     rm = cache.quad_pts[tm][qm]
                     fm = fm_vals[qm]

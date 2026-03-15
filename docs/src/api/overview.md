@@ -30,7 +30,7 @@ Define or import the scatterer geometry and ensure the mesh is suitable for MoM 
 - **Helpers:** `nvertices`, `ntriangles`
   Quick queries on mesh size.
 
-- **Build/import:** `make_rect_plate`, `make_parabolic_reflector`, `read_obj_mesh`, `write_obj_mesh`
+- **Build/import:** `make_rect_plate`, `make_rect_plate_graded`, `make_parabolic_reflector`, `read_obj_mesh`, `write_obj_mesh`
   Create meshes programmatically or load from Wavefront OBJ files.
 
 - **Geometry queries:** `triangle_area`, `triangle_center`, `triangle_normal`, `mesh_unique_edges`, `mesh_wireframe_segments`

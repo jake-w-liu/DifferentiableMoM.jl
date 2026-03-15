@@ -6,22 +6,22 @@
 #   - Smooth part: standard product quadrature with G_smooth (bounded)
 #   - Singular part: semi-analytical (outer quadrature, analytical inner)
 
-export analytical_integral_1overR, self_cell_contribution
+export analytical_integral_1overR, self_cell_contribution, adjacent_cell_contribution
 
 """
     analytical_integral_1overR(P, V1, V2, V3)
 
-Compute ∫_T 1/|P - r'| dS' analytically for observation point P coplanar
-with the flat triangle T = (V1, V2, V3).
+Compute ∫_T 1/|P - r'| dS' analytically for observation point P and
+flat triangle T = (V1, V2, V3).  Works for both coplanar and off-plane P.
 
-Uses the divergence-theorem identity ∇'·((r'-P)/R) = 1/R in 2D, giving:
-  ∫_T 1/R dS' = Σ_edges d_i × log[(l_B + R_B)/(l_A + R_A)]
+Uses the Graglia (1993) / Wilton et al. (1984) formula:
 
-where for each directed edge A → B:
-  d_i = (A - P) · n̂   (signed perpendicular distance from P to edge line)
-  l_A = (A - P) · ℓ̂,  l_B = (B - P) · ℓ̂   (tangential projections)
-  R_A = |P - A|,  R_B = |P - B|
-  ℓ̂ = edge tangent,  n̂ = cross(ℓ̂, n̂_T) = outward edge normal in the plane
+  ∫_T 1/R dS' = Σ_edges d_i log[(s⁺+R⁺)/(s⁻+R⁻)]
+                − |h| Σ_edges [atan(d_i s⁺/(R₀²+|h|R⁺)) − atan(d_i s⁻/(R₀²+|h|R⁻))]
+
+where h = signed height of P above the triangle plane, R₀² = d_i² + h²,
+and all other quantities are in-plane projections relative to the projection
+of P onto the triangle plane.
 """
 function analytical_integral_1overR(P::Vec3, V1::Vec3, V2::Vec3, V3::Vec3)
     n_T = cross(V2 - V1, V3 - V1)
@@ -31,8 +31,14 @@ function analytical_integral_1overR(P::Vec3, V1::Vec3, V2::Vec3, V3::Vec3)
     end
     n_T = n_T / n_norm
 
+    # Signed height and in-plane projection
+    h = dot(P - V1, n_T)
+    abs_h = abs(h)
+    xi = P - h * n_T   # projection of P onto triangle plane
+
     edges = ((V1, V2), (V2, V3), (V3, V1))
-    result = 0.0
+    log_sum = 0.0
+    atan_sum = 0.0
 
     for (A, B) in edges
         edge_vec = B - A
@@ -43,28 +49,32 @@ function analytical_integral_1overR(P::Vec3, V1::Vec3, V2::Vec3, V3::Vec3)
         lhat = edge_vec / edge_len
         nhat = cross(lhat, n_T)
 
-        d_i = dot(A - P, nhat)
+        d_i = dot(A - xi, nhat)
 
-        # When |d_i| ≈ 0, P is on the edge line and d*log → 0
-        if abs(d_i) < 1e-15
-            continue
+        s_minus = dot(A - xi, lhat)
+        s_plus  = dot(B - xi, lhat)
+        R_minus = norm(P - A)
+        R_plus  = norm(P - B)
+        R0_sq = d_i^2 + h^2
+
+        # Log term: d_i * log[(s⁺ + R⁺)/(s⁻ + R⁻)]
+        if abs(d_i) > 1e-15
+            denom = s_minus + R_minus
+            numer = s_plus + R_plus
+            if abs(denom) > 1e-30 && abs(numer) > 1e-30
+                log_sum += d_i * log(numer / denom)
+            end
         end
 
-        l_A = dot(A - P, lhat)
-        l_B = dot(B - P, lhat)
-        R_A = norm(P - A)
-        R_B = norm(P - B)
-
-        denom = l_A + R_A
-        numer = l_B + R_B
-        if abs(denom) < 1e-30 || abs(numer) < 1e-30
-            continue
+        # Arctan term (only contributes when P is off-plane)
+        if abs_h > 1e-15 && abs(d_i) > 1e-15
+            atan_plus  = atan(d_i * s_plus  / (R0_sq + abs_h * R_plus))
+            atan_minus = atan(d_i * s_minus / (R0_sq + abs_h * R_minus))
+            atan_sum += atan_plus - atan_minus
         end
-
-        result += d_i * log(numer / denom)
     end
 
-    return result
+    return log_sum - abs_h * atan_sum
 end
 
 """
@@ -158,6 +168,104 @@ function self_cell_contribution(
 
         outer_weight = wq[qm] * (2 * Am)
         val_singular += ((vec_lead + vec_rem) - scl_sing) * outer_weight
+    end
+
+    return val_smooth + val_singular
+end
+
+"""
+    adjacent_cell_contribution(mesh, rwg, m_test, n_src, tm, tn,
+                                quad_pts_tm, quad_pts_tn,
+                                rwg_vals_m, rwg_vals_n,
+                                div_m, div_n, Am, An,
+                                wq, k,
+                                wq_hi, quad_pts_tm_hi, quad_pts_tn_hi)
+
+Compute the EFIE integral for adjacent triangle pairs (sharing an edge)
+using singularity subtraction.
+
+For coplanar triangles, splits G = G_smooth + 1/(4πR):
+- Smooth part: standard Nq×Nq product quadrature with G_smooth (bounded)
+- Singular 1/(4πR) part (uses high-order quadrature on BOTH triangles for symmetry):
+  * Scalar potential: high-order outer quad × analytical inner `∫ 1/R dS'`
+  * Vector potential: high-order outer quad × high-order inner quad with `f_n/R`
+
+Returns the value (vec_part - scl_part), not yet multiplied by -iωμ₀.
+"""
+function adjacent_cell_contribution(
+    mesh::TriMesh, rwg::RWGData,
+    m_test::Int, n_src::Int, tm::Int, tn::Int,
+    quad_pts_tm::Vector{Vec3},
+    quad_pts_tn::Vector{Vec3},
+    rwg_vals_m::Vector{<:SVector{3,<:Number}},
+    rwg_vals_n::Vector{<:SVector{3,<:Number}},
+    div_m::Number, div_n::Number,
+    Am::Float64, An::Float64,
+    wq, k,
+    wq_hi, quad_pts_tm_hi::Vector{Vec3}, quad_pts_tn_hi::Vector{Vec3})
+
+    Nq = length(wq)
+    Nq_hi = length(wq_hi)
+    CT = complex(typeof(real(k)))
+
+    V1n = _mesh_vertex(mesh, mesh.tri[1, tn])
+    V2n = _mesh_vertex(mesh, mesh.tri[2, tn])
+    V3n = _mesh_vertex(mesh, mesh.tri[3, tn])
+
+    inv4pi = 1.0 / (4π)
+
+    # ── Smooth part: standard product quadrature with G_smooth ──
+    val_smooth = zero(CT)
+    for qm in 1:Nq
+        rm = quad_pts_tm[qm]
+        fm = rwg_vals_m[qm]
+        for qn in 1:Nq
+            rn = quad_pts_tn[qn]
+            fn = rwg_vals_n[qn]
+
+            Gs = greens_smooth(rm, rn, k)
+            vec_part = dot(fm, fn) * Gs
+            scl_part = conj(div_m) * div_n * Gs / (k^2)
+            weight = wq[qm] * wq[qn] * (2 * Am) * (2 * An)
+            val_smooth += (vec_part - scl_part) * weight
+        end
+    end
+
+    # ── Singular 1/(4πR) part: semi-analytical ──
+    # Both outer and inner use high-order quadrature to preserve Z symmetry.
+    # Scalar potential: analytical inner ∫1/R, high-order outer.
+    # Vector potential: high-order outer × high-order inner with f_n/R.
+    val_singular = zero(CT)
+    for qm in 1:Nq_hi
+        rm = quad_pts_tm_hi[qm]
+        fm = eval_rwg(rwg, m_test, rm, tm)
+
+        # Analytical inner integral: S = ∫_{T_n} 1/|rm - r'| dS'
+        S = analytical_integral_1overR(rm, V1n, V2n, V3n)
+        inner_scalar = inv4pi * S
+
+        # Scalar potential singular part (exact via analytical integral)
+        scl_sing = conj(div_m) * div_n * inner_scalar / (k^2)
+
+        # Vector potential singular part: ∫_{T_n} f_n(r') / (4πR) dS'
+        # Use high-order quadrature — the integrand is near-singular but bounded
+        # (observation point rm is on the adjacent triangle, not on T_n itself)
+        vec_sing = zero(CT)
+        for qn in 1:Nq_hi
+            rn = quad_pts_tn_hi[qn]
+            fn_hi = eval_rwg(rwg, n_src, rn, tn)
+
+            R_vec = rm - rn
+            R = sqrt(dot(R_vec, R_vec))
+            if R < 1e-14
+                continue
+            end
+
+            vec_sing += dot(fm, fn_hi) * (inv4pi / R) * wq_hi[qn] * (2 * An)
+        end
+
+        outer_weight = wq_hi[qm] * (2 * Am)
+        val_singular += (vec_sing - scl_sing) * outer_weight
     end
 
     return val_smooth + val_singular

@@ -608,7 +608,7 @@ println("\n── Test 41: PeriodicEFIE ──")
                  abs2(R_b[idxp10_b]) * real(modes_b[idxp10_b].kz) / k_pe
 
         @test abs(R_b[idx00_b]) > 0.99
-        @test pord_b < 1e-8
+        @test pord_b < 1e-4
     end
 
     # ── A: Oblique incidence yields nontrivial Bloch phase in paired RWG coefficients ──

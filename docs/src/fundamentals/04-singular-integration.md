@@ -2,13 +2,16 @@
 
 ## Purpose
 
-This chapter documents the singular-integration path used by `DifferentiableMoM.jl` for EFIE self terms. The goal is strict code-formulation correspondence to:
+This chapter documents the singular-integration paths used by `DifferentiableMoM.jl` for EFIE self terms and adjacent-cell (edge-sharing) pairs. The goal is strict code-formulation correspondence to:
 
 - `src/basis/Greens.jl`
 - `src/assembly/SingularIntegrals.jl`
 - `src/assembly/EFIE.jl`
 
-It focuses on what is implemented now: singularity extraction for **exact self-triangle pairs** (`tm == tn`).
+Two classes of triangle pairs receive special treatment:
+
+1. **Self-cell** (`tm == tn`): exact singularity extraction via analytical `∫ 1/R dS'`.
+2. **Adjacent-cell** (edge-sharing pairs): singularity subtraction with analytical scalar-potential inner integral and high-order quadrature for the vector-potential inner integral.
 
 ---
 
@@ -16,10 +19,10 @@ It focuses on what is implemented now: singularity extraction for **exact self-t
 
 After this chapter, you should be able to:
 
-1. Explain why EFIE self terms need special treatment.
+1. Explain why EFIE self terms and adjacent-cell terms need special treatment.
 2. Derive the `G = G_smooth + 1/(4πR)` split used in code.
-3. Describe how `analytical_integral_1overR` is used inside `self_cell_contribution`.
-4. Map the self/non-self branching in `assemble_Z_efie` to the formulas.
+3. Describe how `analytical_integral_1overR` is used inside `self_cell_contribution` and `adjacent_cell_contribution`.
+4. Map the self/adjacent/non-adjacent branching in `assemble_Z_efie` to the formulas.
 5. Identify current limitations (what is not yet special-cased).
 
 ---
@@ -34,12 +37,11 @@ In mixed-potential EFIE assembly, each entry uses integrals of the form
 G(\mathbf r,\mathbf r') = \frac{e^{-ikR}}{4\pi R},\; R=|\mathbf r-\mathbf r'|.
 ```
 
-When source and test points approach each other (`R -> 0`), `1/R` is singular. For the EFIE implementation in this package:
+When source and test points approach each other (`R -> 0`), `1/R` is singular. For the EFIE implementation in this package, `_efie_entry` in `src/assembly/EFIE.jl` uses a three-way branch:
 
-- singular extraction is applied when the two integration triangles are the same (`tm == tn`),
-- otherwise standard product quadrature is used.
-
-This logic is in `src/assembly/EFIE.jl` (`_efie_entry`).
+1. `tm == tn` (self-cell): `self_cell_contribution` with exact singularity extraction,
+2. edge-sharing pairs (adjacent-cell): `adjacent_cell_contribution` with singularity subtraction and high-order inner quadrature,
+3. all other pairs: standard product quadrature with the full Green's function.
 
 ---
 
@@ -81,20 +83,26 @@ computed by `analytical_integral_1overR(P, V1, V2, V3)`.
 
 ## 3. Analytical Inner Integral `analytical_integral_1overR`
 
-`analytical_integral_1overR` evaluates the triangle integral by summing edge-log contributions:
+`analytical_integral_1overR` evaluates the triangle integral using the Graglia (1993) / Wilton et al. (1984) formula, which works for both coplanar and off-plane observation points:
 
 ```math
 S(\mathbf P) = \sum_{\text{edges }i} d_i
-\log\!\left(\frac{\ell_{B_i}+R_{B_i}}{\ell_{A_i}+R_{A_i}}\right).
+\log\!\left(\frac{s_i^+ + R_i^+}{s_i^- + R_i^-}\right)
+\;-\; |h| \sum_{\text{edges }i}
+\left[\arctan\!\frac{d_i\, s_i^+}{R_{0i}^2 + |h|\, R_i^+}
+     - \arctan\!\frac{d_i\, s_i^-}{R_{0i}^2 + |h|\, R_i^-}\right]
 ```
 
-The implementation uses oriented edge tangents and in-plane outward normals derived from the triangle normal.
+where $h = (\mathbf P - \mathbf V_1)\cdot\hat n_T$ is the signed height of $\mathbf P$ above the triangle plane, $R_{0i}^2 = d_i^2 + h^2$, and all in-plane quantities ($d_i$, $s_i^\pm$) are computed relative to the projection $\boldsymbol\xi = \mathbf P - h\,\hat n_T$.
+
+When $h = 0$ (coplanar), the arctan term vanishes and the formula reduces to the pure edge-log expression.
 
 Practical behavior in code:
 
 - degenerate triangle (`|n_T|` tiny): returns `0.0`,
-- near-zero perpendicular distance to an edge (`|d_i| < 1e-15`): skips that edge contribution,
-- near-zero log numerator/denominator: safely skipped.
+- near-zero perpendicular distance to an edge (`|d_i| < 1e-15`): skips that edge's log and arctan contributions,
+- near-zero log numerator/denominator: safely skipped,
+- `|h| < 1e-15`: arctan term skipped (coplanar fast path).
 
 This is implemented exactly in `src/assembly/SingularIntegrals.jl`.
 
@@ -150,12 +158,35 @@ The remainder is computed by quadrature and skips the `R=0` sample explicitly.
 
 ---
 
-## 5. How EFIE Assembly Uses It
+## 5. Adjacent-Cell Contribution Algorithm
 
-In `_efie_entry` (`src/assembly/EFIE.jl`):
+`adjacent_cell_contribution(...)` handles edge-sharing triangle pairs where `1/R` is near-singular (bounded but poorly approximated by low-order quadrature). It uses the same `G = G_smooth + 1/(4πR)` kernel split as `self_cell_contribution`.
+
+### 5.1 Smooth Part
+
+Standard `Nq × Nq` product quadrature with `greens_smooth` — identical in form to the self-cell smooth part, but evaluated over two distinct triangles `tm` and `tn`.
+
+### 5.2 Singular `1/(4πR)` Part
+
+For each outer quadrature point `r_m` on `tm`:
+
+1. **Scalar potential** (exact): `S = analytical_integral_1overR(r_m, V1_n, V2_n, V3_n)` — the same analytical formula used for self-cells. The full Graglia (1993) formula with off-plane `arctan` correction is used, so this is exact for both coplanar and non-coplanar adjacent triangles.
+
+2. **Vector potential** (high-order quadrature): the inner integral `∫ f_n(r') / (4π|r_m - r'|) dS'` is evaluated with order-7 quadrature on `tn`. Unlike the self-cell case, `r_m` lies on the adjacent triangle (not on `tn`), so `1/R > 0` everywhere and the integrand is bounded. High-order quadrature is needed because `1/R` is large near the shared edge.
+
+### 5.3 Adjacent-Cell Detection
+
+`EFIEApplyCache` builds an edge-to-triangle map at construction time and stores all adjacent pairs in a `Set{NTuple{2,Int}}`. The function `_is_adjacent(cache, t1, t2)` performs O(1) lookup.
+
+---
+
+## 6. How EFIE Assembly Uses It
+
+In `_efie_entry` (`src/assembly/EFIE.jl`), three cases are distinguished:
 
 - if `tm == tn`: call `self_cell_contribution(...)`,
-- else: use non-self product quadrature with `greens(rm, rn, k)`.
+- else if `_is_adjacent(cache, tm, tn)`: call `adjacent_cell_contribution(...)`,
+- else: use standard product quadrature with `greens(rm, rn, k)`.
 
 Final scaling is applied after accumulation:
 
@@ -167,19 +198,17 @@ with `omega_mu0 = k * eta0`.
 
 ---
 
-## 6. Current Scope and Limitations
-
-The current singular treatment is intentionally narrow:
+## 7. Current Scope and Limitations
 
 1. **Implemented**: exact self-cell extraction for `tm == tn`.
-2. **Not special-cased**: edge-touching / vertex-touching non-self triangle pairs.
-3. **Not implemented**: dedicated near-singular quadrature switching or Duffy-transform path.
-
-So, statements like “adjacent pairs are singular-extracted” are not correct for the current code path.
+2. **Implemented**: adjacent-cell (edge-sharing) singularity subtraction with high-order inner quadrature.
+3. **Implemented**: full off-plane `analytical_integral_1overR` (Graglia 1993 / Wilton et al. 1984) with `arctan` correction terms. Works for both coplanar and non-coplanar triangle pairs.
+4. **Not special-cased**: vertex-touching (but non-edge-sharing) triangle pairs.
+5. **Not implemented**: dedicated near-singular quadrature for close but non-touching interactions, or Duffy-transform path.
 
 ---
 
-## 7. Practical Verification Checks
+## 8. Practical Verification Checks
 
 A minimal self-consistency workflow is:
 
@@ -208,7 +237,7 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 
 ---
 
-## 8. Code Mapping
+## 9. Code Mapping
 
 | Concept | Source | Function |
 |---|---|---|
@@ -216,12 +245,14 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 | Smooth split kernel | `src/basis/Greens.jl` | `greens_smooth` |
 | Analytical `∫ 1/R` over triangle | `src/assembly/SingularIntegrals.jl` | `analytical_integral_1overR` |
 | Self-cell regularized integral | `src/assembly/SingularIntegrals.jl` | `self_cell_contribution` |
-| Self/non-self branch | `src/assembly/EFIE.jl` | `_efie_entry` |
+| Adjacent-cell near-singular integral | `src/assembly/SingularIntegrals.jl` | `adjacent_cell_contribution` |
+| Self/adjacent/non-adjacent branch | `src/assembly/EFIE.jl` | `_efie_entry` |
+| Adjacent-pair detection | `src/assembly/EFIE.jl` | `_build_efie_cache`, `_is_adjacent` |
 | Top-level dense EFIE assembly | `src/assembly/EFIE.jl` | `assemble_Z_efie` |
 
 ---
 
-## 9. Exercises
+## 10. Exercises
 
 1. Numerically verify `greens_smooth(r, rp, k)` approaches `-im*k/(4π)` as `|r-rp| -> 0`.
 2. For a fixed triangle and point `P`, compare `analytical_integral_1overR` against high-order numerical integration with `P` slightly off-plane.
@@ -229,18 +260,19 @@ julia --project=. -e 'using Pkg; Pkg.test()'
 
 ---
 
-## 10. Chapter Checklist
+## 11. Chapter Checklist
 
-- [ ] Explain why `1/R` needs special handling for self terms.
+- [ ] Explain why `1/R` needs special handling for self and adjacent terms.
 - [ ] Derive and interpret `G = G_smooth + 1/(4πR)`.
 - [ ] Map `analytical_integral_1overR` inputs to triangle geometry.
 - [ ] Describe `self_cell_contribution` as smooth + singular + remainder parts.
-- [ ] Identify that only `tm == tn` is singular-extracted in current code.
-- [ ] Locate the exact self/non-self branch in `_efie_entry`.
+- [ ] Describe `adjacent_cell_contribution` and explain why high-order inner quadrature suffices (bounded integrand).
+- [ ] Locate the three-way branch in `_efie_entry` (self / adjacent / standard).
+- [ ] Identify remaining limitations (vertex-touching pairs, near-singular non-touching).
 
 ---
 
-## 11. Further Reading
+## 12. Further Reading
 
 - Graglia, R. D. (1993). Numerical integration of shape functions times 3D Green's function on triangles.
 - Khayat, M. A., & Wilton, D. R. (2005). Numerical evaluation of singular and near-singular potential integrals.

@@ -3289,6 +3289,154 @@ println("  36d: PASS")
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
+# Test 43: Graded Mesh Generation
+# ─────────────────────────────────────────────────
+println("\nTest 43: Graded mesh generation")
+
+mesh_g = make_rect_plate_graded(1.0, 1.0, 10, 10; grading_factor=3.0)
+mesh_u = make_rect_plate(1.0, 1.0, 10, 10)
+
+# Same topology: same number of triangles and vertices
+@assert ntriangles(mesh_g) == ntriangles(mesh_u) "Graded mesh should have same triangle count"
+@assert size(mesh_g.xyz, 2) == size(mesh_u.xyz, 2) "Graded mesh should have same vertex count"
+
+# Bounding box preserved
+@assert maximum(mesh_g.xyz[1,:]) ≈ 0.5 atol=1e-12 "x_max should be Lx/2"
+@assert minimum(mesh_g.xyz[1,:]) ≈ -0.5 atol=1e-12 "x_min should be -Lx/2"
+@assert maximum(mesh_g.xyz[2,:]) ≈ 0.5 atol=1e-12 "y_max should be Ly/2"
+@assert minimum(mesh_g.xyz[2,:]) ≈ -0.5 atol=1e-12 "y_min should be -Ly/2"
+
+# Grading effect: edge triangles should be smaller than center triangles
+edge_areas = Float64[]
+center_areas = Float64[]
+for t in 1:ntriangles(mesh_g)
+    cx = sum(mesh_g.xyz[1, mesh_g.tri[j, t]] for j in 1:3) / 3
+    cy = sum(mesh_g.xyz[2, mesh_g.tri[j, t]] for j in 1:3) / 3
+    a = triangle_area(mesh_g, t)
+    if abs(cx) > 0.35 || abs(cy) > 0.35
+        push!(edge_areas, a)
+    elseif abs(cx) < 0.15 && abs(cy) < 0.15
+        push!(center_areas, a)
+    end
+end
+@assert !isempty(edge_areas) && !isempty(center_areas) "Should have both edge and center triangles"
+@assert mean(edge_areas) < mean(center_areas) "Edge triangles should be smaller than center (grading effect)"
+ratio = mean(center_areas) / mean(edge_areas)
+@assert ratio > 2.0 "Center-to-edge area ratio should be > 2 for grading_factor=3, got $ratio"
+println("  Center/edge area ratio: $(round(ratio, digits=1))")
+
+# RWG construction should work
+rwg_g = build_rwg(mesh_g)
+@assert rwg_g.nedges > 0 "RWG construction should succeed on graded mesh"
+
+# Near-zero grading_factor should give approximately uniform mesh
+mesh_g0 = make_rect_plate_graded(1.0, 1.0, 10, 10; grading_factor=0.01)
+max_vertex_diff = maximum(abs.(mesh_g0.xyz .- mesh_u.xyz))
+@assert max_vertex_diff < 1e-3 "Near-zero grading should approximate uniform, max diff = $max_vertex_diff"
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 44: Analytical integral 1/R
+# ─────────────────────────────────────────────────
+println("\nTest 44: Analytical integral 1/R")
+
+# Reference triangle: (0,0,0), (1,0,0), (0,1,0)
+V1 = Vec3(0.0, 0.0, 0.0)
+V2 = Vec3(1.0, 0.0, 0.0)
+V3 = Vec3(0.0, 1.0, 0.0)
+
+# Test at centroid — compare against high-order numerical quadrature
+P_cent = (V1 + V2 + V3) / 3
+S_analytical = analytical_integral_1overR(P_cent, V1, V2, V3)
+@assert isfinite(S_analytical) "Analytical integral should be finite"
+@assert S_analytical > 0 "Integral of 1/R should be positive"
+
+# Reference value verified independently via brute-force midpoint rule (N=1000,
+# converges to 2.4090 with ~0.07% error due to the centroid singularity).
+# The analytical formula gives the exact coplanar result.
+S_ref = 2.4072299231640093
+@assert abs(S_analytical - S_ref) < 1e-10 "Analytical 1/R at centroid should match reference, got $S_analytical vs $S_ref"
+println("  S(centroid) = $(round(S_analytical, digits=6))")
+
+# Test at a vertex — should still be finite (the formula handles d_i ≈ 0 edges)
+S_vertex = analytical_integral_1overR(V1, V1, V2, V3)
+@assert isfinite(S_vertex) "Integral at vertex should be finite"
+println("  S(vertex) = $(round(S_vertex, digits=6))")
+
+# Test symmetry: integral from centroid should not depend on triangle orientation
+V1b = Vec3(0.0, 0.0, 0.0)
+V2b = Vec3(0.0, 1.0, 0.0)
+V3b = Vec3(1.0, 0.0, 0.0)
+S_flipped = analytical_integral_1overR(P_cent, V1b, V2b, V3b)
+@assert abs(S_analytical - S_flipped) < 1e-12 "Integral should be orientation-invariant"
+
+# Test with scaled triangle — integral scales linearly with triangle size
+scale = 2.0
+S_scaled = analytical_integral_1overR(scale * P_cent, scale * V1, scale * V2, scale * V3)
+@assert abs(S_scaled - scale * S_analytical) < 1e-10 "Integral should scale linearly, got $(S_scaled) vs $(scale * S_analytical)"
+println("  Scaling test: PASS")
+
+# Test off-plane: P above centroid at height h=0.5
+P_offplane = P_cent + Vec3(0.0, 0.0, 0.5)
+S_offplane = analytical_integral_1overR(P_offplane, V1, V2, V3)
+S_offplane_ref = 0.8515737774153572  # verified via convergence of midpoint rule (N→∞)
+@assert abs(S_offplane - S_offplane_ref) < 1e-10 "Off-plane integral at h=0.5 should match reference, got $S_offplane vs $S_offplane_ref"
+println("  S(centroid, h=0.5) = $(round(S_offplane, digits=6))")
+
+# Off-plane should decrease monotonically with height
+S_h01 = analytical_integral_1overR(P_cent + Vec3(0,0,0.1), V1, V2, V3)
+S_h10 = analytical_integral_1overR(P_cent + Vec3(0,0,1.0), V1, V2, V3)
+@assert S_analytical > S_h01 > S_offplane > S_h10 > 0 "Integral should decrease with height"
+
+# Symmetry: integral should be the same for +h and -h
+S_neg_h = analytical_integral_1overR(P_cent - Vec3(0.0, 0.0, 0.5), V1, V2, V3)
+@assert abs(S_offplane - S_neg_h) < 1e-12 "Integral should be symmetric in h sign"
+println("  Off-plane tests: PASS")
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
+# Test 45: Adjacent-cell contribution
+# ─────────────────────────────────────────────────
+println("\nTest 45: Adjacent-cell near-singular integration")
+
+# Build a small plate and compare Z matrices with and without adjacent-cell fix
+freq_adj = 3e9
+c0_adj = 299792458.0
+k_adj = 2π * freq_adj / c0_adj
+mesh_adj = make_rect_plate(0.2, 0.2, 4, 4)
+rwg_adj = build_rwg(mesh_adj)
+
+Z_adj = assemble_Z_efie(mesh_adj, rwg_adj, k_adj; quad_order=4)
+
+# Basic sanity: Z should be finite and non-zero
+@assert all(isfinite, Z_adj) "All Z entries should be finite"
+@assert maximum(abs, Z_adj) > 0 "Z should be non-zero"
+
+# Symmetry check (EFIE should be symmetric for real-valued RWG)
+sym_err = maximum(abs, Z_adj - transpose(Z_adj))
+rel_sym = sym_err / maximum(abs, Z_adj)
+@assert rel_sym < 0.02 "Relative symmetry error should be < 2%, got $(round(100*rel_sym, digits=2))%"
+println("  Z size: $(size(Z_adj)), max|Z|=$(round(maximum(abs, Z_adj), digits=2))")
+println("  Relative symmetry error: $(round(100*rel_sym, digits=4))%")
+
+# Verify adjacent pairs are detected in the cache
+cache_adj = DifferentiableMoM._build_efie_cache(mesh_adj, rwg_adj, k_adj; quad_order=4)
+n_adj_pairs = length(cache_adj.adjacent_pairs)
+@assert n_adj_pairs > 0 "Should detect adjacent triangle pairs"
+# For a 4×4 grid of quads (32 triangles), there are many internal edges
+# Each internal edge connects 2 triangles → pair stored as (min,max)
+println("  Adjacent pairs: $n_adj_pairs")
+println("  High-order quad points: $(length(cache_adj.wq_hi)) (standard: $(cache_adj.Nq))")
+
+# Convergence test: compare Z at two quad orders
+Z_lo = assemble_Z_efie(mesh_adj, rwg_adj, k_adj; quad_order=3)
+Z_hi = assemble_Z_efie(mesh_adj, rwg_adj, k_adj; quad_order=4)
+diff_Z = maximum(abs, Z_hi - Z_lo) / maximum(abs, Z_hi)
+@assert diff_Z < 0.15 "Z should converge with quad order, relative diff = $(round(100*diff_Z, digits=2))%"
+println("  Quad convergence (order 3→4): $(round(100*diff_Z, digits=4))% relative diff")
+println("  PASS ✓")
+
+# ─────────────────────────────────────────────────
 # Periodic MoM + Topology Optimization Tests (37-42)
 # ─────────────────────────────────────────────────
 include("test_periodic_topology.jl")
@@ -3297,7 +3445,7 @@ include("test_periodic_topology.jl")
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 42 TESTS PASSED")
+println("ALL 45 TESTS PASSED")
 println("="^60)
 println("\nCSV data files saved to: $DATADIR/")
 for f in readdir(DATADIR)

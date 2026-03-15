@@ -31,6 +31,40 @@ Creates a triangulated rectangular plate in the xy-plane, centered at the origin
 
 ---
 
+### `make_rect_plate_graded(Lx, Ly, Nx, Ny; grading_factor=3.0)`
+
+Creates a triangulated rectangular plate in the xy-plane with graded mesh density near the edges. Same topology as `make_rect_plate` but vertex positions are redistributed using a tanh grading function that clusters elements near the plate boundaries.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `Lx` | `Real` | -- | Plate length in x-direction (meters). |
+| `Ly` | `Real` | -- | Plate length in y-direction (meters). |
+| `Nx` | `Int` | -- | Number of cells along x. |
+| `Ny` | `Int` | -- | Number of cells along y. |
+| `grading_factor` | `Real` | `3.0` | Controls edge clustering strength. Must be positive. |
+
+**Returns:** `TriMesh` with `(Nx+1)*(Ny+1)` vertices and `2*Nx*Ny` triangles (same count as `make_rect_plate`).
+
+**Grading factor guide:**
+
+| `grading_factor` | Edge-to-center density ratio | Use case |
+|-------------------|------------------------------|----------|
+| `1.0` | ~1.5:1 (nearly uniform) | Mild refinement near edges |
+| `3.0` (default) | ~5:1 | Standard edge clustering |
+| `5.0` | ~10:1 | Strong edge clustering |
+
+Values above 6 may create highly skewed center elements.
+
+**Example:**
+```julia
+mesh = make_rect_plate_graded(0.1, 0.1, 12, 12; grading_factor=3.0)
+rwg = build_rwg(mesh)
+```
+
+---
+
 ### `make_parabolic_reflector(D, f, Nr, Nphi; center=Vec3(0,0,0))`
 
 Creates an open parabolic reflector mesh aligned with +z, with surface equation:
