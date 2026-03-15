@@ -322,13 +322,13 @@ adv_db = chk_mean .- opt_mean
 fig_hero = plot_scatter(tu, opt_mean;
     xlabel="Incidence angle θ [deg]",
     ylabel="Specular scattering vs PEC [dB]",
-    mode="lines+markers", color="#0072B2", dash="solid", linewidth=2,
+    mode="lines+markers", color="#0072B2", dash="solid",
     marker_size=7, marker_symbol="circle",
     legend="Optimized (8–12 GHz mean)",
     width=504, height=360, fontsize=12)
 
 plot_scatter!(fig_hero, tu, chk_mean;
-    mode="lines+markers", color="#D55E00", dash="dash", linewidth=2,
+    mode="lines+markers", color="#D55E00", dash="dash",
     marker_size=7, marker_symbol="square",
     legend="Checkerboard (8–12 GHz mean)")
 
