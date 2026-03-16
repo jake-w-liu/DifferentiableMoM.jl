@@ -1,6 +1,6 @@
 # Mesh.jl — Simple mesh generation and geometry utilities
 
-export make_rect_plate, make_rect_plate_graded, make_parabolic_reflector, read_obj_mesh, triangle_area, triangle_center, triangle_normal
+export make_rect_plate, make_rect_plate_graded, make_circular_plate, read_obj_mesh, triangle_area, triangle_center, triangle_normal
 export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
 export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles
@@ -61,6 +61,68 @@ function make_rect_plate(Lx::Real, Ly::Real, Nx::Int, Ny::Int)
     end
 
     return TriMesh(xyz, tri)
+end
+
+"""
+    make_circular_plate(radius, Nr, Nphi)
+
+Generate a triangulated circular plate (disk) in the xy-plane, centered at
+the origin. Uses radial rings with azimuthal subdivision.
+
+Returns a `TriMesh` with approximately `Nr*Nphi + 1` vertices.
+"""
+function make_circular_plate(radius::Real, Nr::Int, Nphi::Int)
+    # Vertices: center + Nr rings × Nphi points each
+    Nv = 1 + Nr * Nphi
+    verts = zeros(3, Nv)
+
+    # Center vertex
+    verts[:, 1] = [0.0, 0.0, 0.0]
+
+    # Ring vertices
+    idx = 1
+    for ir in 1:Nr
+        r = radius * ir / Nr
+        for ip in 1:Nphi
+            phi = 2π * (ip - 1) / Nphi
+            idx += 1
+            verts[1, idx] = r * cos(phi)
+            verts[2, idx] = r * sin(phi)
+        end
+    end
+
+    # Triangles
+    tris = Int[]
+
+    # Inner ring: triangles from center to first ring
+    for ip in 1:Nphi
+        v1 = 1   # center
+        v2 = 1 + ip
+        v3 = 1 + mod(ip, Nphi) + 1  # wraps: ip=Nphi -> next is 1+1=2
+        # Fix: the next vertex in the ring
+        v3 = ip < Nphi ? 1 + ip + 1 : 1 + 1
+        push!(tris, v1, v2, v3)
+    end
+
+    # Outer rings: quads split into two triangles
+    for ir in 1:Nr-1
+        off_inner = 1 + (ir - 1) * Nphi
+        off_outer = 1 + ir * Nphi
+        for ip in 1:Nphi
+            ip_next = ip < Nphi ? ip + 1 : 1
+            v1 = off_inner + ip
+            v2 = off_outer + ip
+            v3 = off_outer + ip_next
+            v4 = off_inner + ip_next
+            push!(tris, v1, v2, v3)
+            push!(tris, v1, v3, v4)
+        end
+    end
+
+    Nt = length(tris) ÷ 3
+    tri = reshape(tris, 3, Nt)
+
+    return TriMesh(verts, tri)
 end
 
 """
