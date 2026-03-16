@@ -55,12 +55,21 @@ include("optimization/MultiAngleRCS.jl")
 include("optimization/DensityFiltering.jl")
 include("optimization/DensityAdjoint.jl")
 
+# 2D TM Volume Integral Equation (MoM)
+include("mom2d/Types2D.jl")
+include("mom2d/Greens2D.jl")
+include("mom2d/Assembly2D.jl")
+include("mom2d/Excitation2D.jl")
+include("mom2d/Scatter2D.jl")
+include("mom2d/Mie2D.jl")
+
 # Workflow
 include("Workflow.jl")
 
 # Post-processing (remaining)
 include("postprocessing/Diagnostics.jl")
 include("postprocessing/PhysicalOptics.jl")
+include("postprocessing/PTD.jl")
 include("postprocessing/Mie.jl")
 include("postprocessing/Visualization.jl")
 include("postprocessing/PeriodicMetrics.jl")
