@@ -226,49 +226,37 @@ where both Y and tan diverge, the combined expression stays finite.
 end
 
 """
-    _ptd_fringe_fg(n, delta_s, delta_i, gamma, top_illuminated) -> (f, g)
+    _ptd_fringe_fg(n, delta_s, delta_i, gamma) -> (f, g)
 
 Compute the real-valued PTD fringe coefficients f and g for a PEC wedge,
 following Sáez de Adana et al., eqs. 4.131-4.136.
 
+Uses the bottom-side illuminated formula (eq 4.133-4.134) which matches
+the azimuth convention where δⁱ is computed from k̂.
+
 Uses numerically stable combined computation of (X - tan) and (Y + tan)
-terms to avoid catastrophic cancellation at shadow/reflection boundaries.
+to avoid catastrophic cancellation at shadow/reflection boundaries.
 """
 function _ptd_fringe_fg(n::Float64, delta_s::Float64, delta_i::Float64,
-                         gamma::Float64, top_illuminated::Bool)
+                         gamma::Float64)
     u = 0.5 * (delta_s - delta_i)
     v = 0.5 * (delta_s + delta_i)
-
     # A = X - (1/2)tan(u)  [stable, bounded at shadow boundary]
     A = _stable_XminusTan(u, n)
 
-    if top_illuminated
-        # Top side (eq 4.135-4.136): PO uses tan(v) where v = (δˢ+δⁱ)/2
-        # f = (X - 1/2 tan u) + (-Y - 1/2 tan v) = A + B
-        # g = (X - 1/2 tan u) + (+Y + 1/2 tan v) = A + C
-        B = _stable_YplusTan(v, n, -1, -1)   # -Y - (1/2)tan(v)
-        C = _stable_YplusTan(v, n, +1, +1)   # +Y + (1/2)tan(v)
-        f = A + B
-        g = A + C
-    else
-        # Bottom side (eq 4.133-4.134): PO uses tan(γ - v)
-        # f = (X - 1/2 tan u) + (-Y - 1/2 tan(γ-v))
-        # g = (X - 1/2 tan u) + (+Y + 1/2 tan(γ-v))
-        w = gamma - v
-        B = _stable_YplusTan(v, n, -1, 0) + _stable_YplusTan(w, n, 0, -1)
-        C = _stable_YplusTan(v, n, +1, 0) + _stable_YplusTan(w, n, 0, +1)
-        # Simpler: compute Y and tan(γ-v) with the same stable approach
-        # but Y uses v while tan uses w = γ-v → different arguments
-        # Fall back to direct computation for the Y part (no cancellation issue)
-        sin_pi_n = sin(π / n)
-        cos_pi_n = cos(π / n)
-        denom_Y = cos_pi_n - cos(2v / n)
-        Y = abs(denom_Y) > 1e-10 ? (sin_pi_n / n) / denom_Y : 0.0
-        tw = abs(cos(w)) > 1e-10 ? 0.5 * sin(w) / cos(w) : sign(sin(w)) * 10.0
-        tw = clamp(tw, -10.0, 10.0)
-        f = A - Y - tw
-        g = A + Y + tw
-    end
+    # Bottom-side formula (eq 4.133-4.134):
+    # f = X - Y - 1/2 tan(u) - 1/2 tan(γ-v)
+    # g = X + Y - 1/2 tan(u) + 1/2 tan(γ-v)
+    #
+    # For n=2: tan(2π-v) = -tan(v), so -1/2 tan(γ-v) = +1/2 tan(v).
+    # Thus: -Y - 1/2 tan(γ-v) = -Y + 1/2 tan(v) → use _stable_YplusTan(v, n, -1, +1)
+    # This is CRITICAL: Y and tan(γ-v) BOTH diverge at the reflection boundary
+    # (v = γ/2 for n=2), and their combination must be computed stably.
+    B_bot = _stable_YplusTan(v, n, -1, +1)   # -Y + 1/2 tan(v) = -Y - 1/2 tan(γ-v) for n=2
+    C_bot = _stable_YplusTan(v, n, +1, -1)   # +Y - 1/2 tan(v) = +Y + 1/2 tan(γ-v) for n=2
+
+    f = A + B_bot
+    g = A + C_bot
 
     return (f, g)
 end
@@ -370,11 +358,9 @@ function solve_ptd(mesh::TriMesh, freq_hz::Real, excitation::PlaneWaveExcitation
             isnothing(delta_i) && continue
             isnothing(delta_s) && continue
 
-            # ── PTD fringe coefficients (real-valued, eqs 4.131-4.136) ──
-            # Illumination case from azimuth angle (eq 4.135 vs 4.133)
+            # ── PTD fringe coefficients (real-valued, eq 4.137-4.138) ──
             n = γ / π
-            top_lit = delta_i <= (γ - π)
-            f_ptd, g_ptd = _ptd_fringe_fg(n, delta_s, delta_i, γ, top_lit)
+            f_ptd, g_ptd = _ptd_fringe_fg(n, delta_s, delta_i, γ)
 
             # ── Incident field at edge midpoint ──
             E_inc_Q0 = pol * E0 * exp(-1im * k * dot(k_hat, Q₀))
@@ -385,18 +371,10 @@ function solve_ptd(mesh::TriMesh, freq_hz::Real, excitation::PlaneWaveExcitation
             tE = dot(ê, E_inc_Q0)                              # t̂·Ēⁱ
             tH = dot(ê, cross(k_hat, E_inc_Q0))                # t̂·(k̂ᵢ×Ēⁱ)
 
-            # ── Scattered field: compute directly via vector projection ──
-            # Instead of E_θ/E_φ decomposition (which needs careful basis
-            # convention), compute the transverse far-field directly:
-            # The edge current is along ê. The far-field projection removes
-            # the r̂ component: ê_⊥ = ê - (ê·r̂)r̂ = -r̂×(r̂×ê)
-            ê_perp = ê - dot(ê, r_hat) * r_hat  # transverse part of ê
-
-            # The soft contribution radiates like an electric current along ê:
-            #   E_soft ∝ f × tE × ê_⊥   (transverse projection of ê)
-            # The hard contribution radiates like a magnetic current along ê:
-            #   E_hard ∝ g × tH × (r̂ × ê)   (cross product, perpendicular)
-            r_cross_e = cross(r_hat, ê)  # = r̂ × ê
+            # ── Scattered field ──
+            # Edge-fixed basis: ê_⊥ (soft/electric) and r̂×ê (hard/magnetic)
+            ê_perp = ê - dot(ê, r_hat) * r_hat
+            r_cross_e = cross(r_hat, ê)
 
             E_soft = prefactor / sin2_beta * (-f_ptd * tE) * ê_perp
             E_hard = prefactor / sin2_beta * (-g_ptd * tH) * r_cross_e
