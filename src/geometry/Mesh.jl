@@ -1,6 +1,6 @@
 # Mesh.jl — Simple mesh generation and geometry utilities
 
-export make_rect_plate, make_rect_plate_graded, make_circular_plate, read_obj_mesh, triangle_area, triangle_center, triangle_normal
+export make_rect_plate, make_rect_plate_graded, make_circular_plate, make_parabolic_reflector, read_obj_mesh, triangle_area, triangle_center, triangle_normal
 export mesh_quality_report, mesh_quality_ok, assert_mesh_quality
 export write_obj_mesh, repair_mesh_for_simulation, repair_obj_mesh
 export estimate_dense_matrix_gib, cluster_mesh_vertices, drop_nonmanifold_triangles

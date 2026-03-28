@@ -582,11 +582,11 @@ version = "2.3.1"
 
 [[deps.PlotlySupply]]
 deps = ["BatchAssign", "ElectronCall", "Infiltrator", "MeshGrid", "PlotlyBase", "Reexport"]
-git-tree-sha1 = "81ded5a001446657e3cefd19276b7bac6fe6fa20"
-repo-rev = "v1.6.0"
+git-tree-sha1 = "686d70f089c7877e11ecb003db70bc867db67c19"
+repo-rev = "v1.6.4"
 repo-url = "https://github.com/jake-w-liu/PlotlySupply.jl"
 uuid = "a389b534-8bca-4fe3-8ff2-14829cd8824f"
-version = "1.6.0"
+version = "1.6.4"
 
 [[deps.PooledArrays]]
 deps = ["DataAPI", "Future"]

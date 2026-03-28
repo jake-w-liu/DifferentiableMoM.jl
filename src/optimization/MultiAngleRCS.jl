@@ -39,7 +39,7 @@ Build `AngleConfig` entries for multi-angle monostatic RCS optimization.
   - `pol`: polarization unit vector (Vec3)
   - `weight`: weight in objective (default 1.0)
 - `grid`: `SphGrid` for far-field evaluation (shared across all angles)
-- `backscatter_cone`: half-angle in degrees for backscatter mask (default 10°)
+- `backscatter_cone`: half-angle in degrees for backscatter mask (default 15°)
 
 # Returns
 Vector of `AngleConfig`, one per incidence angle.
@@ -47,10 +47,10 @@ Vector of `AngleConfig`, one per incidence angle.
 function build_multiangle_configs(mesh::TriMesh, rwg::RWGData, k::Float64,
                                    angles::Vector{<:NamedTuple};
                                    grid::SphGrid,
-                                   backscatter_cone::Float64=10.0)
+                                   backscatter_cone::Float64=15.0)
     eta0 = 376.730313668
     G_mat = radiation_vectors(mesh, rwg, grid, k; eta0=eta0)
-    pol_mat = pol_linear_x(grid)  # default pol — overridden per-angle below
+    pol_mat = pol_linear_x(grid)  # shared θ̂ polarization for all angles
 
     configs = AngleConfig[]
     for ang in angles
@@ -108,14 +108,14 @@ Uses `ImpedanceLoadedOperator` internally to build Z(θ) = Z_base + Z_imp(θ).
 - `verbose`: print progress
 
 # Returns
-`(theta_opt, trace)` where trace records `(iter, J, gnorm)` per iteration.
+`(theta_opt, trace)` where trace records `(iter, J, gnorm, n_fwd, n_adj)` per iteration.
 """
 function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
                                   Mp::Vector{<:AbstractMatrix},
                                   configs::Vector{AngleConfig},
                                   theta0::Vector{Float64};
                                   maxiter::Int=100,
-                                  tol::Float64=1e-6,
+                                  tol::Float64=1e-10,
                                   m_lbfgs::Int=10,
                                   alpha0::Float64=0.01,
                                   verbose::Bool=true,
@@ -129,8 +129,10 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
     P = length(theta0)     # number of design parameters
     theta = copy(theta0)
 
-    # Always use GMRES — the composite ImpedanceLoadedOperator is matrix-free
-    solver = :gmres
+    # Use dense LU when Z_base is a dense Matrix for exact solves;
+    # fall back to GMRES for matrix-free operators (MLFMA, ACA)
+    use_dense_lu = Z_base isa Matrix{ComplexF64}
+    solver = use_dense_lu ? :direct : :gmres
 
     function project!(x)
         lb !== nothing && (x .= max.(x, lb))
@@ -141,7 +143,7 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
 
     if verbose
         println("Multi-angle RCS optimization: $M angles, $P parameters, solver=$solver")
-        if preconditioner !== nothing
+        if !use_dense_lu && preconditioner !== nothing
             println("  GMRES preconditioned")
         end
     end
@@ -149,23 +151,32 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
     # L-BFGS history
     s_list = Vector{Vector{Float64}}()
     y_list = Vector{Vector{Float64}}()
-    trace = Vector{NamedTuple{(:iter, :J, :gnorm), Tuple{Int,Float64,Float64}}}()
+    trace = Vector{NamedTuple{(:iter, :J, :gnorm, :n_fwd, :n_adj), Tuple{Int,Float64,Float64,Int,Int}}}()
+
+    # Solve counters — track every forward and adjoint solve including line search
+    n_fwd_solves = 0
+    n_adj_solves = 0
 
     theta_old = copy(theta)
     g_old = zeros(P)
 
     for iter in 1:maxiter
-        # ── 1. Build composite operator Z(θ) ────────────────────
-        Z_op = ImpedanceLoadedOperator(Z_base, Mp, theta, reactive)
+        # ── 1. Build system matrix Z(θ) ──────────────────────────
+        if use_dense_lu
+            Z_full = assemble_full_Z(Z_base, Mp, theta; reactive=reactive)
+        else
+            Z_full = ImpedanceLoadedOperator(Z_base, Mp, theta, reactive)
+        end
 
         # ── 2. Forward solves: I_a = Z(θ)⁻¹ v_a ────────────────
         I_all = Vector{Vector{ComplexF64}}(undef, M)
         for a in 1:M
-            I_all[a] = solve_forward(Z_op, configs[a].v;
+            I_all[a] = solve_forward(Z_full, configs[a].v;
                                       solver=solver,
                                       preconditioner=preconditioner,
                                       gmres_tol=gmres_tol,
                                       gmres_maxiter=gmres_maxiter)
+            n_fwd_solves += 1
         end
 
         # ── 3. Objective: J = Σ_a w_a (I_a† Q_a I_a) ──────────
@@ -178,11 +189,12 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
         lambda_all = Vector{Vector{ComplexF64}}(undef, M)
         for a in 1:M
             rhs_a = configs[a].Q * I_all[a]
-            lambda_all[a] = solve_adjoint_rhs(Z_op, rhs_a;
+            lambda_all[a] = solve_adjoint_rhs(Z_full, rhs_a;
                                                solver=solver,
                                                preconditioner=preconditioner,
                                                gmres_tol=gmres_tol,
                                                gmres_maxiter=gmres_maxiter)
+            n_adj_solves += 1
         end
 
         # ── 5. Gradient: g[p] = Σ_a w_a · ∂J_a/∂θ_p ───────────
@@ -193,14 +205,23 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
         end
         gnorm = norm(g)
 
-        push!(trace, (iter=iter, J=J_val, gnorm=gnorm))
+        push!(trace, (iter=iter, J=J_val, gnorm=gnorm, n_fwd=n_fwd_solves, n_adj=n_adj_solves))
         if verbose
-            println("  iter=$iter  J=$(round(J_val, sigdigits=6))  |g|=$(round(gnorm, sigdigits=4))")
+            println("  iter=$iter  J=$(round(J_val, sigdigits=6))  |g|=$(round(gnorm, sigdigits=4))  solves(fwd=$n_fwd_solves, adj=$n_adj_solves)")
         end
 
         if gnorm < tol
-            verbose && println("Converged at iteration $iter")
+            verbose && println("Converged at iteration $iter (gradient < tol)")
             break
+        end
+
+        # Stagnation detection: stop if J hasn't improved by >0.1% in 10 iterations
+        if length(trace) >= 11
+            J_10_ago = trace[end-10].J
+            if abs(J_val - J_10_ago) / max(abs(J_10_ago), 1e-30) < 1e-3
+                verbose && println("Stagnated at iteration $iter (J unchanged for 10 iters)")
+                break
+            end
         end
 
         # ── 6. L-BFGS curvature pair update ─────────────────────
@@ -244,9 +265,24 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
         theta_old = copy(theta)
         g_old = copy(g)
 
+        ls_success = false
+
+        # Check if L-BFGS direction is descent; if not, use steepest descent
+        gd = dot(g, d)
+        if gd >= 0
+            d = -g
+            gd = -gnorm^2
+            empty!(s_list)
+            empty!(y_list)
+        end
+
         for ls in 1:20
             theta_trial = project!(theta_old + alpha_ls * d)
-            Z_trial = ImpedanceLoadedOperator(Z_base, Mp, theta_trial, reactive)
+            if use_dense_lu
+                Z_trial = assemble_full_Z(Z_base, Mp, theta_trial; reactive=reactive)
+            else
+                Z_trial = ImpedanceLoadedOperator(Z_base, Mp, theta_trial, reactive)
+            end
 
             # Evaluate trial objective
             J_trial = 0.0
@@ -256,16 +292,19 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
                                          preconditioner=preconditioner,
                                          gmres_tol=gmres_tol,
                                          gmres_maxiter=gmres_maxiter)
+                n_fwd_solves += 1
                 J_trial += configs[a].weight * real(dot(I_trial, configs[a].Q * I_trial))
             end
 
-            # Armijo condition (minimizing J)
-            if J_trial <= J_val + 1e-4 * alpha_ls * dot(g, d)
+            # Armijo condition
+            if J_trial <= J_val + 1e-4 * alpha_ls * gd
                 theta = theta_trial
+                ls_success = true
                 break
             end
             alpha_ls *= 0.5
             if ls == 20
+                # Take the smallest step to accumulate curvature information
                 theta = project!(theta_old + alpha_ls * d)
             end
         end

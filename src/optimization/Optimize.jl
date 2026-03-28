@@ -25,7 +25,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
                         Q::Matrix{ComplexF64},
                         theta0::Vector{Float64};
                         maxiter::Int=100,
-                        tol::Float64=1e-6,
+                        tol::Float64=1e-10,
                         m_lbfgs::Int=10,
                         alpha0::Float64=0.01,
                         verbose::Bool=true,
@@ -95,7 +95,11 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
     s_list = Vector{Vector{Float64}}()
     y_list = Vector{Vector{Float64}}()
 
-    trace = Vector{NamedTuple{(:iter, :J, :gnorm), Tuple{Int,Float64,Float64}}}()
+    trace = Vector{NamedTuple{(:iter, :J, :gnorm, :n_fwd, :n_adj), Tuple{Int,Float64,Float64,Int,Int}}}()
+
+    # Solve counters — track every forward and adjoint solve including line search
+    n_fwd_solves = 0
+    n_adj_solves = 0
 
     theta_old = copy(theta)
     g_old = zeros(length(theta))
@@ -115,6 +119,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
         I_coeffs = solve_forward(Z, rhs_eff_base;
                                   solver=solver, preconditioner=nf_preconditioner,
                                   gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
+        n_fwd_solves += 1
 
         # Objective (always report the true J)
         J_val = real(dot(I_coeffs, Q * I_coeffs))
@@ -123,6 +128,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
         lambda = solve_adjoint(Z, Q, I_coeffs;
                                 solver=solver, preconditioner=nf_preconditioner,
                                 gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
+        n_adj_solves += 1
 
         # Gradient of J (true objective)
         g_true = gradient_impedance(Mp_eff, I_coeffs, lambda; reactive=reactive)
@@ -131,9 +137,9 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
         g = sense .* g_true
         gnorm = norm(g_true)
 
-        push!(trace, (iter=iter, J=J_val, gnorm=gnorm))
+        push!(trace, (iter=iter, J=J_val, gnorm=gnorm, n_fwd=n_fwd_solves, n_adj=n_adj_solves))
         if verbose
-            println("  iter=$iter  J=$J_val  |g|=$gnorm")
+            println("  iter=$iter  J=$J_val  |g|=$gnorm  solves(fwd=$n_fwd_solves, adj=$n_adj_solves)")
         end
 
         if gnorm < tol
@@ -184,6 +190,16 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
 
         # Line search: backtracking Armijo with projection
         d = -r
+
+        # Check if L-BFGS direction is descent; if not, reset to steepest descent
+        gd = dot(g, d)
+        if gd >= 0
+            d = -g
+            gd = -gnorm^2
+            empty!(s_list)
+            empty!(y_list)
+        end
+
         alpha = 1.0
         theta_old = copy(theta)
         g_old = copy(g)
@@ -203,6 +219,7 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
             I_trial = solve_forward(Z_trial, rhs_eff_base;
                                      solver=solver, preconditioner=nf_preconditioner,
                                      gmres_tol=gmres_tol, gmres_maxiter=gmres_maxiter)
+            n_fwd_solves += 1
             J_trial_internal = sense * real(dot(I_trial, Q * I_trial))
 
             if J_trial_internal <= J_internal + 1e-4 * alpha * dot(g, d)

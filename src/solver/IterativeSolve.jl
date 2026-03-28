@@ -77,11 +77,13 @@ function solve_gmres_adjoint(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:
                               precond_side::Symbol=:left,
                               tol::Float64=1e-8,
                               maxiter::Int=200,
+                              memory::Int=20,
                               verbose::Bool=false)
     rhs_c = _as_complex_rhs(rhs)
 
     if preconditioner === nothing
         x, stats = Krylov.gmres(adjoint(Z), rhs_c;
+                                 memory=memory,
                                  rtol=tol, atol=0.0,
                                  itmax=maxiter,
                                  verbose=(verbose ? 1 : 0))
@@ -89,6 +91,7 @@ function solve_gmres_adjoint(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:
         N_adj = NearFieldAdjointOperator(preconditioner)
         x, stats = Krylov.gmres(adjoint(Z), rhs_c;
                                  N=N_adj,
+                                 memory=memory,
                                  rtol=tol, atol=0.0,
                                  itmax=maxiter,
                                  verbose=(verbose ? 1 : 0))
@@ -96,6 +99,7 @@ function solve_gmres_adjoint(Z::AbstractMatrix{<:Number}, rhs::AbstractVector{<:
         M_adj = NearFieldAdjointOperator(preconditioner)
         x, stats = Krylov.gmres(adjoint(Z), rhs_c;
                                  M=M_adj,
+                                 memory=memory,
                                  rtol=tol, atol=0.0,
                                  itmax=maxiter,
                                  verbose=(verbose ? 1 : 0))
