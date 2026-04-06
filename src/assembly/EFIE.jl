@@ -126,9 +126,9 @@ end
             fn_vals = _rwg_vals(cache, n, itn)
 
             if tm == tn
-                # Self-cell singularity extraction
+                # Self-cell singularity extraction (high-order quadrature)
                 val += self_cell_contribution(
-                    cache.mesh, cache.rwg, n, tm,
+                    cache.mesh, cache.rwg, m, n, tm,
                     cache.quad_pts[tm],
                     fm_vals,
                     fn_vals,
@@ -137,6 +137,8 @@ end
                     Am,
                     cache.wq,
                     cache.k,
+                    cache.wq_hi,
+                    cache.quad_pts_hi[tm],
                 )
             elseif _is_adjacent(cache, tm, tn)
                 # Adjacent-cell near-singular integration

@@ -78,9 +78,10 @@ function analytical_integral_1overR(P::Vec3, V1::Vec3, V2::Vec3, V3::Vec3)
 end
 
 """
-    self_cell_contribution(mesh, rwg, n, tm,
+    self_cell_contribution(mesh, rwg, m, n, tm,
                            quad_pts_tm, rwg_vals_m, rwg_vals_n,
-                           div_m, div_n, Am, wq, k)
+                           div_m, div_n, Am, wq, k,
+                           [wq_hi, quad_pts_tm_hi])
 
 Compute the EFIE self-cell integral for basis functions m, n on the same
 triangle tm using singularity extraction.
@@ -88,57 +89,64 @@ triangle tm using singularity extraction.
 Returns the value (vec_part - scl_part), not yet multiplied by -iωμ₀.
 
 The integral splits as:
-  I = I_smooth  (Nq×Nq product quadrature with G_smooth)
-    + I_singular (outer Nq-point quadrature, analytical inner ∫ 1/R dS')
+  I = I_smooth  (product quadrature with G_smooth)
+    + I_singular (outer quadrature, analytical inner ∫ 1/R dS')
+
+When high-order quadrature data (wq_hi, quad_pts_tm_hi) is provided, the
+self-cell uses it for both smooth and singular parts.  This matches the
+adjacent-cell treatment and improves impedance matrix accuracy.
 """
 function self_cell_contribution(
     mesh::TriMesh, rwg::RWGData,
-    n::Int, tm::Int,
+    m_test::Int, n_src::Int, tm::Int,
     quad_pts_tm::Vector{Vec3},
     rwg_vals_m::Vector{<:SVector{3,<:Number}},
     rwg_vals_n::Vector{<:SVector{3,<:Number}},
     div_m::Number, div_n::Number,
-    Am::Float64, wq, k)
+    Am::Float64, wq, k,
+    wq_hi, quad_pts_tm_hi::Vector{Vec3})
 
     Nq = length(wq)
+    Nq_hi = length(wq_hi)
     CT = complex(typeof(real(k)))
 
     V1 = _mesh_vertex(mesh, mesh.tri[1, tm])
     V2 = _mesh_vertex(mesh, mesh.tri[2, tm])
     V3 = _mesh_vertex(mesh, mesh.tri[3, tm])
 
-    # ── Smooth part: standard product quadrature with G_smooth ──
+    # ── Smooth part: high-order product quadrature with G_smooth ──
+    # Self-cell G_smooth has a cusp at R=0; use high-order rule for accuracy
     val_smooth = zero(CT)
-    for qm in 1:Nq
-        rm = quad_pts_tm[qm]
-        fm = rwg_vals_m[qm]
-        for qn in 1:Nq
-            rn = quad_pts_tm[qn]
-            fn = rwg_vals_n[qn]
+    for qm in 1:Nq_hi
+        rm = quad_pts_tm_hi[qm]
+        fm = eval_rwg(rwg, m_test, rm, tm)
+        for qn in 1:Nq_hi
+            rn = quad_pts_tm_hi[qn]
+            fn = eval_rwg(rwg, n_src, rn, tm)
 
             Gs = greens_smooth(rm, rn, k)
             vec_part = dot(fm, fn) * Gs
             scl_part = conj(div_m) * div_n * Gs / (k^2)
-            weight = wq[qm] * wq[qn] * (2 * Am) * (2 * Am)
+            weight = wq_hi[qm] * wq_hi[qn] * (2 * Am) * (2 * Am)
             val_smooth += (vec_part - scl_part) * weight
         end
     end
 
-    # ── Singular part: semi-analytical ──
+    # ── Singular part: semi-analytical with high-order outer quadrature ──
     # For each outer quad point r_qm, compute:
     #   S = ∫_T 1/|r_qm - r'| dS'  (analytical)
     #
     # Vector part: ∫_T f_m·f_n/(4πR) dS'
     #   = f_m·f_n(r_qm) × S/(4π)
-    #     + ∫_T f_m·[f_n(r') - f_n(r_qm)]/(4πR) dS'  (regular, standard quad)
+    #     + ∫_T f_m·[f_n(r') - f_n(r_qm)]/(4πR) dS'  (regular, high-order quad)
     #
     # Scalar part: div_m × div_n × S / (4πk²)
     inv4pi = 1.0 / (4π)
 
     val_singular = zero(CT)
-    for qm in 1:Nq
-        rm = quad_pts_tm[qm]
-        fm = rwg_vals_m[qm]
+    for qm in 1:Nq_hi
+        rm = quad_pts_tm_hi[qm]
+        fm = eval_rwg(rwg, m_test, rm, tm)
 
         S = analytical_integral_1overR(rm, V1, V2, V3)
         inner_scalar = inv4pi * S
@@ -147,14 +155,14 @@ function self_cell_contribution(
         scl_sing = conj(div_m) * div_n * inner_scalar / (k^2)
 
         # Vector potential singular part: leading term
-        fn_at_rm = eval_rwg(rwg, n, rm, tm)
+        fn_at_rm = eval_rwg(rwg, n_src, rm, tm)
         vec_lead = dot(fm, fn_at_rm) * inner_scalar
 
         # Vector potential singular part: remainder (bounded integrand)
         vec_rem = zero(CT)
-        for qn in 1:Nq
-            rn = quad_pts_tm[qn]
-            fn = rwg_vals_n[qn]
+        for qn in 1:Nq_hi
+            rn = quad_pts_tm_hi[qn]
+            fn = eval_rwg(rwg, n_src, rn, tm)
 
             R_vec = rm - rn
             R = sqrt(dot(R_vec, R_vec))
@@ -163,14 +171,30 @@ function self_cell_contribution(
             end
 
             delta_fn = fn - fn_at_rm
-            vec_rem += dot(fm, delta_fn) * (inv4pi / R) * wq[qn] * (2 * Am)
+            vec_rem += dot(fm, delta_fn) * (inv4pi / R) * wq_hi[qn] * (2 * Am)
         end
 
-        outer_weight = wq[qm] * (2 * Am)
+        outer_weight = wq_hi[qm] * (2 * Am)
         val_singular += ((vec_lead + vec_rem) - scl_sing) * outer_weight
     end
 
     return val_smooth + val_singular
+end
+
+# Backward-compatible method without high-order data (uses wq for both)
+function self_cell_contribution(
+    mesh::TriMesh, rwg::RWGData,
+    m_test::Int, n_src::Int, tm::Int,
+    quad_pts_tm::Vector{Vec3},
+    rwg_vals_m::Vector{<:SVector{3,<:Number}},
+    rwg_vals_n::Vector{<:SVector{3,<:Number}},
+    div_m::Number, div_n::Number,
+    Am::Float64, wq, k)
+
+    return self_cell_contribution(mesh, rwg, m_test, n_src, tm,
+        quad_pts_tm, rwg_vals_m, rwg_vals_n,
+        div_m, div_n, Am, wq, k,
+        wq, quad_pts_tm)
 end
 
 """
