@@ -517,7 +517,7 @@ function dipole_incident_field(r::Vec3, dipole::DipoleExcitation)
     if dipole.type == :electric
         term1 = cross(R_hat, p)
         term1 = cross(term1, R_hat) * k^2
-        term2 = (3 * R_hat * dot(R_hat, p) - p) * (1 / R^2 - 1im * k / R)
+        term2 = (3 * R_hat * dot(R_hat, p) - p) * (1 / R^2 + 1im * k / R)
         return (term1 + term2) * exp(-1im * k * R) / (4π * ϵ0 * R)
     elseif dipole.type == :magnetic
         # E = (η0/4π) (k/R^2 + i k^2/R) e^{-ikR} (m × R̂)   [Balanis Ch. 5]
