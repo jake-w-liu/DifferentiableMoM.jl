@@ -63,10 +63,7 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64},
     mul!(y, A.Z_base, x)
     @inbounds for p in eachindex(A.theta)
         coeff = A.reactive ? (1im * A.theta[p]) : ComplexF64(A.theta[p])
-        Mpx = A.Mp[p] * x
-        for i in eachindex(y)
-            y[i] -= coeff * Mpx[i]
-        end
+        mul!(y, A.Mp[p], x, -coeff, one(ComplexF64))
     end
     return y
 end
@@ -86,10 +83,7 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64},
     @inbounds for p in eachindex(A.parent.theta)
         # Conjugate of the coefficient for adjoint
         coeff = A.parent.reactive ? (-1im * A.parent.theta[p]) : ComplexF64(A.parent.theta[p])
-        Mpx = A.parent.Mp[p]' * x   # sparse adjoint matvec
-        for i in eachindex(y)
-            y[i] -= coeff * Mpx[i]
-        end
+        mul!(y, A.parent.Mp[p]', x, -coeff, one(ComplexF64))
     end
     return y
 end

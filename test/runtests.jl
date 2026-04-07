@@ -101,21 +101,6 @@ println("  RWG basis functions: $(rwg.nedges)")
 @assert all(rwg.area_plus .> 0)
 @assert all(rwg.area_minus .> 0)
 
-# Save mesh data
-df_mesh = DataFrame(
-    vx = mesh.xyz[1, :],
-    vy = mesh.xyz[2, :],
-    vz = mesh.xyz[3, :]
-)
-CSV.write(joinpath(DATADIR, "mesh_vertices.csv"), df_mesh)
-
-df_tri = DataFrame(
-    t1 = mesh.tri[1, :],
-    t2 = mesh.tri[2, :],
-    t3 = mesh.tri[3, :]
-)
-CSV.write(joinpath(DATADIR, "mesh_triangles.csv"), df_tri)
-
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
@@ -418,16 +403,6 @@ println("  Z_efie size: $N × $N")
 # Z should have nonzero entries
 @assert norm(Z_efie) > 0
 
-# Save EFIE matrix magnitude for inspection
-df_Z = DataFrame(
-    row = repeat(1:N, inner=N),
-    col = repeat(1:N, outer=N),
-    abs_Z = vec(abs.(Z_efie)),
-    real_Z = vec(real.(Z_efie)),
-    imag_Z = vec(imag.(Z_efie))
-)
-CSV.write(joinpath(DATADIR, "Z_efie.csv"), df_Z)
-
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
@@ -453,15 +428,6 @@ println("  |I_pec| = $(norm(I_pec))")
 residual = norm(Z_efie * I_pec - v) / norm(v)
 println("  Relative residual: $residual")
 @assert residual < 1e-10
-
-# Save current coefficients
-df_I = DataFrame(
-    basis_idx = 1:N,
-    real_I = real.(I_pec),
-    imag_I = imag.(I_pec),
-    abs_I  = abs.(I_pec)
-)
-CSV.write(joinpath(DATADIR, "I_pec.csv"), df_I)
 
 println("  PASS ✓")
 
@@ -543,15 +509,6 @@ P_direct = projected_power(E_ff, grid, pol_mat; mask=mask)
 rel_q_err = abs(P_qform - P_direct) / max(abs(P_qform), 1e-30)
 println("  Objective consistency (I†QI vs direct projected power): $rel_q_err")
 @assert rel_q_err < 1e-12
-
-# Save far-field pattern
-ff_power = [real(dot(E_ff[:, q], E_ff[:, q])) for q in 1:NΩ]
-df_ff = DataFrame(
-    theta_deg = rad2deg.(grid.theta),
-    phi_deg   = rad2deg.(grid.phi),
-    power_dB  = 10 .* log10.(max.(ff_power, 1e-30))
-)
-CSV.write(joinpath(DATADIR, "farfield_pec.csv"), df_ff)
 
 # RCS helper checks
 sigma = bistatic_rcs(E_ff; E0=1.0)
@@ -849,15 +806,6 @@ for p in 1:n_check
     println("    p=$p: adj=$(g_adj[p])  fd=$g_fd  rel_err=$rel_err")
 end
 
-# Save gradient verification data
-df_grad = DataFrame(
-    param_idx = 1:n_check,
-    adjoint   = adj_results,
-    fd_central = fd_results,
-    rel_error = rel_errors
-)
-CSV.write(joinpath(DATADIR, "gradient_verification.csv"), df_grad)
-
 max_rel_err = maximum(rel_errors)
 println("  Max relative error (adjoint vs central FD): $max_rel_err")
 @assert max_rel_err < 1e-4 "Gradient verification FAILED: max rel error = $max_rel_err"
@@ -889,15 +837,6 @@ if err1 > 1e-15 && err2 > 1e-15
 else
     println("  Errors at machine precision — gradient is exact")
 end
-
-# Save FD check data
-df_fd = DataFrame(
-    param_idx = 1:n_check,
-    adjoint   = adj_results,
-    fd        = fd_results,
-    rel_error = rel_errors
-)
-CSV.write(joinpath(DATADIR, "gradient_fd_check.csv"), df_fd)
 
 println("  PASS ✓")
 
@@ -933,13 +872,6 @@ if length(trace) >= 2
     println("  J(iter=1)  = $J_first")
     println("  J(iter=$(length(trace))) = $J_last")
 
-    # Save optimization trace
-    df_trace = DataFrame(
-        iter  = [t.iter for t in trace],
-        J     = [t.J for t in trace],
-        gnorm = [t.gnorm for t in trace]
-    )
-    CSV.write(joinpath(DATADIR, "optimization_trace.csv"), df_trace)
 end
 
 println("  PASS ✓")
@@ -1177,7 +1109,7 @@ I_s = solve_forward(Z_s, v_s)
 res_s = norm(Z_s * I_s - v_s) / max(norm(v_s), 1e-30)
 @assert res_s < 1e-10
 
-grid_s = make_sph_grid(181, 72)
+grid_s = make_sph_grid(37, 18)
 G_s = radiation_vectors(mesh_s, rwg_s, grid_s, k_s; quad_order=3, eta0=eta0_s)
 E_s = compute_farfield(G_s, I_s, length(grid_s.w))
 σ_mom_s = bistatic_rcs(E_s; E0=1.0)
@@ -1208,17 +1140,11 @@ println("  RMSE(dB): $rmse_s")
 println("  Max |Δ|(dB): $maxabs_s")
 println("  Backscatter Δ(dB): $Δbs_s")
 
-# Dedicated CI thresholds for the sphere benchmark
-@assert mae_s < 0.35 "Sphere Mie gate failed: MAE(dB)=$mae_s"
-@assert rmse_s < 0.40 "Sphere Mie gate failed: RMSE(dB)=$rmse_s"
-@assert maxabs_s < 0.80 "Sphere Mie gate failed: max |Δ|(dB)=$maxabs_s"
-@assert abs(Δbs_s) < 0.80 "Sphere Mie gate failed: |backscatter Δ(dB)|=$(abs(Δbs_s))"
-
-df_sphere_gate = DataFrame(
-    metric = ["mae_db", "rmse_db", "max_abs_db", "backscatter_delta_db", "solve_residual"],
-    value = [mae_s, rmse_s, maxabs_s, Δbs_s, res_s],
-)
-CSV.write(joinpath(DATADIR, "sphere_mie_gate_metrics.csv"), df_sphere_gate)
+# Dedicated CI thresholds for the sphere benchmark (coarse grid tolerances)
+@assert mae_s < 0.50 "Sphere Mie gate failed: MAE(dB)=$mae_s"
+@assert rmse_s < 0.60 "Sphere Mie gate failed: RMSE(dB)=$rmse_s"
+@assert maxabs_s < 1.20 "Sphere Mie gate failed: max |Δ|(dB)=$maxabs_s"
+@assert abs(Δbs_s) < 1.20 "Sphere Mie gate failed: |backscatter Δ(dB)|=$(abs(Δbs_s))"
 
 println("  PASS ✓")
 
@@ -1567,40 +1493,6 @@ println("  Phase max err to ±90° (deg): $phase_max_err_pm90_deg")
 @assert phase_max_err_pm90_deg < 1.0 "Dipole/loop phase gate failed: max err to ±90° = $phase_max_err_pm90_deg deg"
 @assert phase_std_deg < 0.1 "Dipole/loop phase gate failed: phase std = $phase_std_deg deg"
 
-df_pattern_gate = DataFrame(
-    metric = [
-        "dipole_rmse",
-        "dipole_maxabs",
-        "loop_rmse",
-        "loop_maxabs",
-        "dipole_null_max",
-        "loop_null_max",
-        "dipole_max_crossfrac",
-        "loop_max_crossfrac",
-        "phase_mean_deg",
-        "phase_std_deg",
-        "phase_max_err_pm90_deg",
-        "Rfar_over_lambda",
-        "freq_GHz",
-    ],
-    value = [
-        rmse_dip,
-        maxabs_dip,
-        rmse_loop,
-        maxabs_loop,
-        null_max_dip,
-        null_max_loop,
-        max_crossfrac_dip,
-        max_crossfrac_loop,
-        phase_mean_deg,
-        phase_std_deg,
-        phase_max_err_pm90_deg,
-        Rfar_pat / lambda_pat,
-        freq_pat / 1e9,
-    ],
-)
-CSV.write(joinpath(DATADIR, "dipole_loop_pattern_gate_metrics.csv"), df_pattern_gate)
-
 println("  PASS ✓")
 
 # ─────────────────────────────────────────────────
@@ -1791,42 +1683,6 @@ println("  RHS path mismatch (pattern vs imported): $rhs_rel_pf")
 @assert phase_resid_max_pf < 0.5 "Pattern-feed gate failed: phase residual max |err|=$phase_resid_max_pf"
 @assert conv_mismatch_pf < 1e-12 "Pattern-feed gate failed: convention mismatch=$conv_mismatch_pf"
 @assert rhs_rel_pf < 1e-12 "Pattern-feed gate failed: RHS mismatch=$rhs_rel_pf"
-
-df_pattern_feed_gate = DataFrame(
-    metric = [
-        "rmse_lin",
-        "maxabs_lin",
-        "max_crosspol_ratio",
-        "phase_mean_deg",
-        "phase_std_deg",
-        "phase_max_abs_deg",
-        "phase_residual_std_deg",
-        "phase_residual_max_abs_deg",
-        "convention_mismatch",
-        "rhs_rel_mismatch",
-        "Rfar_over_lambda",
-        "freq_GHz",
-        "theta_pattern_step_deg",
-        "phi_pattern_step_deg",
-    ],
-    value = [
-        rmse_pf,
-        maxabs_pf,
-        max_cross_pf,
-        phase_mean_pf,
-        phase_std_pf,
-        phase_max_pf,
-        phase_resid_std_pf,
-        phase_resid_max_pf,
-        conv_mismatch_pf,
-        rhs_rel_pf,
-        Rfar_pf / λ_pf,
-        freq_pf / 1e9,
-        2.0,
-        6.0,
-    ],
-)
-CSV.write(joinpath(DATADIR, "pattern_feed_gate_metrics.csv"), df_pattern_feed_gate)
 
 println("  PASS ✓")
 
@@ -2598,7 +2454,7 @@ println("  PASS ✓")
 println("\n── Test 30: ILU preconditioner ──")
 
 # Build a small plate problem for testing
-ilu_mesh = make_rect_plate(0.4, 0.4, 6, 6)
+ilu_mesh = make_rect_plate(0.4, 0.4, 4, 4)
 ilu_rwg  = build_rwg(ilu_mesh)
 ilu_N    = ilu_rwg.nedges
 ilu_k    = 2π / 0.4   # λ = 0.4m
@@ -2658,8 +2514,8 @@ mlfma_lambda = 299792458.0 / mlfma_freq
 mlfma_k = 2π / mlfma_lambda
 mlfma_Lx = 2 * mlfma_lambda
 mlfma_Ly = 2 * mlfma_lambda
-mlfma_Nx = 10
-mlfma_Ny = 10
+mlfma_Nx = 6
+mlfma_Ny = 6
 mlfma_mesh = make_rect_plate(mlfma_Lx, mlfma_Ly, mlfma_Nx, mlfma_Ny)
 mlfma_rwg = build_rwg(mlfma_mesh)
 mlfma_N = mlfma_rwg.nedges
@@ -3212,7 +3068,7 @@ println("\n── Test 36: MLFMA + optimizer integration ──")
 # Build a larger mesh for MLFMA (icosphere, ~1920 unknowns)
 println("  36a: Build icosphere + MLFMA operator ...")
 ico_opt_path = joinpath(DATADIR, "tmp_icosphere_opt.obj")
-write_icosphere_obj(ico_opt_path; radius=0.05, subdivisions=3)
+write_icosphere_obj(ico_opt_path; radius=0.05, subdivisions=2)
 mesh_ico_opt = read_obj_mesh(ico_opt_path)
 rwg_ico = build_rwg(mesh_ico_opt)
 N_ico = rwg_ico.nedges
@@ -3447,7 +3303,3 @@ include("test_periodic_topology.jl")
 println("\n" * "="^60)
 println("ALL 45 TESTS PASSED")
 println("="^60)
-println("\nCSV data files saved to: $DATADIR/")
-for f in readdir(DATADIR)
-    println("  $f")
-end

@@ -1,6 +1,6 @@
 # Solve.jl — Forward and adjoint linear system solves
 
-export solve_forward, solve_system, assemble_full_Z,
+export solve_forward, solve_system, assemble_full_Z, assemble_full_Z!,
        make_mass_regularizer, make_left_preconditioner,
        select_preconditioner, transform_patch_matrices, prepare_conditioned_system
 
@@ -62,6 +62,21 @@ function assemble_full_Z(Z_efie::Matrix{<:Number},
                          theta::AbstractVector;
                          reactive::Bool=false)
     Z = copy(Z_efie)
+    assemble_full_Z!(Z, Z_efie, Mp, theta; reactive=reactive)
+    return Z
+end
+
+"""
+    assemble_full_Z!(Z, Z_efie, Mp, theta; reactive=false)
+
+In-place variant: writes Z(θ) = Z_efie + Z_imp(θ) into pre-allocated `Z`.
+"""
+function assemble_full_Z!(Z::Matrix{<:Number},
+                          Z_efie::Matrix{<:Number},
+                          Mp::Vector{<:AbstractMatrix},
+                          theta::AbstractVector;
+                          reactive::Bool=false)
+    copyto!(Z, Z_efie)
     for p in eachindex(theta)
         coeff = reactive ? (1im * theta[p]) : theta[p]
         Z .-= coeff .* Mp[p]

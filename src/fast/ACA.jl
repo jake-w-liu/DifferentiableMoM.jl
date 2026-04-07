@@ -35,6 +35,15 @@ struct LowRankBlock
 end
 
 """
+Pre-allocated workspace for ACA `mul!`, eliminating per-call allocations.
+"""
+mutable struct ACAWorkspace
+    x_perm::Vector{ComplexF64}
+    y_perm::Vector{ComplexF64}
+    tmp::Vector{ComplexF64}   # sized to max rank across all low-rank blocks
+end
+
+"""
     ACAOperator{TC} <: AbstractMatrix{ComplexF64}
 
 H-matrix operator assembled via ACA. Supports `mul!` for GMRES
@@ -46,6 +55,7 @@ struct ACAOperator{TC<:EFIEApplyCache} <: AbstractMatrix{ComplexF64}
     dense_blocks::Vector{DenseBlock}
     lowrank_blocks::Vector{LowRankBlock}
     N::Int
+    workspace::ACAWorkspace
 end
 
 """
@@ -427,7 +437,11 @@ function build_aca_operator(mesh::TriMesh, rwg::RWGData, k;
         end
     end
 
-    return ACAOperator{typeof(cache)}(cache, tree, dense_blocks, lowrank_blocks, N)
+    max_rank = isempty(lowrank_blocks) ? 0 : maximum(size(blk.U, 2) for blk in lowrank_blocks)
+    ws = ACAWorkspace(Vector{ComplexF64}(undef, N),
+                       zeros(ComplexF64, N),
+                       Vector{ComplexF64}(undef, max(max_rank, 1)))
+    return ACAOperator{typeof(cache)}(cache, tree, dense_blocks, lowrank_blocks, N, ws)
 end
 
 # ─── Matvec ───────────────────────────────────────────────────────
@@ -437,13 +451,15 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::ACAOperator, x::Ab
     length(x) == N || throw(DimensionMismatch("x length $(length(x)) != $N"))
     length(y) == N || throw(DimensionMismatch("y length $(length(y)) != $N"))
 
+    ws = A.workspace
+    x_perm = ws.x_perm
+    y_perm = ws.y_perm
+
     # Permute x to tree order
-    x_perm = Vector{ComplexF64}(undef, N)
     @inbounds for k in 1:N
         x_perm[k] = x[A.tree.perm[k]]
     end
-
-    y_perm = zeros(ComplexF64, N)
+    fill!(y_perm, zero(ComplexF64))
 
     # Dense blocks — BLAS gemv
     for blk in A.dense_blocks
@@ -458,7 +474,7 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::ACAOperator, x::Ab
         k_rank == 0 && continue
         rows = blk.row_range
         cols = blk.col_range
-        tmp = Vector{ComplexF64}(undef, k_rank)
+        tmp = @view(ws.tmp[1:k_rank])
         mul!(tmp, blk.V', @view(x_perm[cols]))
         mul!(@view(y_perm[rows]), blk.U, tmp, one(ComplexF64), one(ComplexF64))
     end
@@ -485,18 +501,17 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::ACAAdjointOperator
     length(y) == N || throw(DimensionMismatch("y length $(length(y)) != $N"))
 
     tree = A.op.tree
+    ws = A.op.workspace
+    x_perm = ws.x_perm
+    y_perm = ws.y_perm
 
     # Permute x to tree order
-    x_perm = Vector{ComplexF64}(undef, N)
     @inbounds for k in 1:N
         x_perm[k] = x[tree.perm[k]]
     end
-
-    y_perm = zeros(ComplexF64, N)
+    fill!(y_perm, zero(ComplexF64))
 
     # Dense blocks: adjoint means transpose-conjugate
-    # Original: y[rows] += data * x[cols]
-    # Adjoint:  y[cols] += data' * x[rows]
     for blk in A.op.dense_blocks
         rows = blk.row_range
         cols = blk.col_range
@@ -504,14 +519,12 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::ACAAdjointOperator
     end
 
     # Low-rank blocks: adjoint of U * V' is V * U'
-    # Original: y[rows] += U * (V' * x[cols])
-    # Adjoint:  y[cols] += V * (U' * x[rows])
     for blk in A.op.lowrank_blocks
         k_rank = size(blk.U, 2)
         k_rank == 0 && continue
         rows = blk.row_range
         cols = blk.col_range
-        tmp = Vector{ComplexF64}(undef, k_rank)
+        tmp = @view(ws.tmp[1:k_rank])
         mul!(tmp, blk.U', @view(x_perm[rows]))
         mul!(@view(y_perm[cols]), blk.V, tmp, one(ComplexF64), one(ComplexF64))
     end

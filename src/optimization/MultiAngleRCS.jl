@@ -160,10 +160,14 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
     theta_old = copy(theta)
     g_old = zeros(P)
 
+    # Pre-allocate Z buffer for in-place assembly (dense LU path)
+    Z_buf = use_dense_lu ? Matrix{ComplexF64}(undef, size(Z_base)...) : Matrix{ComplexF64}(undef, 0, 0)
+
     for iter in 1:maxiter
         # ── 1. Build system matrix Z(θ) ──────────────────────────
         if use_dense_lu
-            Z_full = assemble_full_Z(Z_base, Mp, theta; reactive=reactive)
+            assemble_full_Z!(Z_buf, Z_base, Mp, theta; reactive=reactive)
+            Z_full = Z_buf
         else
             Z_full = ImpedanceLoadedOperator(Z_base, Mp, theta, reactive)
         end
@@ -279,7 +283,8 @@ function optimize_multiangle_rcs(Z_base::AbstractMatrix{ComplexF64},
         for ls in 1:20
             theta_trial = project!(theta_old + alpha_ls * d)
             if use_dense_lu
-                Z_trial = assemble_full_Z(Z_base, Mp, theta_trial; reactive=reactive)
+                assemble_full_Z!(Z_buf, Z_base, Mp, theta_trial; reactive=reactive)
+                Z_trial = Z_buf
             else
                 Z_trial = ImpedanceLoadedOperator(Z_base, Mp, theta_trial, reactive)
             end

@@ -828,6 +828,205 @@ function _apply_disagg_filter(data::Matrix{ComplexF64},
     return result
 end
 
+"""
+Pre-allocated scratch arrays for `_apply_disagg_filter!`, sized for a
+specific parent↔child level transition.
+"""
+struct DisaggFilterScratch
+    a_coeff::Array{ComplexF64,3}   # (4, nθ_parent, M_eff+1)
+    b_coeff::Array{ComplexF64,3}   # (4, nθ_parent, M_eff+1)
+    a_out::Array{ComplexF64,3}     # (4, nθ_child,  M_eff+1)
+    b_out::Array{ComplexF64,3}     # (4, nθ_child,  M_eff+1)
+    parent_phi::Vector{Float64}    # uniform φ grid at parent sampling
+    child_phi::Vector{Float64}     # uniform φ grid at child sampling
+end
+
+function DisaggFilterScratch(parent_samp::SphereSampling,
+                              child_samp::SphereSampling,
+                              M_eff::Int)
+    nθp, nφp = parent_samp.ntheta, parent_samp.nphi
+    nθc, nφc = child_samp.ntheta, child_samp.nphi
+    return DisaggFilterScratch(
+        zeros(ComplexF64, 4, nθp, M_eff + 1),
+        zeros(ComplexF64, 4, nθp, M_eff + 1),
+        zeros(ComplexF64, 4, nθc, M_eff + 1),
+        zeros(ComplexF64, 4, nθc, M_eff + 1),
+        [(j - 0.5) * 2π / nφp for j in 1:nφp],
+        [(j - 0.5) * 2π / nφc for j in 1:nφc],
+    )
+end
+
+"""
+In-place variant of `_apply_disagg_filter` that writes into pre-allocated
+`result` (4, nθc*nφc) and uses `scratch` buffers to avoid heap allocations.
+"""
+function _apply_disagg_filter!(result::Matrix{ComplexF64},
+                                data::Matrix{ComplexF64},
+                                filters_m::Vector{Matrix{Float64}},
+                                parent_samp::SphereSampling,
+                                child_samp::SphereSampling,
+                                scratch::DisaggFilterScratch)
+    nθp, nφp = parent_samp.ntheta, parent_samp.nphi
+    nθc, nφc = child_samp.ntheta, child_samp.nphi
+    M_eff = length(filters_m) - 1
+
+    a_coeff = scratch.a_coeff
+    b_coeff = scratch.b_coeff
+    a_out   = scratch.a_out
+    b_out   = scratch.b_out
+
+    fill!(a_coeff, zero(ComplexF64))
+    fill!(b_coeff, zero(ComplexF64))
+    fill!(a_out, zero(ComplexF64))
+    fill!(b_out, zero(ComplexF64))
+    fill!(result, zero(ComplexF64))
+
+    # Step 1: DFT analysis in φ at parent sampling
+    for it in 1:nθp
+        for ip in 1:nφp
+            q = (it - 1) * nφp + ip
+            φ = scratch.parent_phi[ip]
+            @inbounds for c in 1:4
+                dval = data[c, q]
+                a_coeff[c, it, 1] += dval
+                for m in 1:M_eff
+                    a_coeff[c, it, m + 1] += dval * cos(m * φ)
+                    b_coeff[c, it, m + 1] += dval * sin(m * φ)
+                end
+            end
+        end
+        @inbounds for c in 1:4
+            a_coeff[c, it, 1] /= nφp
+            for m in 1:M_eff
+                a_coeff[c, it, m + 1] *= 2.0 / nφp
+                b_coeff[c, it, m + 1] *= 2.0 / nφp
+            end
+        end
+    end
+
+    # Step 2: Apply per-m θ filters
+    for m in 0:M_eff
+        Ft = filters_m[m + 1]
+        for it_t in 1:nθc
+            @inbounds for c in 1:4
+                va = zero(ComplexF64)
+                vb = zero(ComplexF64)
+                for it_s in 1:nθp
+                    w = Ft[it_t, it_s]
+                    va += w * a_coeff[c, it_s, m + 1]
+                    if m > 0
+                        vb += w * b_coeff[c, it_s, m + 1]
+                    end
+                end
+                a_out[c, it_t, m + 1] = va
+                b_out[c, it_t, m + 1] = vb
+            end
+        end
+    end
+
+    # Step 3: IDFT synthesis at child φ points
+    for it in 1:nθc
+        for ip in 1:nφc
+            q = (it - 1) * nφc + ip
+            φ = scratch.child_phi[ip]
+            @inbounds for c in 1:4
+                val = a_out[c, it, 1]
+                for m in 1:M_eff
+                    val += a_out[c, it, m + 1] * cos(m * φ) +
+                           b_out[c, it, m + 1] * sin(m * φ)
+                end
+                result[c, q] = val
+            end
+        end
+    end
+
+    return result
+end
+
+# ─── Workspace structs for allocation-free mul! ────────────────
+
+"""
+Pre-allocated workspace for MLFMA `mul!`, eliminating per-call heap
+allocations. Created once by `build_mlfma_operator` and reused in every
+matvec.
+"""
+mutable struct MLFMAWorkspace
+    # agg[idx][box] = (4, npts) buffer, idx = 1..nL-1 → octree level idx+1
+    agg::Vector{Vector{Matrix{ComplexF64}}}
+    # incoming[idx][box] = (4, npts) buffer, same indexing
+    incoming::Vector{Vector{Matrix{ComplexF64}}}
+    # Per-level-transition scratch for _apply_disagg_filter! (aggregation direction)
+    agg_disagg_scratch::Vector{DisaggFilterScratch}
+    # Per-level-transition scratch for _apply_disagg_filter! (disaggregation direction)
+    disagg_disagg_scratch::Vector{DisaggFilterScratch}
+    # Per-level-transition scratch: interpolation result (4, parent_npts) for aggregation
+    interp_result::Vector{Matrix{ComplexF64}}
+    # Per-level-transition scratch: shifted copy (4, parent_npts) for disaggregation
+    shifted_buf::Vector{Matrix{ComplexF64}}
+    # Per-level-transition scratch: filter result (4, child_npts) for disaggregation
+    filter_result::Vector{Matrix{ComplexF64}}
+end
+
+function _build_mlfma_workspace(octree::Octree,
+                                 samplings::Vector{SphereSampling},
+                                 agg_filters::Vector{Vector{Matrix{Float64}}},
+                                 disagg_filters::Vector{Vector{Matrix{Float64}}})
+    nL = octree.nLevels
+
+    # Pre-allocate agg and incoming with correct sizes per level
+    agg = Vector{Vector{Matrix{ComplexF64}}}(undef, nL - 1)
+    incoming = Vector{Vector{Matrix{ComplexF64}}}(undef, nL - 1)
+    for idx in 1:(nL - 1)
+        level = idx + 1  # octree level
+        nboxes = length(octree.levels[level].boxes)
+        npts = samplings[idx].npts
+        agg[idx] = [zeros(ComplexF64, 4, npts) for _ in 1:nboxes]
+        incoming[idx] = [zeros(ComplexF64, 4, npts) for _ in 1:nboxes]
+    end
+
+    # Per-level-transition scratch for disagg filters
+    n_transitions = max(nL - 2, 0)  # number of level transitions (levels 2..nL-1)
+    agg_disagg_scratch = Vector{DisaggFilterScratch}(undef, n_transitions)
+    disagg_disagg_scratch = Vector{DisaggFilterScratch}(undef, n_transitions)
+    interp_result_vec = Vector{Matrix{ComplexF64}}(undef, n_transitions)
+    shifted_buf_vec = Vector{Matrix{ComplexF64}}(undef, n_transitions)
+    filter_result_vec = Vector{Matrix{ComplexF64}}(undef, n_transitions)
+
+    for i in 1:n_transitions
+        # interp_idx = i corresponds to l-1 where l goes from 2 to nL-1
+        # child_samp = samplings[i+1], parent_samp = samplings[i]
+        child_samp = samplings[i + 1]
+        parent_samp = samplings[i]
+
+        # Aggregation filters: child→parent
+        if i <= length(agg_filters)
+            M_eff_agg = length(agg_filters[i]) - 1
+        else
+            M_eff_agg = 0
+        end
+        agg_disagg_scratch[i] = DisaggFilterScratch(child_samp, parent_samp, M_eff_agg)
+
+        # Disaggregation filters: parent→child
+        if i <= length(disagg_filters)
+            M_eff_disagg = length(disagg_filters[i]) - 1
+        else
+            M_eff_disagg = 0
+        end
+        disagg_disagg_scratch[i] = DisaggFilterScratch(parent_samp, child_samp, M_eff_disagg)
+
+        # Interpolation result: (4, parent_npts) for aggregation
+        interp_result_vec[i] = zeros(ComplexF64, 4, parent_samp.npts)
+        # Shifted buffer: (4, parent_npts) for disaggregation
+        shifted_buf_vec[i] = zeros(ComplexF64, 4, parent_samp.npts)
+        # Filter result: (4, child_npts) for disaggregation
+        filter_result_vec[i] = zeros(ComplexF64, 4, child_samp.npts)
+    end
+
+    return MLFMAWorkspace(agg, incoming,
+                           agg_disagg_scratch, disagg_disagg_scratch,
+                           interp_result_vec, shifted_buf_vec, filter_result_vec)
+end
+
 # ─── MLFMAOperator ──────────────────────────────────────────────
 
 struct MLFMAOperator <: AbstractMatrix{ComplexF64}
@@ -844,6 +1043,7 @@ struct MLFMAOperator <: AbstractMatrix{ComplexF64}
     agg_filters::Vector{Vector{Matrix{Float64}}}    # aggregation: per-m θ filters [level][m+1]
     disagg_filters::Vector{Vector{Matrix{Float64}}}  # disaggregation: per-m θ filters [level][m+1]
     N::Int
+    workspace::MLFMAWorkspace               # pre-allocated buffers for mul!
 end
 
 struct MLFMAAdjointOperator <: AbstractMatrix{ComplexF64}
@@ -963,9 +1163,12 @@ function build_mlfma_operator(mesh::TriMesh, rwg::RWGData, k::Float64;
 
     prefactor = -k^2 * eta0 / (16π^2)
 
+    workspace = _build_mlfma_workspace(octree, samplings, agg_filters, disagg_filters)
+
     return MLFMAOperator(octree, Z_near, k, eta0, prefactor,
                           samplings, trans_factors, bf_patterns,
-                          interp_theta, interp_phi, agg_filters, disagg_filters, N)
+                          interp_theta, interp_phi, agg_filters, disagg_filters, N,
+                          workspace)
 end
 
 # ─── Phase shift helper ─────────────────────────────────────────
@@ -1076,21 +1279,21 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
     length(x) == N || throw(DimensionMismatch("x length $(length(x)) != $N"))
     length(y) == N || throw(DimensionMismatch("y length $(length(y)) != $N"))
 
+    ws = A.workspace
+    agg = ws.agg
+    incoming = ws.incoming
+
     # 1. Near-field
     mul!(y, A.Z_near, x)
 
     # 2. Aggregation at leaf level
     leaf_level = A.octree.levels[nL]
     leaf_samp = A.samplings[nL - 1]
-    nboxes_leaf = length(leaf_level.boxes)
 
-    # agg[level_index][box_id] = (4, npts) matrix
-    agg = Vector{Vector{Matrix{ComplexF64}}}(undef, nL - 1)
-
-    # Leaf level aggregation
-    agg_leaf = Vector{Matrix{ComplexF64}}(undef, nboxes_leaf)
+    # Zero leaf agg buffers and aggregate
     for (bi, box) in enumerate(leaf_level.boxes)
-        a = zeros(ComplexF64, 4, leaf_samp.npts)
+        a = agg[nL - 1][bi]
+        fill!(a, zero(ComplexF64))
         for n_perm in box.bf_range
             n = A.octree.perm[n_perm]
             xn = x[n]
@@ -1102,11 +1305,9 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
                 end
             end
         end
-        agg_leaf[bi] = a
     end
-    agg[nL - 1] = agg_leaf
 
-    # Bottom-up aggregation: interpolate first (φ→θ), then phase shift
+    # Bottom-up aggregation: spectral filter, then phase shift
     for l in (nL - 1):-1:2
         parent_level = A.octree.levels[l]
         child_level = A.octree.levels[l + 1]
@@ -1115,9 +1316,9 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
         nboxes_p = length(parent_level.boxes)
         interp_idx = l - 1
 
-        agg_p = Vector{Matrix{ComplexF64}}(undef, nboxes_p)
+        # Zero parent agg buffers
         for bi in 1:nboxes_p
-            agg_p[bi] = zeros(ComplexF64, 4, parent_samp.npts)
+            fill!(agg[l - 1][bi], zero(ComplexF64))
         end
 
         for (ci, cbox) in enumerate(child_level.boxes)
@@ -1127,34 +1328,37 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
             d = cbox.center - pbox.center
 
             # Step 1: Spectral interpolation from child to parent sampling
+            interp_buf = ws.interp_result[interp_idx]
             if !isempty(A.agg_filters) && interp_idx <= length(A.agg_filters)
-                interpolated = _apply_disagg_filter(agg[l][ci], A.agg_filters[interp_idx],
-                                                     child_samp, parent_samp)
+                _apply_disagg_filter!(interp_buf, agg[l][ci],
+                                       A.agg_filters[interp_idx],
+                                       child_samp, parent_samp,
+                                       ws.agg_disagg_scratch[interp_idx])
             else
-                interpolated = copy(agg[l][ci])
+                copyto!(interp_buf, agg[l][ci])
             end
 
             # Step 2: Phase shift child → parent center (at parent sampling)
-            _apply_phase_shift!(interpolated, parent_samp, A.k, d, 1.0)
+            _apply_phase_shift!(interp_buf, parent_samp, A.k, d, 1.0)
 
-            agg_p[pid] .+= interpolated
+            agg[l - 1][pid] .+= interp_buf
         end
-        agg[l - 1] = agg_p
     end
 
     # 3. Translation at each level
-    incoming = Vector{Vector{Matrix{ComplexF64}}}(undef, nL - 1)
     for l in 2:nL
         level = A.octree.levels[l]
         samp = A.samplings[l - 1]
         nboxes = length(level.boxes)
-        inc_l = Vector{Matrix{ComplexF64}}(undef, nboxes)
+
+        # Zero incoming buffers
         for bi in 1:nboxes
-            inc_l[bi] = zeros(ComplexF64, 4, samp.npts)
+            fill!(incoming[l - 1][bi], zero(ComplexF64))
         end
 
         tf = A.trans_factors[l - 1]
         for (bi, box) in enumerate(level.boxes)
+            dst = incoming[l - 1][bi]
             for il_id in box.interaction_list
                 il_box = level.boxes[il_id]
                 dijk = (box.ijk[1] - il_box.ijk[1],
@@ -1165,12 +1369,11 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
                 @inbounds for q in 1:samp.npts
                     Tq = T[q]
                     for c in 1:4
-                        inc_l[bi][c, q] += Tq * src[c, q]
+                        dst[c, q] += Tq * src[c, q]
                     end
                 end
             end
         end
-        incoming[l - 1] = inc_l
     end
 
     # 4. Disaggregation (top-down): phase shift first, then spectral filter
@@ -1187,14 +1390,18 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
             d = cbox.center - pbox.center
 
             # Step 1: Phase shift parent → child center (at parent sampling)
-            shifted = copy(incoming[l - 1][pid])
+            shifted = ws.shifted_buf[interp_idx]
+            copyto!(shifted, incoming[l - 1][pid])
             _apply_phase_shift!(shifted, parent_samp, A.k, d, -1.0)
 
             # Step 2: Spectral filter from parent to child sampling (band-limiting)
             if !isempty(A.disagg_filters) && interp_idx <= length(A.disagg_filters)
                 child_samp = A.samplings[l]
-                filtered = _apply_disagg_filter(shifted, A.disagg_filters[interp_idx],
-                                                 parent_samp, child_samp)
+                filtered = ws.filter_result[interp_idx]
+                _apply_disagg_filter!(filtered, shifted,
+                                       A.disagg_filters[interp_idx],
+                                       parent_samp, child_samp,
+                                       ws.disagg_disagg_scratch[interp_idx])
             else
                 filtered = shifted
             end
@@ -1209,13 +1416,14 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAOperator,
         for n_perm in box.bf_range
             n = A.octree.perm[n_perm]
             val = zero(ComplexF64)
+            inc = incoming[nL - 1][bi]
             @inbounds for q in 1:leaf_samp.npts
                 dot4 = zero(ComplexF64)
                 for c in 1:3
-                    dot4 += conj(A.bf_patterns[c, q, n]) * incoming[nL - 1][bi][c, q]
+                    dot4 += conj(A.bf_patterns[c, q, n]) * inc[c, q]
                 end
                 # Scalar part with minus sign (Z = vec - scl)
-                dot4 -= conj(A.bf_patterns[4, q, n]) * incoming[nL - 1][bi][4, q]
+                dot4 -= conj(A.bf_patterns[4, q, n]) * inc[4, q]
                 val += leaf_samp.weights[q] * dot4
             end
             y[n] += A.prefactor * val
@@ -1240,6 +1448,10 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
     length(x) == N || throw(DimensionMismatch("x length $(length(x)) != $N"))
     length(y) == N || throw(DimensionMismatch("y length $(length(y)) != $N"))
 
+    ws = A.op.workspace
+    agg = ws.agg
+    incoming = ws.incoming
+
     # Near-field adjoint
     mul!(y, adjoint(A.op.Z_near), x)
 
@@ -1250,13 +1462,11 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
 
     leaf_level = A.op.octree.levels[nL]
     leaf_samp = A.op.samplings[nL - 1]
-    nboxes_leaf = length(leaf_level.boxes)
 
     # Aggregation at leaf: using conjugated patterns (receiving role)
-    agg = Vector{Vector{Matrix{ComplexF64}}}(undef, nL - 1)
-    agg_leaf = Vector{Matrix{ComplexF64}}(undef, nboxes_leaf)
     for (bi, box) in enumerate(leaf_level.boxes)
-        a = zeros(ComplexF64, 4, leaf_samp.npts)
+        a = agg[nL - 1][bi]
+        fill!(a, zero(ComplexF64))
         for n_perm in box.bf_range
             n = A.op.octree.perm[n_perm]
             xn = x[n]
@@ -1270,9 +1480,7 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
                 end
             end
         end
-        agg_leaf[bi] = a
     end
-    agg[nL - 1] = agg_leaf
 
     # Bottom-up aggregation (same structure as forward)
     for l in (nL - 1):-1:2
@@ -1283,9 +1491,9 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
         interp_idx = l - 1
         nboxes_p = length(parent_level.boxes)
 
-        agg_p = Vector{Matrix{ComplexF64}}(undef, nboxes_p)
+        # Zero parent agg buffers
         for bi in 1:nboxes_p
-            agg_p[bi] = zeros(ComplexF64, 4, parent_samp.npts)
+            fill!(agg[l - 1][bi], zero(ComplexF64))
         end
 
         for (ci, cbox) in enumerate(child_level.boxes)
@@ -1295,34 +1503,37 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
             d = cbox.center - pbox.center
 
             # Step 1: Spectral interpolation from child to parent sampling
+            interp_buf = ws.interp_result[interp_idx]
             if !isempty(A.op.agg_filters) && interp_idx <= length(A.op.agg_filters)
-                interpolated = _apply_disagg_filter(agg[l][ci], A.op.agg_filters[interp_idx],
-                                                     child_samp, parent_samp)
+                _apply_disagg_filter!(interp_buf, agg[l][ci],
+                                       A.op.agg_filters[interp_idx],
+                                       child_samp, parent_samp,
+                                       ws.agg_disagg_scratch[interp_idx])
             else
-                interpolated = copy(agg[l][ci])
+                copyto!(interp_buf, agg[l][ci])
             end
 
             # Step 2: Phase shift child → parent center (at parent sampling)
-            _apply_phase_shift!(interpolated, parent_samp, A.op.k, d, 1.0)
+            _apply_phase_shift!(interp_buf, parent_samp, A.op.k, d, 1.0)
 
-            agg_p[pid] .+= interpolated
+            agg[l - 1][pid] .+= interp_buf
         end
-        agg[l - 1] = agg_p
     end
 
     # Translation with conjugated factors
-    incoming = Vector{Vector{Matrix{ComplexF64}}}(undef, nL - 1)
     for l in 2:nL
         level = A.op.octree.levels[l]
         samp = A.op.samplings[l - 1]
         nboxes = length(level.boxes)
-        inc_l = Vector{Matrix{ComplexF64}}(undef, nboxes)
+
+        # Zero incoming buffers
         for bi in 1:nboxes
-            inc_l[bi] = zeros(ComplexF64, 4, samp.npts)
+            fill!(incoming[l - 1][bi], zero(ComplexF64))
         end
 
         tf = A.op.trans_factors[l - 1]
         for (bi, box) in enumerate(level.boxes)
+            dst = incoming[l - 1][bi]
             for il_id in box.interaction_list
                 il_box = level.boxes[il_id]
                 dijk = (box.ijk[1] - il_box.ijk[1],
@@ -1333,12 +1544,11 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
                 @inbounds for q in 1:samp.npts
                     Tq = conj(T[q])  # conjugate for adjoint
                     for c in 1:4
-                        inc_l[bi][c, q] += Tq * src[c, q]
+                        dst[c, q] += Tq * src[c, q]
                     end
                 end
             end
         end
-        incoming[l - 1] = inc_l
     end
 
     # Disaggregation (top-down): phase shift first, then spectral filter
@@ -1355,14 +1565,18 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
             d = cbox.center - pbox.center
 
             # Step 1: Phase shift parent → child center (at parent sampling)
-            shifted = copy(incoming[l - 1][pid])
+            shifted = ws.shifted_buf[interp_idx]
+            copyto!(shifted, incoming[l - 1][pid])
             _apply_phase_shift!(shifted, parent_samp, A.op.k, d, -1.0)
 
             # Step 2: Spectral filter from parent to child sampling (band-limiting)
             if !isempty(A.op.disagg_filters) && interp_idx <= length(A.op.disagg_filters)
                 child_samp = A.op.samplings[l]
-                filtered = _apply_disagg_filter(shifted, A.op.disagg_filters[interp_idx],
-                                                 parent_samp, child_samp)
+                filtered = ws.filter_result[interp_idx]
+                _apply_disagg_filter!(filtered, shifted,
+                                       A.op.disagg_filters[interp_idx],
+                                       parent_samp, child_samp,
+                                       ws.disagg_disagg_scratch[interp_idx])
             else
                 filtered = shifted
             end
@@ -1377,10 +1591,11 @@ function LinearAlgebra.mul!(y::AbstractVector{ComplexF64}, A::MLFMAAdjointOperat
         for n_perm in box.bf_range
             n = A.op.octree.perm[n_perm]
             val = zero(ComplexF64)
+            inc = incoming[nL - 1][bi]
             @inbounds for q in 1:leaf_samp.npts
                 dot4 = zero(ComplexF64)
                 for c in 1:4
-                    dot4 += A.op.bf_patterns[c, q, n] * incoming[nL - 1][bi][c, q]
+                    dot4 += A.op.bf_patterns[c, q, n] * inc[c, q]
                 end
                 val += leaf_samp.weights[q] * dot4
             end

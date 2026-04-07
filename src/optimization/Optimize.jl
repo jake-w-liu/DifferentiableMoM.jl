@@ -104,9 +104,13 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
     theta_old = copy(theta)
     g_old = zeros(length(theta))
 
+    # Pre-allocate Z_raw buffer for in-place assembly
+    N_sys = size(Z_efie, 1)
+    Z_raw = Matrix{ComplexF64}(undef, N_sys, N_sys)
+
     for iter in 1:maxiter
         # Assemble and solve
-        Z_raw = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
+        assemble_full_Z!(Z_raw, Z_efie, Mp, theta; reactive=reactive)
         Z, _, _ = prepare_conditioned_system(
             Z_raw,
             v;
@@ -207,9 +211,9 @@ function optimize_lbfgs(Z_efie::Matrix{ComplexF64},
 
         for ls in 1:20
             theta_trial = project!(theta_old + alpha * d)
-            Z_trial_raw = assemble_full_Z(Z_efie, Mp, theta_trial; reactive=reactive)
+            assemble_full_Z!(Z_raw, Z_efie, Mp, theta_trial; reactive=reactive)
             Z_trial, _, _ = prepare_conditioned_system(
-                Z_trial_raw,
+                Z_raw,
                 v;
                 regularization_alpha=regularization_alpha,
                 regularization_R=R_mat,
@@ -328,8 +332,12 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
     theta_old = copy(theta)
     g_old = zeros(length(theta))
 
+    # Pre-allocate Z_raw buffer for in-place assembly
+    N_sys = size(Z_efie, 1)
+    Z_raw = Matrix{ComplexF64}(undef, N_sys, N_sys)
+
     for iter in 1:maxiter
-        Z_raw = assemble_full_Z(Z_efie, Mp, theta; reactive=reactive)
+        assemble_full_Z!(Z_raw, Z_efie, Mp, theta; reactive=reactive)
         Z, _, _ = prepare_conditioned_system(
             Z_raw,
             v;
@@ -415,9 +423,9 @@ function optimize_directivity(Z_efie::Matrix{ComplexF64},
         # Line search on J_ratio directly
         for ls in 1:20
             theta_trial = project!(theta_old + alpha_ls * d)
-            Z_trial_raw = assemble_full_Z(Z_efie, Mp, theta_trial; reactive=reactive)
+            assemble_full_Z!(Z_raw, Z_efie, Mp, theta_trial; reactive=reactive)
             Z_trial, _, _ = prepare_conditioned_system(
-                Z_trial_raw,
+                Z_raw,
                 v;
                 regularization_alpha=regularization_alpha,
                 regularization_R=R_mat,
