@@ -111,24 +111,23 @@ function _precompute_nearfield_triangle_data(mesh::TriMesh, rwg::RWGData,
         push!(tri_to_basis[rwg.tminus[n]], n)
     end
 
-    J_samples = Vector{Vector{CVec3}}(undef, Nt)
+    # Flat matrix avoids per-triangle Vector{CVec3} heap allocations
+    J_samples = zeros(CVec3, Nq, Nt)
     div_samples = Vector{ComplexF64}(undef, Nt)
 
     @inbounds for t in 1:Nt
         quad_pts[t] = tri_quad_points(mesh, t, xi)
         areas[t] = triangle_area(mesh, t)
-        Jt = [CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im) for _ in 1:Nq]
         divt = 0.0 + 0im
 
         for n in tri_to_basis[t]
             In = ComplexF64(I_coeffs[n])
             divt += In * div_rwg(rwg, n, t)
             for q in 1:Nq
-                Jt[q] += In * eval_rwg(rwg, n, quad_pts[t][q], t)
+                J_samples[q, t] += In * eval_rwg(rwg, n, quad_pts[t][q], t)
             end
         end
 
-        J_samples[t] = Jt
         div_samples[t] = divt
     end
 
@@ -185,7 +184,7 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
                 rq = quad_pts[t][q]
                 wt = wq[q] * (2 * At)
                 G = greens(robs, rq, k)
-                Jq = J_samples[t][q]
+                Jq = J_samples[q, t]
 
                 Ex += pref_vec * Jq[1] * (wt * G)
                 Ey += pref_vec * Jq[2] * (wt * G)

@@ -189,10 +189,16 @@ function solve_po(mesh::TriMesh, freq_hz::Real, excitation::PlaneWaveExcitation;
 
     prefactor = -1im * k * E0 / (2π)
 
+    # Precompute rhat Vec3 (avoids column-slice allocation in hot loop)
+    rhat_vec = Vector{Vec3}(undef, NΩ)
+    @inbounds for q in 1:NΩ
+        rhat_vec[q] = Vec3(grid.rhat[1, q], grid.rhat[2, q], grid.rhat[3, q])
+    end
+
     E_ff = zeros(ComplexF64, 3, NΩ)
 
     for q in 1:NΩ
-        r_hat = Vec3(grid.rhat[:, q])
+        r_hat = rhat_vec[q]
         # Phase: exp(jk(r̂ - k̂_prop)·r')
         delta_k = r_hat - k_hat
 

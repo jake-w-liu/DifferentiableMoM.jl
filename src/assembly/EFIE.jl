@@ -15,6 +15,7 @@ struct EFIEApplyCache{TK, Tω, TD, TV}
     mesh::TriMesh
     rwg::RWGData
     k::TK
+    inv_k2::TK                           # precomputed 1/k²
     omega_mu0::Tω
     wq::Vector{Float64}
     Nq::Int
@@ -24,9 +25,10 @@ struct EFIEApplyCache{TK, Tω, TD, TV}
     div_vals::Matrix{TD}                 # (2, N)
     rwg_vals::Vector{NTuple{2,Vector{TV}}}
     # Adjacent-cell near-singular integration data
-    adjacent_pairs::Set{NTuple{2,Int}}   # set of (t1,t2) pairs sharing a mesh edge
+    adjacent::BitMatrix                  # (Nt, Nt) adjacency matrix
     wq_hi::Vector{Float64}              # high-order quadrature weights
     quad_pts_hi::Vector{Vector{Vec3}}    # high-order quadrature points per triangle
+    rwg_vals_hi::Vector{NTuple{2,Vector{TV}}}  # RWG values at high-order quad pts
 end
 
 function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
@@ -37,6 +39,7 @@ function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
     TVec = SVector{3,Tcoef}
 
     omega_mu0 = k * eta0   # ωμ₀ = k η₀
+    inv_k2 = 1 / k^2
 
     xi, wq = tri_quad_rule(quad_order)
     Nq = length(wq)
@@ -49,9 +52,18 @@ function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
         areas[t] = triangle_area(mesh, t)
     end
 
+    # High-order quadrature for inner integration of self/adjacent cells
+    xi_hi, wq_hi = tri_quad_rule(7)
+    Nq_hi = length(wq_hi)
+    quad_pts_hi = Vector{Vector{Vec3}}(undef, Nt)
+    for t in 1:Nt
+        quad_pts_hi[t] = tri_quad_points(mesh, t, xi_hi)
+    end
+
     tri_ids = zeros(Int, 2, N)
     div_vals = zeros(Tcoef, 2, N)
     rwg_vals = Vector{NTuple{2,Vector{TVec}}}(undef, N)
+    rwg_vals_hi = Vector{NTuple{2,Vector{TVec}}}(undef, N)
 
     for n in 1:N
         tp = rwg.tplus[n]
@@ -64,11 +76,15 @@ function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
         vals_p = [eval_rwg(rwg, n, quad_pts[tp][q], tp) for q in 1:Nq]
         vals_m = [eval_rwg(rwg, n, quad_pts[tm][q], tm) for q in 1:Nq]
         rwg_vals[n] = (vals_p, vals_m)
+
+        vals_p_hi = [eval_rwg(rwg, n, quad_pts_hi[tp][q], tp) for q in 1:Nq_hi]
+        vals_m_hi = [eval_rwg(rwg, n, quad_pts_hi[tm][q], tm) for q in 1:Nq_hi]
+        rwg_vals_hi[n] = (vals_p_hi, vals_m_hi)
     end
 
-    # Build triangle adjacency map from mesh connectivity
+    # Build triangle adjacency BitMatrix from mesh connectivity
     # Two triangles are adjacent if they share a mesh edge (pair of vertex indices)
-    adjacent_pairs = Set{NTuple{2,Int}}()
+    adjacent = falses(Nt, Nt)
     edge_to_tri = Dict{NTuple{2,Int}, Vector{Int}}()
     for t in 1:Nt
         v1 = mesh.tri[1, t]
@@ -87,74 +103,72 @@ function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
         for i in 1:length(tris)
             for j in (i+1):length(tris)
                 t1, t2 = tris[i], tris[j]
-                push!(adjacent_pairs, (min(t1,t2), max(t1,t2)))
+                adjacent[t1, t2] = true
+                adjacent[t2, t1] = true
             end
         end
     end
 
-    # High-order quadrature for inner integration of adjacent cells
-    xi_hi, wq_hi = tri_quad_rule(7)
-    quad_pts_hi = Vector{Vector{Vec3}}(undef, Nt)
-    for t in 1:Nt
-        quad_pts_hi[t] = tri_quad_points(mesh, t, xi_hi)
-    end
-
-    return EFIEApplyCache(mesh, rwg, k, omega_mu0, wq, Nq, quad_pts, areas,
+    return EFIEApplyCache(mesh, rwg, k, inv_k2, omega_mu0, wq, Nq, quad_pts, areas,
                           tri_ids, div_vals, rwg_vals,
-                          adjacent_pairs, wq_hi, quad_pts_hi)
+                          adjacent, wq_hi, quad_pts_hi, rwg_vals_hi)
 end
 
 @inline function _is_adjacent(cache::EFIEApplyCache, t1::Int, t2::Int)
-    key = t1 < t2 ? (t1, t2) : (t2, t1)
-    return key in cache.adjacent_pairs
+    return @inbounds cache.adjacent[t1, t2]
 end
 
 @inline function _efie_entry(cache::EFIEApplyCache, m::Int, n::Int)
+    # For non-Bloch RWG, normalize to canonical order (m ≤ n) so that
+    # _efie_entry(c, i, j) == _efie_entry(c, j, i) bitwise.
+    # This keeps dense assembly (symmetry exploit) and on-the-fly getindex consistent.
+    if !cache.rwg.has_periodic_bloch && m > n
+        return _efie_entry(cache, n, m)
+    end
     CT = ComplexF64
     val = zero(CT)
+    inv_k2 = cache.inv_k2
 
     @inbounds for itm in 1:2
         tm = cache.tri_ids[itm, m]
         Am = cache.areas[tm]
         dvm = cache.div_vals[itm, m]
         fm_vals = _rwg_vals(cache, m, itm)
+        fm_vals_hi = _rwg_vals_hi(cache, m, itm)
 
         for itn in 1:2
             tn = cache.tri_ids[itn, n]
             An = cache.areas[tn]
             dvn = cache.div_vals[itn, n]
             fn_vals = _rwg_vals(cache, n, itn)
+            fn_vals_hi = _rwg_vals_hi(cache, n, itn)
 
             if tm == tn
                 # Self-cell singularity extraction (high-order quadrature)
-                val += self_cell_contribution(
-                    cache.mesh, cache.rwg, m, n, tm,
-                    cache.quad_pts[tm],
-                    fm_vals,
-                    fn_vals,
-                    dvm,
-                    dvn,
-                    Am,
-                    cache.wq,
-                    cache.k,
+                val += _self_cell_cached(
+                    cache.mesh, tm,
+                    fm_vals_hi,
+                    fn_vals_hi,
+                    dvm, dvn,
+                    Am, cache.k, inv_k2,
                     cache.wq_hi,
                     cache.quad_pts_hi[tm],
                 )
             elseif _is_adjacent(cache, tm, tn)
                 # Adjacent-cell near-singular integration
-                val += adjacent_cell_contribution(
-                    cache.mesh, cache.rwg, m, n, tm, tn,
-                    cache.quad_pts[tm],
-                    cache.quad_pts[tn],
-                    fm_vals,
-                    fn_vals,
+                val += _adjacent_cell_cached(
+                    cache.mesh, tn,
+                    cache.quad_pts[tm], cache.quad_pts[tn],
+                    fm_vals, fn_vals,
+                    fm_vals_hi, fn_vals_hi,
                     dvm, dvn,
                     Am, An,
-                    cache.wq, cache.k,
+                    cache.wq, cache.k, inv_k2,
                     cache.wq_hi, cache.quad_pts_hi[tm], cache.quad_pts_hi[tn],
                 )
             else
                 # Non-adjacent: standard product quadrature
+                dvmn_inv_k2 = conj(dvm) * dvn * inv_k2
                 for qm in 1:cache.Nq
                     rm = cache.quad_pts[tm][qm]
                     fm = fm_vals[qm]
@@ -166,7 +180,7 @@ end
                         G = greens(rm, rn, cache.k)
 
                         vec_part = dot(fm, fn) * G
-                        scl_part = conj(dvm) * dvn * G / (cache.k^2)
+                        scl_part = dvmn_inv_k2 * G
                         weight = cache.wq[qm] * cache.wq[qn] * (2 * Am) * (2 * An)
 
                         val += (vec_part - scl_part) * weight
@@ -184,6 +198,171 @@ end
         return cache.rwg_vals[n][1]
     end
     return cache.rwg_vals[n][2]
+end
+
+@inline function _rwg_vals_hi(cache::EFIEApplyCache, n::Int, it::Int)
+    if it == 1
+        return cache.rwg_vals_hi[n][1]
+    end
+    return cache.rwg_vals_hi[n][2]
+end
+
+# ── Internal cached versions of self/adjacent cell (no eval_rwg calls) ──
+
+"""
+Self-cell contribution using precomputed high-order RWG values.
+Avoids calling eval_rwg in the hot inner loops.
+"""
+@inline function _self_cell_cached(
+    mesh::TriMesh, tm::Int,
+    fm_hi::Vector{<:SVector{3,<:Number}},
+    fn_hi::Vector{<:SVector{3,<:Number}},
+    div_m::Number, div_n::Number,
+    Am::Float64, k, inv_k2,
+    wq_hi, quad_pts_tm_hi::Vector{Vec3})
+
+    Nq_hi = length(wq_hi)
+    CT = complex(typeof(real(k)))
+
+    V1 = _mesh_vertex(mesh, mesh.tri[1, tm])
+    V2 = _mesh_vertex(mesh, mesh.tri[2, tm])
+    V3 = _mesh_vertex(mesh, mesh.tri[3, tm])
+
+    inv4pi = 1.0 / (4π)
+    dvmn_inv_k2 = conj(div_m) * div_n * inv_k2
+
+    # ── Smooth part: high-order product quadrature with G_smooth ──
+    val_smooth = zero(CT)
+    @inbounds for qm in 1:Nq_hi
+        rm = quad_pts_tm_hi[qm]
+        fm = fm_hi[qm]
+        for qn in 1:Nq_hi
+            rn = quad_pts_tm_hi[qn]
+            fn = fn_hi[qn]
+
+            Gs = greens_smooth(rm, rn, k)
+            vec_part = dot(fm, fn) * Gs
+            scl_part = dvmn_inv_k2 * Gs
+            weight = wq_hi[qm] * wq_hi[qn] * (2 * Am) * (2 * Am)
+            val_smooth += (vec_part - scl_part) * weight
+        end
+    end
+
+    # ── Singular part: semi-analytical with high-order outer quadrature ──
+    val_singular = zero(CT)
+    @inbounds for qm in 1:Nq_hi
+        rm = quad_pts_tm_hi[qm]
+        fm = fm_hi[qm]
+
+        S = analytical_integral_1overR(rm, V1, V2, V3)
+        inner_scalar = inv4pi * S
+
+        # Scalar potential singular part
+        scl_sing = dvmn_inv_k2 * inner_scalar
+
+        # Vector potential singular part: leading term
+        fn_at_rm = fn_hi[qm]
+        vec_lead = dot(fm, fn_at_rm) * inner_scalar
+
+        # Vector potential singular part: remainder (bounded integrand)
+        vec_rem = zero(CT)
+        for qn in 1:Nq_hi
+            rn = quad_pts_tm_hi[qn]
+            fn = fn_hi[qn]
+
+            R_vec = rm - rn
+            R = sqrt(dot(R_vec, R_vec))
+            if R < 1e-14
+                continue
+            end
+
+            delta_fn = fn - fn_at_rm
+            vec_rem += dot(fm, delta_fn) * (inv4pi / R) * wq_hi[qn] * (2 * Am)
+        end
+
+        outer_weight = wq_hi[qm] * (2 * Am)
+        val_singular += ((vec_lead + vec_rem) - scl_sing) * outer_weight
+    end
+
+    return val_smooth + val_singular
+end
+
+"""
+Adjacent-cell contribution using precomputed high-order RWG values.
+"""
+@inline function _adjacent_cell_cached(
+    mesh::TriMesh, tn::Int,
+    quad_pts_tm::Vector{Vec3}, quad_pts_tn::Vector{Vec3},
+    fm_vals::Vector{<:SVector{3,<:Number}},
+    fn_vals::Vector{<:SVector{3,<:Number}},
+    fm_hi::Vector{<:SVector{3,<:Number}},
+    fn_hi::Vector{<:SVector{3,<:Number}},
+    div_m::Number, div_n::Number,
+    Am::Float64, An::Float64,
+    wq, k, inv_k2,
+    wq_hi, quad_pts_tm_hi::Vector{Vec3}, quad_pts_tn_hi::Vector{Vec3})
+
+    Nq = length(wq)
+    Nq_hi = length(wq_hi)
+    CT = complex(typeof(real(k)))
+
+    V1n = _mesh_vertex(mesh, mesh.tri[1, tn])
+    V2n = _mesh_vertex(mesh, mesh.tri[2, tn])
+    V3n = _mesh_vertex(mesh, mesh.tri[3, tn])
+
+    inv4pi = 1.0 / (4π)
+    dvmn_inv_k2 = conj(div_m) * div_n * inv_k2
+
+    # ── Smooth part: standard product quadrature with G_smooth ──
+    val_smooth = zero(CT)
+    @inbounds for qm in 1:Nq
+        rm = quad_pts_tm[qm]
+        fm = fm_vals[qm]
+        for qn in 1:Nq
+            rn = quad_pts_tn[qn]
+            fn = fn_vals[qn]
+
+            Gs = greens_smooth(rm, rn, k)
+            vec_part = dot(fm, fn) * Gs
+            scl_part = dvmn_inv_k2 * Gs
+            weight = wq[qm] * wq[qn] * (2 * Am) * (2 * An)
+            val_smooth += (vec_part - scl_part) * weight
+        end
+    end
+
+    # ── Singular 1/(4πR) part: semi-analytical ──
+    val_singular = zero(CT)
+    @inbounds for qm in 1:Nq_hi
+        rm = quad_pts_tm_hi[qm]
+        fm = fm_hi[qm]
+
+        # Analytical inner integral: S = ∫_{T_n} 1/|rm - r'| dS'
+        S = analytical_integral_1overR(rm, V1n, V2n, V3n)
+        inner_scalar = inv4pi * S
+
+        # Scalar potential singular part
+        scl_sing = dvmn_inv_k2 * inner_scalar
+
+        # Vector potential singular part: ∫_{T_n} f_n(r') / (4πR) dS'
+        vec_sing = zero(CT)
+        for qn in 1:Nq_hi
+            rn = quad_pts_tn_hi[qn]
+            fn_qn = fn_hi[qn]
+
+            R_vec = rm - rn
+            R = sqrt(dot(R_vec, R_vec))
+            if R < 1e-14
+                continue
+            end
+
+            vec_sing += dot(fm, fn_qn) * (inv4pi / R) * wq_hi[qn] * (2 * An)
+        end
+
+        outer_weight = wq_hi[qm] * (2 * Am)
+        val_singular += (vec_sing - scl_sing) * outer_weight
+    end
+
+    return val_smooth + val_singular
 end
 
 """
@@ -211,9 +390,20 @@ function assemble_Z_efie(mesh::TriMesh, rwg::RWGData, k;
     CT = ComplexF64
     Z = zeros(CT, N, N)
 
-    @inbounds for m in 1:N
-        for n in 1:N
-            Z[m, n] = _efie_entry(cache, m, n)
+    # Exploit Z symmetry for non-Bloch RWG (real coefficients → Z_mn = Z_nm)
+    if !rwg.has_periodic_bloch
+        Threads.@threads for m in 1:N
+            @inbounds for n in m:N
+                z = _efie_entry(cache, m, n)
+                Z[m, n] = z
+                Z[n, m] = z
+            end
+        end
+    else
+        Threads.@threads for m in 1:N
+            @inbounds for n in 1:N
+                Z[m, n] = _efie_entry(cache, m, n)
+            end
         end
     end
 

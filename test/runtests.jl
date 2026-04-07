@@ -3421,10 +3421,10 @@ println("  Relative symmetry error: $(round(100*rel_sym, digits=4))%")
 
 # Verify adjacent pairs are detected in the cache
 cache_adj = DifferentiableMoM._build_efie_cache(mesh_adj, rwg_adj, k_adj; quad_order=4)
-n_adj_pairs = length(cache_adj.adjacent_pairs)
+n_adj_pairs = count(cache_adj.adjacent) ÷ 2  # BitMatrix is symmetric, count unique pairs
 @assert n_adj_pairs > 0 "Should detect adjacent triangle pairs"
 # For a 4×4 grid of quads (32 triangles), there are many internal edges
-# Each internal edge connects 2 triangles → pair stored as (min,max)
+# Each internal edge connects 2 triangles → pair stored symmetrically in BitMatrix
 println("  Adjacent pairs: $n_adj_pairs")
 println("  High-order quad points: $(length(cache_adj.wq_hi)) (standard: $(cache_adj.Nq))")
 

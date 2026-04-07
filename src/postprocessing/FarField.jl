@@ -54,19 +54,32 @@ function radiation_vectors(mesh::TriMesh, rwg::RWGData, grid::SphGrid, k;
                            quad_order::Int=3, eta0=376.730313668)
     N = rwg.nedges
     NΩ = length(grid.w)
+    Nt = ntriangles(mesh)
     prefactor = 1im * k * eta0 / (4π)
 
     xi, wq = tri_quad_rule(quad_order)
     Nq = length(wq)
 
+    # Precompute quad points and areas per triangle (avoids recomputation per basis)
+    quad_pts = Vector{Vector{Vec3}}(undef, Nt)
+    areas = Vector{Float64}(undef, Nt)
+    @inbounds for t in 1:Nt
+        quad_pts[t] = tri_quad_points(mesh, t, xi)
+        areas[t] = triangle_area(mesh, t)
+    end
+
+    # Precompute rhat Vec3 (avoids column-slice allocation in inner loop)
+    rhat_vec = Vector{Vec3}(undef, NΩ)
+    @inbounds for q in 1:NΩ
+        rhat_vec[q] = Vec3(grid.rhat[1, q], grid.rhat[2, q], grid.rhat[3, q])
+    end
+
     G_mat = zeros(ComplexF64, 3 * NΩ, N)
 
-    for n in 1:N
-        # Compute ∫ f_n(r') exp(ik r̂·r') dS' for each r̂
-        # by summing over the two support triangles
+    @inbounds for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
 
             for q_surf in 1:Nq
                 rp = pts[q_surf]
@@ -74,16 +87,12 @@ function radiation_vectors(mesh::TriMesh, rwg::RWGData, grid::SphGrid, k;
                 wt = wq[q_surf] * 2 * A
 
                 for q_dir in 1:NΩ
-                    rh = Vec3(grid.rhat[:, q_dir])
+                    rh = rhat_vec[q_dir]
                     phase = exp(1im * k * dot(rh, rp))
 
-                    # Accumulate: N_n(r̂) = ∫ f_n exp(ik r̂·r') dS'
                     contrib = fn * (wt * phase)
-
-                    # Apply r̂ × (r̂ × N) = (r̂·N)r̂ - N
                     rh_cross_N_cross = rh * dot(rh, contrib) - contrib
 
-                    # g_n = prefactor * r̂ × (r̂ × N)
                     idx = 3 * (q_dir - 1)
                     G_mat[idx+1, n] += prefactor * rh_cross_N_cross[1]
                     G_mat[idx+2, n] += prefactor * rh_cross_N_cross[2]
