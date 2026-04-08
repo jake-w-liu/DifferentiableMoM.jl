@@ -171,6 +171,16 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
     pref_vec = -1im * k * eta0
     pref_scl = -1im * eta0 / k
 
+    # Near-singular quadrature is activated per-triangle when the observation
+    # point is closer than the triangle's characteristic edge length.
+    # This is a physics-based criterion: standard Gaussian quadrature of
+    # order Nq on a triangle of edge h resolves integrands varying on scale
+    # ~h. When the 1/R singularity is at distance d < h, the integrand
+    # varies faster than the quadrature can resolve → singularity subtraction
+    # is needed. No global threshold — each triangle uses its own size.
+
+    inv4pi = 1.0 / (4π)
+
     @inbounds for i in 1:Nobs
         robs = observation_points[i]
         Ex = 0.0 + 0im
@@ -180,21 +190,113 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
         for t in 1:Nt
             At = areas[t]
             divt = div_samples[t]
-            for q in 1:Nq
-                rq = quad_pts[t][q]
-                wt = wq[q] * (2 * At)
-                G = greens(robs, rq, k)
-                Jq = J_samples[q, t]
 
-                Ex += pref_vec * Jq[1] * (wt * G)
-                Ey += pref_vec * Jq[2] * (wt * G)
-                Ez += pref_vec * Jq[3] * (wt * G)
+            # Check distance from observation to this triangle
+            V1 = _mesh_vertex(mesh, mesh.tri[1, t])
+            V2 = _mesh_vertex(mesh, mesh.tri[2, t])
+            V3 = _mesh_vertex(mesh, mesh.tri[3, t])
+            dist = _point_triangle_distance(robs, V1, V2, V3)
 
-                if abs(divt) > 0.0
-                    gradG = grad_greens(robs, rq, k)
-                    Ex += pref_scl * divt * (wt * gradG[1])
-                    Ey += pref_scl * divt * (wt * gradG[2])
-                    Ez += pref_scl * divt * (wt * gradG[3])
+            # Singularity subtraction when observation is closer than the
+            # quadrature's resolution limit. For order-Nq Gaussian quadrature
+            # on a triangle of edge h, the nearest quadrature point to the
+            # centroid is ~h/3. The 1/R integrand is well-resolved when
+            # R_min >> h/Nq. Activate subtraction when dist < h/(2*Nq).
+            h_t = sqrt(2 * At)
+            if dist < h_t / (2 * Nq)
+                # ── Near-singular: singularity subtraction for BOTH potentials ──
+                # Vector potential: G = G_smooth + 1/(4πR)
+                #   Smooth part via quadrature, singular 1/(4πR) via analytical integral
+                # Scalar potential: ∇G = ∇G_smooth + ∇(1/(4πR))
+                #   Smooth part via quadrature, singular ∇(1/(4πR)) via analytical gradient
+
+                S = analytical_integral_1overR(robs, V1, V2, V3)
+
+                for q in 1:Nq
+                    rq = quad_pts[t][q]
+                    wt = wq[q] * (2 * At)
+                    Gs = greens_smooth(robs, rq, k)
+                    Jq = J_samples[q, t]
+
+                    # Vector potential smooth part
+                    Ex += pref_vec * Jq[1] * (wt * Gs)
+                    Ey += pref_vec * Jq[2] * (wt * Gs)
+                    Ez += pref_vec * Jq[3] * (wt * Gs)
+
+                    # Scalar potential: use smooth ∇G = ∇G_full - ∇(1/(4πR))
+                    if abs(divt) > 0.0
+                        R_vec = robs - rq
+                        R = sqrt(dot(R_vec, R_vec))
+                        if R > 1e-14
+                            gradG_full = grad_greens(robs, rq, k)
+                            grad_1overR = -(inv4pi / R^2) * (R_vec / R)
+                            gradG_smooth = gradG_full - grad_1overR
+                            Ex += pref_scl * divt * (wt * gradG_smooth[1])
+                            Ey += pref_scl * divt * (wt * gradG_smooth[2])
+                            Ez += pref_scl * divt * (wt * gradG_smooth[3])
+                        end
+                    end
+                end
+
+                # Vector potential singular part: J_avg · S/(4π)
+                J_avg = SVector{3,ComplexF64}(0.0, 0.0, 0.0)
+                for q in 1:Nq
+                    J_avg = J_avg + J_samples[q, t] * wq[q]
+                end
+                J_avg = J_avg * (1.0 / sum(wq[qq] for qq in 1:Nq))
+                Ex += pref_vec * J_avg[1] * (inv4pi * S)
+                Ey += pref_vec * J_avg[2] * (inv4pi * S)
+                Ez += pref_vec * J_avg[3] * (inv4pi * S)
+
+                # Scalar potential singular part: divt · ∫ ∇(1/(4πR)) dS'
+                # The gradient of ∫ 1/R dS' over a triangle is the negative
+                # of the solid-angle gradient. For a flat triangle with the
+                # observation point at height h above the plane:
+                #   ∫_T ∇(1/R) dS' = -n̂ · Ω(robs, T)
+                # where Ω is the solid angle subtended by T at robs.
+                # For points very near the surface, |Ω| → 2π (half-space).
+                # Use the analytical gradient via the solid angle formula.
+                n_T = cross(V2 - V1, V3 - V1)
+                n_norm = norm(n_T)
+                if n_norm > 1e-30 && abs(divt) > 0.0
+                    n_hat = n_T / n_norm
+                    # Signed height
+                    h_val = dot(robs - V1, n_hat)
+                    # Solid angle of triangle from observation point
+                    # Using the Van Oosterom formula
+                    a_vec = V1 - robs; b_vec = V2 - robs; c_vec = V3 - robs
+                    a_r = norm(a_vec); b_r = norm(b_vec); c_r = norm(c_vec)
+                    if min(a_r, b_r, c_r) > 1e-14
+                        numer = dot(a_vec, cross(b_vec, c_vec))
+                        denom = a_r*b_r*c_r + dot(a_vec,b_vec)*c_r + dot(a_vec,c_vec)*b_r + dot(b_vec,c_vec)*a_r
+                        omega = 2 * atan(numer, denom)
+                        # ∫_T ∇_r(1/R) dS' = -n̂ · omega (for the normal component)
+                        # Actually: ∫_T R̂/R² dS' = n̂ · omega (solid angle)
+                        # So ∫_T ∇(1/(4πR)) dS' = -(1/(4π)) · n̂ · omega
+                        grad_sing = -(inv4pi * omega) * n_hat
+                        Ex += pref_scl * divt * grad_sing[1]
+                        Ey += pref_scl * divt * grad_sing[2]
+                        Ez += pref_scl * divt * grad_sing[3]
+                    end
+                end
+            else
+                # ── Standard quadrature (far from surface) ──
+                for q in 1:Nq
+                    rq = quad_pts[t][q]
+                    wt = wq[q] * (2 * At)
+                    G = greens(robs, rq, k)
+                    Jq = J_samples[q, t]
+
+                    Ex += pref_vec * Jq[1] * (wt * G)
+                    Ey += pref_vec * Jq[2] * (wt * G)
+                    Ez += pref_vec * Jq[3] * (wt * G)
+
+                    if abs(divt) > 0.0
+                        gradG = grad_greens(robs, rq, k)
+                        Ex += pref_scl * divt * (wt * gradG[1])
+                        Ey += pref_scl * divt * (wt * gradG[2])
+                        Ez += pref_scl * divt * (wt * gradG[3])
+                    end
                 end
             end
         end

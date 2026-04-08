@@ -28,8 +28,6 @@ using Statistics
 using CSV
 using DataFrames
 using PlotlySupply
-import PlotlyKaleido
-PlotlyKaleido.start()
 
 println("="^60)
 println("Example 12: PEC Plate RCS — STL Round-Trip + PO Analytical")
@@ -211,7 +209,7 @@ relayout!(p, xaxis=attr(title="θ (deg)", range=[0, 180], dtick=30),
           legend=attr(x=0.60, y=0.95),
           margin=attr(l=60, r=30, t=60, b=50))
 fig_path = joinpath(figdir, "12_plate_rcs_mom_vs_po.png")
-PlotlyKaleido.savefig(p, fig_path; width=900, height=550)
+savefig(p, fig_path)
 println("\nPlot saved: $fig_path")
 
 println("\n" * "="^60)

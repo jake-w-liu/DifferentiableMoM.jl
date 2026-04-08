@@ -11,8 +11,6 @@ include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 using LinearAlgebra
 using PlotlySupply
-import PlotlyKaleido
-PlotlyKaleido.start()
 
 println("="^60)
 println("Example 23: Circular Plate — MoM vs PO vs PO+PTD")
@@ -156,7 +154,7 @@ let
     end
     relayout!(p, legend=attr(x=0.01, y=0.98, bgcolor="rgba(255,255,255,0.8)"),
               margin=attr(l=60, r=20, t=50, b=50))
-    PlotlyKaleido.savefig(p, joinpath(figdir, "23_circular_ptd_3panel.png"); width=1800, height=500)
+    savefig(p, joinpath(figdir, "23_circular_ptd_3panel.png"); width=1800, height=500)
     println("\nPlot saved: 23_circular_ptd_3panel.png")
 end
 
@@ -181,7 +179,7 @@ let
         relayout!(p, xaxis=attr(title="θ (deg)", range=[0, 180]),
                   yaxis=attr(title="Bistatic RCS (dBsm)", range=yranges[i]),
                   legend=attr(x=0.55, y=0.95), margin=attr(l=60, r=30, t=60, b=50))
-        PlotlyKaleido.savefig(p, joinpath(figdir, "23_disk_$(r.dλ)lam_rcs.png"); width=900, height=550)
+        savefig(p, joinpath(figdir, "23_disk_$(r.dλ)lam_rcs.png"); width=900, height=550)
         println("Plot saved: 23_disk_$(r.dλ)lam_rcs.png")
     end
 end

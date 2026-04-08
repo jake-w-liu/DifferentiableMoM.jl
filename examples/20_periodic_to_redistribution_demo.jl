@@ -15,9 +15,7 @@ using Statistics
 using Random
 using CSV, DataFrames
 using PlotlySupply
-using PlotlyKaleido
 import PlotlySupply: savefig
-PlotlyKaleido.start(mathjax=false)
 
 Random.seed!(2024)
 

@@ -15,8 +15,6 @@ using .DifferentiableMoM
 using LinearAlgebra
 using SparseArrays
 using PlotlySupply
-import PlotlyKaleido
-PlotlyKaleido.start()
 
 println("="^72)
 println("Example 11: MLFMA + PO — Aircraft at 0.3 GHz, Finer Meshes")
@@ -263,12 +261,12 @@ end
 
 p0 = make_rcs_plot(phi0_idx, θ_deg_0,
     "Aircraft RCS φ=0° — MLFMA + PO ($(freq/1e9) GHz, mesh convergence)")
-PlotlyKaleido.savefig(p0, joinpath(figdir, "11_aircraft_rcs_phi0.png"); width=950, height=600)
+savefig(p0, joinpath(figdir, "11_aircraft_rcs_phi0.png"); width=950, height=600)
 println("Plot saved: 11_aircraft_rcs_phi0.png")
 
 p90 = make_rcs_plot(phi90_idx, θ_deg_90,
     "Aircraft RCS φ=90° — MLFMA + PO ($(freq/1e9) GHz, mesh convergence)")
-PlotlyKaleido.savefig(p90, joinpath(figdir, "11_aircraft_rcs_phi90.png"); width=950, height=600)
+savefig(p90, joinpath(figdir, "11_aircraft_rcs_phi90.png"); width=950, height=600)
 println("Plot saved: 11_aircraft_rcs_phi90.png")
 
 println("\n" * "="^72)

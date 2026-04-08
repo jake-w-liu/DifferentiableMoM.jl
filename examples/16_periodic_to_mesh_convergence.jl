@@ -15,9 +15,7 @@ using StaticArrays
 using Statistics
 using CSV, DataFrames
 using PlotlySupply
-using PlotlyKaleido
 import PlotlySupply: savefig
-PlotlyKaleido.start(mathjax=false)
 
 const PKG_DIR  = dirname(@__DIR__)
 const DATA_DIR = joinpath(PKG_DIR, "..", "data")

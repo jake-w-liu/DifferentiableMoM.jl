@@ -23,8 +23,6 @@ using Printf
 using CSV
 using DataFrames
 using PlotlySupply
-import PlotlyKaleido
-PlotlyKaleido.start()
 
 function make_icosphere(radius::Float64; subdivisions::Int=2)
     phi_g = (1 + sqrt(5.0)) / 2
@@ -271,7 +269,7 @@ relayout!(
     margin=attr(l=70, r=40, t=70, b=60),
 )
 fig_mag_path = joinpath(figdir, "21_rayleigh_near_total_field_magnitude.png")
-PlotlyKaleido.savefig(p_mag, fig_mag_path; width=1100, height=460)
+savefig(p_mag, fig_mag_path)
 println("Plot saved: $fig_mag_path")
 
 fig_err = subplots(
@@ -329,7 +327,7 @@ relayout!(
     margin=attr(l=70, r=40, t=70, b=60),
 )
 fig_err_path = joinpath(figdir, "21_rayleigh_near_total_field_errors.png")
-PlotlyKaleido.savefig(p_err, fig_err_path; width=1100, height=460)
+savefig(p_err, fig_err_path)
 println("Plot saved: $fig_err_path")
 
 @assert residual < 1e-10

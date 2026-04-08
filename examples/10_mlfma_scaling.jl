@@ -17,8 +17,6 @@ using .DifferentiableMoM
 using LinearAlgebra
 using SparseArrays
 using PlotlySupply
-import PlotlyKaleido
-PlotlyKaleido.start()
 
 println("="^72)
 println("Example 10: Dense vs ACA vs MLFMA — Aircraft at 0.3 GHz")
@@ -282,12 +280,12 @@ end
 
 p0 = make_rcs_plot(phi0_idx, θ_deg_0,
     "Aircraft RCS φ=0° — Dense vs ACA vs MLFMA ($(freq/1e9) GHz)")
-PlotlyKaleido.savefig(p0, joinpath(figdir, "10_aircraft_rcs_phi0.png"); width=950, height=600)
+savefig(p0, joinpath(figdir, "10_aircraft_rcs_phi0.png"); width=950, height=600)
 println("Plot saved: 10_aircraft_rcs_phi0.png")
 
 p90 = make_rcs_plot(phi90_idx, θ_deg_90,
     "Aircraft RCS φ=90° — Dense vs ACA vs MLFMA ($(freq/1e9) GHz)")
-PlotlyKaleido.savefig(p90, joinpath(figdir, "10_aircraft_rcs_phi90.png"); width=950, height=600)
+savefig(p90, joinpath(figdir, "10_aircraft_rcs_phi90.png"); width=950, height=600)
 println("Plot saved: 10_aircraft_rcs_phi90.png")
 
 println("\n" * "="^72)

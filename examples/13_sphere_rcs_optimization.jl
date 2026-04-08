@@ -14,8 +14,6 @@ using DifferentiableMoM
 using LinearAlgebra
 using Statistics
 using PlotlySupply
-import PlotlyKaleido
-PlotlyKaleido.start()
 
 figdir = joinpath(@__DIR__, "figs")
 mkpath(figdir)
@@ -236,7 +234,7 @@ relayout!(p1,
     margin=attr(l=80, r=30, t=20, b=70))
 set_legend!(p1; position=:bottomright)
 fig1_path = joinpath(figdir, "13_sphere_mom_vs_mie.pdf")
-PlotlyKaleido.savefig(p1, fig1_path; width=700, height=400)
+savefig(p1, fig1_path)
 println("  Saved: $fig1_path")
 
 
@@ -431,7 +429,7 @@ relayout!(p2,
     margin=attr(l=80, r=30, t=20, b=70))
 set_legend!(p2; position=:topright)
 fig2_path = joinpath(figdir, "13_sphere_rcs_optimization.pdf")
-PlotlyKaleido.savefig(p2, fig2_path; width=700, height=400)
+savefig(p2, fig2_path)
 println("  Saved: $fig2_path")
 
 # ── B11. Plot 4: Multi-angle — signed-θ xz-plane cut (both angles, one plot) ──
@@ -547,7 +545,7 @@ relayout!(p4,
     ])
 set_legend!(p4; position=:bottomright)
 fig4_path = joinpath(figdir, "13_sphere_multiangle_rcs.pdf")
-PlotlyKaleido.savefig(p4, fig4_path; width=700, height=400)
+savefig(p4, fig4_path)
 println("  Saved: $fig4_path")
 
 # ── B12. Plot 3: Convergence history ──────────────────
@@ -581,7 +579,7 @@ relayout!(p3,
     margin=attr(l=80, r=30, t=20, b=70))
 set_legend!(p3; position=:topright)
 fig3_path = joinpath(figdir, "13_sphere_convergence.pdf")
-PlotlyKaleido.savefig(p3, fig3_path; width=700, height=400)
+savefig(p3, fig3_path)
 println("  Saved: $fig3_path")
 
 # ── B13. Plot 5: Mesh + patch partition (3D) ─────────────
@@ -622,7 +620,7 @@ relayout!(p5,
     margin = attr(l=0, r=80, t=10, b=10),
     paper_bgcolor = "white")
 fig5_path = joinpath(figdir, "13_sphere_mesh_patches.pdf")
-PlotlyKaleido.savefig(p5, fig5_path; width=900, height=800)
+savefig(p5, fig5_path)
 println("  Saved: $fig5_path")
 
 
@@ -665,7 +663,7 @@ relayout!(p6,
     margin = attr(l=0, r=80, t=10, b=10),
     paper_bgcolor = "white")
 fig6_path = joinpath(figdir, "13_sphere_impedance_dist.pdf")
-PlotlyKaleido.savefig(p6, fig6_path; width=900, height=800)
+savefig(p6, fig6_path)
 println("  Saved: $fig6_path")
 
 
