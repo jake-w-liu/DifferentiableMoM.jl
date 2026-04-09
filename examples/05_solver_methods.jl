@@ -82,9 +82,9 @@ n_lr = length(A_aca.lowrank_blocks)
 println("  ACA build: $(round(t_aca, digits=3)) s")
 println("    Dense blocks: $n_dense, Low-rank blocks: $n_lr")
 
-# Build NF preconditioner from geometry (without dense Z)
-t_pre3 = @elapsed P_nf_aca = build_nearfield_preconditioner(mesh, rwg, k, cutoff)
-println("  NF preconditioner (geometry-direct): $(round(t_pre3, digits=3)) s")
+# Build NF preconditioner directly from ACA dense blocks (no recomputation)
+t_pre3 = @elapsed P_nf_aca = build_nearfield_preconditioner(A_aca)
+println("  NF preconditioner (from ACA blocks): $(round(t_pre3, digits=3)) s")
 
 t_sol3 = @elapsed begin
     I_aca, stats3 = solve_gmres(A_aca, v; preconditioner=P_nf_aca, tol=1e-6, maxiter=300)

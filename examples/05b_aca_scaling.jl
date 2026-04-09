@@ -48,11 +48,10 @@ for cfg in configs
     t_dense_sol = @elapsed I_dense = Z \ v
     t_dense_total = t_dense_asm + t_dense_sol
 
-    # ACA + NF-preconditioned GMRES
-    cutoff = 1.0 * λ0
+    # ACA + NF-preconditioned GMRES (extract preconditioner from ACA dense blocks)
     t_aca_build = @elapsed A_aca = build_aca_operator(mesh, rwg, k;
         leaf_size=32, eta=1.5, aca_tol=1e-6, max_rank=50)
-    t_aca_pre = @elapsed P_nf = build_nearfield_preconditioner(mesh, rwg, k, cutoff)
+    t_aca_pre = @elapsed P_nf = build_nearfield_preconditioner(A_aca)
     t_aca_sol = @elapsed begin
         I_aca, stats = solve_gmres(A_aca, v; preconditioner=P_nf, tol=1e-6, maxiter=300)
     end

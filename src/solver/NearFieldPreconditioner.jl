@@ -405,6 +405,48 @@ function build_nearfield_preconditioner(mesh::TriMesh, rwg::RWGData, k, cutoff::
 end
 
 """
+    build_nearfield_preconditioner(A_aca::ACAOperator; factorization=:lu, ilu_tau=1e-3)
+
+Build a preconditioner by extracting the dense (inadmissible) blocks that are
+already computed inside the ACA H-matrix operator.  This avoids recomputing
+any EFIE entries — the near-field matrix is assembled directly from the block
+data using the cluster-tree permutation.
+"""
+function build_nearfield_preconditioner(A_aca::ACAOperator;
+                                         factorization::Symbol=:lu,
+                                         ilu_tau::Float64=1e-3)
+    N = A_aca.N
+    perm = A_aca.tree.perm   # tree-order → original index
+
+    # Pre-allocate triplets: dense blocks tile the near field without overlap
+    total_entries = sum(length(db.row_range) * length(db.col_range)
+                        for db in A_aca.dense_blocks; init=0)
+    I_idx = Vector{Int}(undef, total_entries)
+    J_idx = Vector{Int}(undef, total_entries)
+    V_val = Vector{ComplexF64}(undef, total_entries)
+
+    pos = 0
+    @inbounds for db in A_aca.dense_blocks
+        nr = length(db.row_range)
+        nc = length(db.col_range)
+        for jj in 1:nc
+            j_orig = perm[db.col_range[jj]]
+            for ii in 1:nr
+                i_orig = perm[db.row_range[ii]]
+                pos += 1
+                I_idx[pos] = i_orig
+                J_idx[pos] = j_orig
+                V_val[pos] = db.data[ii, jj]
+            end
+        end
+    end
+
+    Z_nf = sparse(I_idx, J_idx, V_val, N, N)
+    return build_nearfield_preconditioner(Z_nf; factorization=factorization,
+                                           ilu_tau=ilu_tau)
+end
+
+"""
     build_nearfield_preconditioner(Z_nf_sparse; factorization=:lu, ilu_tau=1e-3)
 
 Build a preconditioner directly from a pre-assembled sparse near-field matrix.

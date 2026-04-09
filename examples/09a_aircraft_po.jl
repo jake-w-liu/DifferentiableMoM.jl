@@ -122,18 +122,11 @@ else
     all_curves["PO"] = σ_po_cuts_dB
     curve_order = ["PO"]
 
-    MAX_N_DIRECT = 10_000
-    MIN_N_MLFMA = 2_000
     LEAF_LAMBDA = 2.0
-    # NF cutoff: 5λ for small N, 2λ for large N (ILU handles the fill-in)
-    nf_cutoff_for(N_m) = N_m <= 10_000 ? 5.0 * λ_air : 2.0 * λ_air
-    # Factorization: full LU for small N, ILU for large N (avoids OOM)
-    nf_fac_for(N_m) = N_m <= 10_000 ? :lu : :ilu
-    gmres_maxiter_for(N_m) = N_m <= 10_000 ? 1000 : 2000
     ILU_TAU = 1e-3
     GMRES_TOL = 1e-6
 
-    println("\n── Solver comparison (NF: 5λ+LU for N≤10k, 2λ+ILU for N>10k) ──")
+    println("\n── MLFMA solver ──")
     println("  Level          N     Solver        Asm(s)  Sol(s)  Iters  Backscatter  RMSE vs PO")
     println("  " * "─"^88)
 
@@ -142,82 +135,8 @@ else
         N_m = rwg_m.nedges
         v_m = assemble_excitation(m, rwg_m, pw_air)
 
-        # ── Direct solver ──
-        if N_m <= MAX_N_DIRECT
-            t_asm_d = @elapsed Z_m = assemble_Z_efie(m, rwg_m, k_air)
-            t_sol_d = @elapsed I_d = Z_m \ v_m
-
-            # Far-field on cut grid (1°)
-            G_d = radiation_vectors(m, rwg_m, grid_cuts, k_air)
-            E_ff_d = compute_farfield(G_d, Vector{ComplexF64}(I_d), NΩ_cuts)
-            σ_d_dB = 10 .* log10.(max.(bistatic_rcs(E_ff_d; E0=1.0), 1e-30))
-            bs_d = backscatter_rcs(E_ff_d, grid_cuts, Vec3(0.0, 0.0, -k_air); E0=1.0)
-
-            # RMSE on coarse grid
-            G_d_c = radiation_vectors(m, rwg_m, grid_coarse, k_air)
-            E_ff_d_c = compute_farfield(G_d_c, Vector{ComplexF64}(I_d), NΩ_coarse)
-            σ_d_c_dB = 10 .* log10.(max.(bistatic_rcs(E_ff_d_c; E0=1.0), 1e-30))
-            rmse_d = sqrt(sum((σ_d_c_dB .- σ_po_coarse_dB).^2) / NΩ_coarse)
-
-            bs_d_dB = round(10 * log10(max(bs_d.sigma, 1e-30)), digits=2)
-            println("  $(rpad(label, 14))  $(lpad(N_m, 5))  $(lpad("direct", 12))  " *
-                    "$(lpad(round(t_asm_d, digits=1), 6))  $(lpad(round(t_sol_d, digits=1), 6))      -  " *
-                    "$(lpad(bs_d_dB, 10)) dBsm  $(round(rmse_d, digits=2)) dB")
-
-            dlabel = "$label direct (N=$N_m)"
-            all_curves[dlabel] = σ_d_dB
-            push!(curve_order, dlabel)
-        else
-            println("  $(rpad(label, 14))  $(lpad(N_m, 5))  $(lpad("direct", 12))    SKIP (N > $MAX_N_DIRECT)")
-        end
-
-        # ── ACA + GMRES (only for 1λ mesh; too slow at λ/2) ──
-        MAX_N_ACA = 40_000
-        if N_m <= MAX_N_ACA
-            t_asm_i = @elapsed A_m = build_aca_operator(m, rwg_m, k_air;
-                leaf_size=32, eta=1.5, aca_tol=1e-6, max_rank=80)
-            cutoff = nf_cutoff_for(N_m)
-            fac = nf_fac_for(N_m)
-            println("    Building ACA NF preconditioner (cutoff=$(round(cutoff, digits=1))m, fac=$fac)...")
-            t_nf = @elapsed P_nf = build_nearfield_preconditioner(m, rwg_m, k_air, cutoff;
-                factorization=fac, ilu_tau=ILU_TAU)
-            fac_info = fac == :ilu ? "ilu(τ=$(ILU_TAU))" : "lu"
-            println("    NF: nnz=$(round(P_nf.nnz_ratio * 100, digits=1))%, $fac_info, build $(round(t_nf, digits=1))s")
-            t_sol_i = @elapsed begin
-                I_i, stats = solve_gmres(A_m, v_m; preconditioner=P_nf,
-                    tol=GMRES_TOL, maxiter=gmres_maxiter_for(N_m))
-            end
-
-            G_i = radiation_vectors(m, rwg_m, grid_cuts, k_air)
-            E_ff_i = compute_farfield(G_i, Vector{ComplexF64}(I_i), NΩ_cuts)
-            σ_i_dB = 10 .* log10.(max.(bistatic_rcs(E_ff_i; E0=1.0), 1e-30))
-            bs_i = backscatter_rcs(E_ff_i, grid_cuts, Vec3(0.0, 0.0, -k_air); E0=1.0)
-
-            rmse_str = ""
-            if N_m <= 50_000
-                G_i_c = radiation_vectors(m, rwg_m, grid_coarse, k_air)
-                E_ff_i_c = compute_farfield(G_i_c, Vector{ComplexF64}(I_i), NΩ_coarse)
-                σ_i_c_dB = 10 .* log10.(max.(bistatic_rcs(E_ff_i_c; E0=1.0), 1e-30))
-                rmse_i = sqrt(sum((σ_i_c_dB .- σ_po_coarse_dB).^2) / NΩ_coarse)
-                rmse_str = "$(round(rmse_i, digits=2)) dB"
-            else
-                rmse_str = "—"
-            end
-
-            bs_i_dB = round(10 * log10(max(bs_i.sigma, 1e-30)), digits=2)
-            println("  $(rpad(label, 14))  $(lpad(N_m, 5))  $(lpad("aca+gmres", 12))  " *
-                    "$(lpad(round(t_asm_i, digits=1), 6))  $(lpad(round(t_sol_i, digits=1), 6))  " *
-                    "$(lpad(stats.niter, 5))  $(lpad(bs_i_dB, 10)) dBsm  $rmse_str")
-
-            ilabel = "$label ACA (N=$N_m)"
-            all_curves[ilabel] = σ_i_dB
-            push!(curve_order, ilabel)
-        else
-            println("  $(rpad(label, 14))  $(lpad(N_m, 5))  $(lpad("aca+gmres", 12))    SKIP (N > $MAX_N_ACA)")
-        end
-
         # ── MLFMA + GMRES ──
-        if N_m >= MIN_N_MLFMA
+        begin
             println("    Building MLFMA operator...")
             t_mlfma = @elapsed A_mlfma = build_mlfma_operator(m, rwg_m, k_air;
                 leaf_lambda=LEAF_LAMBDA, verbose=true)
@@ -259,8 +178,6 @@ else
             mlabel = "$label MLFMA (N=$N_m)"
             all_curves[mlabel] = σ_m_dB
             push!(curve_order, mlabel)
-        else
-            println("  $(rpad(label, 14))  $(lpad(N_m, 5))  $(lpad("mlfma+gmres", 12))    SKIP (N < $MIN_N_MLFMA)")
         end
     end
 
@@ -299,18 +216,14 @@ else
     println("  φ=0° cut: $(length(phi0_idx)) points")
     println("  φ=90° cut: $(length(phi90_idx)) points")
 
-    # Color/dash scheme: direct=solid, ACA=dashed, MLFMA=dotted
+    # Color/dash scheme: PO=black solid, MLFMA=red solid
     mesh_colors = ["#d62728"]  # red for 1λ mesh
     style_map = Dict{String, NamedTuple{(:color, :width, :dash), Tuple{String, Int, String}}}()
     style_map["PO"] = (color="black", width=3, dash="solid")
     for (i, (_, label)) in enumerate(mesh_levels)
         N_m = build_rwg(mesh_levels[i][1]).nedges
-        dlabel = "$label direct (N=$N_m)"
-        ilabel = "$label ACA (N=$N_m)"
         mlabel = "$label MLFMA (N=$N_m)"
-        style_map[dlabel] = (color=mesh_colors[i], width=3, dash="solid")
-        style_map[ilabel] = (color=mesh_colors[i], width=2, dash="dash")
-        style_map[mlabel] = (color=mesh_colors[i], width=2, dash="dot")
+        style_map[mlabel] = (color=mesh_colors[min(i, length(mesh_colors))], width=2, dash="solid")
     end
 
     function make_rcs_plot(cut_idx, θ_deg, title_str)

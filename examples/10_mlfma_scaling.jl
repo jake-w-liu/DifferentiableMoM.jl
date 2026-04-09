@@ -155,8 +155,8 @@ for (m, label) in mesh_levels
 
     cutoff_a = nf_cutoff_for(N_m)
     fac_a = nf_fac_for(N_m)
-    t_pre_a = @elapsed P_nf_a = build_nearfield_preconditioner(m, rwg_m, k, cutoff_a;
-        factorization=fac_a, ilu_tau=ILU_TAU, mesh_precheck=false)
+    t_pre_a = @elapsed P_nf_a = build_nearfield_preconditioner(A_aca;
+        factorization=fac_a, ilu_tau=ILU_TAU)
 
     t_sol_a = @elapsed begin
         I_aca, stats_a = solve_gmres(A_aca, v_m; preconditioner=P_nf_a,

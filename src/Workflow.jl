@@ -199,10 +199,8 @@ function solve_scattering(mesh::TriMesh, freq_hz::Real, excitation;
                     P_nf = build_nearfield_preconditioner(Z, mesh, rwg, cutoff;
                                                            factorization=factorization)
                 elseif selected_method == :aca_gmres
-                    P_nf = build_nearfield_preconditioner(mesh, rwg, k, cutoff;
-                                                           quad_order=quad_order,
-                                                           factorization=factorization,
-                                                           mesh_precheck=false)
+                    P_nf = build_nearfield_preconditioner(A_aca;
+                                                           factorization=factorization)
                 end
             end
             verbose && println("  Preconditioner ($precond_used): $(round(t_precond, digits=3)) s, " *
