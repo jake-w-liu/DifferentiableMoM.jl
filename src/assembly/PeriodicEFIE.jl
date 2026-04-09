@@ -146,10 +146,25 @@ function _assemble_periodic_correction(mesh::TriMesh, rwg::RWGData, k,
     end
 
     CT = ComplexF64
+
+    # Precompute ΔG for all unique triangle pairs. ΔG is smooth everywhere
+    # (no singularity), so every pair is handled by standard quadrature.
+    # Shared triangle pairs across RWG functions are evaluated only once.
+    dG_cache = Array{CT, 4}(undef, Nq, Nq, Nt, Nt)
+    Threads.@threads for tm in 1:Nt
+        @inbounds for tn in 1:Nt
+            for qm in 1:Nq, qn in 1:Nq
+                dG_cache[qm, qn, tm, tn] =
+                    greens_periodic_correction(quad_pts[tm][qm], quad_pts[tn][qn], k, lattice)
+            end
+        end
+    end
+
+    inv_k2 = 1 / (k^2)
     Z_corr = zeros(CT, N, N)
 
-    @inbounds for m_idx in 1:N
-        for n_idx in 1:N
+    Threads.@threads for m_idx in 1:N
+        @inbounds for n_idx in 1:N
             val = zero(CT)
 
             for itm in 1:2
@@ -164,17 +179,14 @@ function _assemble_periodic_correction(mesh::TriMesh, rwg::RWGData, k,
                     dvn = div_vals[itn, n_idx]
                     fn_vals = itn == 1 ? rwg_vals[n_idx][1] : rwg_vals[n_idx][2]
 
-                    # Product quadrature with ΔG (smooth for all triangle pairs)
+                    dvmn_inv_k2 = conj(dvm) * dvn * inv_k2
                     for qm in 1:Nq
-                        rm = quad_pts[tm][qm]
                         fm = fm_vals[qm]
                         for qn in 1:Nq
-                            rn = quad_pts[tn][qn]
                             fn = fn_vals[qn]
-
-                            dG = greens_periodic_correction(rm, rn, k, lattice)
+                            dG = dG_cache[qm, qn, tm, tn]
                             vec_part = dot(fm, fn) * dG
-                            scl_part = conj(dvm) * dvn * dG / (k^2)
+                            scl_part = dvmn_inv_k2 * dG
                             weight = wq[qm] * wq[qn] * (2 * Am) * (2 * An)
                             val += (vec_part - scl_part) * weight
                         end

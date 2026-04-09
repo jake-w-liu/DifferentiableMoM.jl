@@ -79,7 +79,6 @@ let
               yaxis=attr(title="Bistatic RCS (dBsm)", range=[-40, 10]),
               legend=attr(x=0.65, y=0.95), margin=attr(l=60, r=30, t=60, b=50))
     savefig(p, joinpath(figdir, "09_flat_plate_rcs.png"); width=800, height=500)
-    println("\nPlot saved: 09_flat_plate_rcs.png")
 end
 
 println("\n" * "="^60)
