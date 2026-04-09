@@ -237,6 +237,125 @@ function _nearfield_triplets_spatial(centers::Vector{Vec3}, cutoff::Float64, get
     return I_idx, J_idx, V_val
 end
 
+"""
+Single-pass near-field triplet assembly with lazy Green's caching for EFIE.
+
+Iterates the spatial-hash neighbor structure and computes EFIE entries on
+the fly, but caches Green's quadrature matrices G[qm,qn] per unique
+(tm, tn) triangle pair so that shared pairs are evaluated only once.
+Self-cell and adjacent-cell terms bypass the cache entirely.
+"""
+function _nearfield_triplets_batched(cache::EFIEApplyCache, centers::Vector{Vec3},
+                                      cutoff::Float64)
+    N = length(centers)
+    N == 0 && return Int[], Int[], ComplexF64[]
+
+    if cutoff <= 0 || !isfinite(cutoff)
+        return _nearfield_triplets_spatial(centers, cutoff,
+                                            (m, n) -> _efie_entry(cache, m, n))
+    end
+
+    # Spatial hash
+    inv_cell = 1.0 / cutoff
+    buckets = Dict{NTuple{3,Int}, Vector{Int}}()
+    @inbounds for i in 1:N
+        key = _cell_key(centers[i], inv_cell)
+        push!(get!(() -> Int[], buckets, key), i)
+    end
+
+    cutoff2 = cutoff * cutoff
+    est_pairs = max(N, min(N * N, 27 * N))
+    I_idx = Int[];       sizehint!(I_idx, est_pairs)
+    J_idx = Int[];       sizehint!(J_idx, est_pairs)
+    V_val = ComplexF64[]; sizehint!(V_val, est_pairs)
+
+    Nq     = cache.Nq
+    inv_k2 = cache.inv_k2
+
+    # Lazy Green's cache: computed once per unique (tm, tn) pair
+    green_cache = Dict{Tuple{Int,Int}, Matrix{ComplexF64}}()
+
+    @inline function _get_greens(tm::Int, tn::Int)
+        val = get(green_cache, (tm, tn), nothing)
+        val !== nothing && return val
+        G_mat = Matrix{ComplexF64}(undef, Nq, Nq)
+        @inbounds for qm in 1:Nq, qn in 1:Nq
+            G_mat[qm, qn] = greens(cache.quad_pts[tm][qm], cache.quad_pts[tn][qn], cache.k)
+        end
+        green_cache[(tm, tn)] = G_mat
+        return G_mat
+    end
+
+    @inbounds for m in 1:N
+        cm = centers[m]
+        key = _cell_key(cm, inv_cell)
+        for dz in -1:1, dy in -1:1, dx in -1:1
+            key_n = (key[1] + dx, key[2] + dy, key[3] + dz)
+            n_list = get(buckets, key_n, nothing)
+            n_list === nothing && continue
+            for n in n_list
+                is_near = (m == n) || (let δ = cm - centers[n]; dot(δ, δ) end) <= cutoff2
+                is_near || continue
+
+                # Compute EFIE entry with cached Green's
+                val = zero(ComplexF64)
+                for itm in 1:2
+                    tm = cache.tri_ids[itm, m]
+                    Am = cache.areas[tm]
+                    dvm = cache.div_vals[itm, m]
+                    fm_vals = _rwg_vals(cache, m, itm)
+                    fm_vals_hi = _rwg_vals_hi(cache, m, itm)
+
+                    for itn in 1:2
+                        tn = cache.tri_ids[itn, n]
+                        An = cache.areas[tn]
+                        dvn = cache.div_vals[itn, n]
+                        fn_vals = _rwg_vals(cache, n, itn)
+                        fn_vals_hi = _rwg_vals_hi(cache, n, itn)
+
+                        if tm == tn
+                            val += _self_cell_cached(
+                                cache.mesh, tm,
+                                fm_vals_hi, fn_vals_hi,
+                                dvm, dvn,
+                                Am, cache.k, inv_k2,
+                                cache.wq_hi, cache.quad_pts_hi[tm])
+                        elseif _is_adjacent(cache, tm, tn)
+                            val += _adjacent_cell_cached(
+                                cache.mesh, tn,
+                                cache.quad_pts[tm], cache.quad_pts[tn],
+                                fm_vals, fn_vals,
+                                fm_vals_hi, fn_vals_hi,
+                                dvm, dvn, Am, An,
+                                cache.wq, cache.k, inv_k2,
+                                cache.wq_hi, cache.quad_pts_hi[tm], cache.quad_pts_hi[tn])
+                        else
+                            G_mat = _get_greens(tm, tn)
+                            dvmn_inv_k2 = conj(dvm) * dvn * inv_k2
+                            for qm in 1:Nq
+                                fm = fm_vals[qm]
+                                for qn in 1:Nq
+                                    G = G_mat[qm, qn]
+                                    vec_part = dot(fm, fn_vals[qn]) * G
+                                    scl_part = dvmn_inv_k2 * G
+                                    weight = cache.wq[qm] * cache.wq[qn] * (2*Am) * (2*An)
+                                    val += (vec_part - scl_part) * weight
+                                end
+                            end
+                        end
+                    end
+                end
+
+                push!(I_idx, m)
+                push!(J_idx, n)
+                push!(V_val, -1im * cache.omega_mu0 * val)
+            end
+        end
+    end
+
+    return I_idx, J_idx, V_val
+end
+
 function _build_diagonal_preconditioner_data(getvalue, N::Int, cutoff::Float64)
     diag_entries = Vector{ComplexF64}(undef, N)
     maxabs = 0.0
@@ -359,18 +478,46 @@ end
 """
     build_nearfield_preconditioner(A::MatrixFreeEFIEOperator, cutoff)
 
-Convenience overload for building a near-field preconditioner directly from
-the matrix-free EFIE operator cache.
+Build a near-field preconditioner from a matrix-free EFIE operator using
+batched Green's function evaluation.  Triangle-pair Green's matrices are
+precomputed once and reused across RWG pairs that share triangles.
 """
 function build_nearfield_preconditioner(A::MatrixFreeEFIEOperator, cutoff::Float64;
                                          neighbor_search::Symbol=:spatial,
                                          factorization::Symbol=:lu,
                                          ilu_tau::Float64=1e-3)
-    return build_nearfield_preconditioner(A, A.cache.mesh, A.cache.rwg, cutoff;
-        neighbor_search=neighbor_search,
-        factorization=factorization,
-        ilu_tau=ilu_tau,
-    )
+    cache = A.cache
+    N = cache.rwg.nedges
+
+    if factorization == :diag
+        return _build_diagonal_preconditioner_data(
+            (m, n) -> _efie_entry(cache, m, n), N, cutoff)
+    elseif factorization ∉ (:lu, :ilu)
+        error("Invalid factorization: $factorization (expected :lu, :ilu, or :diag)")
+    end
+
+    if neighbor_search ∉ (:spatial, :bruteforce)
+        error("Invalid neighbor_search: $neighbor_search (expected :spatial or :bruteforce)")
+    end
+
+    centers = rwg_centers(cache.mesh, cache.rwg)
+    I_idx, J_idx, V_val = if neighbor_search == :bruteforce
+        _nearfield_triplets_bruteforce(centers, cutoff,
+                                        (m, n) -> _efie_entry(cache, m, n))
+    else
+        _nearfield_triplets_batched(cache, centers, cutoff)
+    end
+
+    Z_nf = sparse(I_idx, J_idx, V_val, N, N)
+    nnz_ratio = nnz(Z_nf) / max(N * N, 1)
+
+    if factorization == :ilu
+        ilu_fac = IncompleteLU.ilu(Z_nf, τ = ilu_tau)
+        return ILUPreconditionerData(ilu_fac, cutoff, nnz_ratio, ilu_tau)
+    else
+        Z_nf_fac = lu(Z_nf)
+        return NearFieldPreconditionerData(Z_nf_fac, cutoff, nnz_ratio)
+    end
 end
 
 """
@@ -386,7 +533,6 @@ function build_nearfield_preconditioner(mesh::TriMesh, rwg::RWGData, k, cutoff::
                                          allow_boundary::Bool=true,
                                          require_closed::Bool=false,
                                          area_tol_rel::Float64=1e-12,
-                                         neighbor_search::Symbol=:spatial,
                                          factorization::Symbol=:lu,
                                          ilu_tau::Float64=1e-3)
     A = matrixfree_efie_operator(mesh, rwg, k;
@@ -398,7 +544,6 @@ function build_nearfield_preconditioner(mesh::TriMesh, rwg::RWGData, k, cutoff::
         area_tol_rel=area_tol_rel,
     )
     return build_nearfield_preconditioner(A, cutoff;
-        neighbor_search=neighbor_search,
         factorization=factorization,
         ilu_tau=ilu_tau,
     )
