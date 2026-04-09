@@ -181,7 +181,22 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
 
     inv4pi = 1.0 / (4π)
 
-    @inbounds for i in 1:Nobs
+    # Precompute triangle vertices to avoid repeated mesh lookups
+    V1_all = Vector{Vec3}(undef, Nt)
+    V2_all = Vector{Vec3}(undef, Nt)
+    V3_all = Vector{Vec3}(undef, Nt)
+    h_t_all = Vector{Float64}(undef, Nt)
+    @inbounds for t in 1:Nt
+        V1_all[t] = _mesh_vertex(mesh, mesh.tri[1, t])
+        V2_all[t] = _mesh_vertex(mesh, mesh.tri[2, t])
+        V3_all[t] = _mesh_vertex(mesh, mesh.tri[3, t])
+        h_t_all[t] = sqrt(2 * areas[t])
+    end
+
+    wq_sum_inv = 1.0 / sum(wq[qq] for qq in 1:Nq)
+
+    Threads.@threads for i in 1:Nobs
+        @inbounds begin
         robs = observation_points[i]
         Ex = 0.0 + 0im
         Ey = 0.0 + 0im
@@ -191,22 +206,12 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
             At = areas[t]
             divt = div_samples[t]
 
-            # Check distance from observation to this triangle
-            V1 = _mesh_vertex(mesh, mesh.tri[1, t])
-            V2 = _mesh_vertex(mesh, mesh.tri[2, t])
-            V3 = _mesh_vertex(mesh, mesh.tri[3, t])
+            V1 = V1_all[t]
+            V2 = V2_all[t]
+            V3 = V3_all[t]
             dist = _point_triangle_distance(robs, V1, V2, V3)
 
-            # Near-singular quadrature for the vector potential (G = exp(-ikR)/(4πR)).
-            # When the observation is very close to a triangle, the 1/R singularity
-            # in G causes standard quadrature to diverge. Use singularity subtraction:
-            # G = G_smooth + 1/(4πR), with the 1/(4πR) part integrated analytically.
-            #
-            # The scalar potential (∇G) uses standard quadrature always — its 1/R²
-            # singularity is integrable for off-surface points and does not diverge
-            # like 1/R does. Using the same quadrature path for ∇G at all distances
-            # avoids jitter from switching between standard and near-singular paths.
-            h_t = sqrt(2 * At)
+            h_t = h_t_all[t]
             if dist < h_t / Nq
                 # ── Vector potential: singularity subtraction ──
                 S = analytical_integral_1overR(robs, V1, V2, V3)
@@ -217,12 +222,10 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
                     Gs = greens_smooth(robs, rq, k)
                     Jq = J_samples[q, t]
 
-                    # Vector potential: smooth part only (G_smooth is bounded)
                     Ex += pref_vec * Jq[1] * (wt * Gs)
                     Ey += pref_vec * Jq[2] * (wt * Gs)
                     Ez += pref_vec * Jq[3] * (wt * Gs)
 
-                    # Scalar potential: standard quadrature (always)
                     if abs(divt) > 0.0
                         gradG = grad_greens(robs, rq, k)
                         Ex += pref_scl * divt * (wt * gradG[1])
@@ -236,7 +239,7 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
                 for q in 1:Nq
                     J_avg = J_avg + J_samples[q, t] * wq[q]
                 end
-                J_avg = J_avg * (1.0 / sum(wq[qq] for qq in 1:Nq))
+                J_avg = J_avg * wq_sum_inv
                 Ex += pref_vec * J_avg[1] * (inv4pi * S)
                 Ey += pref_vec * J_avg[2] * (inv4pi * S)
                 Ez += pref_vec * J_avg[3] * (inv4pi * S)
@@ -265,6 +268,7 @@ function _compute_nearfield_matrix(mesh::TriMesh, rwg::RWGData,
         E[1, i] = Ex
         E[2, i] = Ey
         E[3, i] = Ez
+        end  # @inbounds
     end
 
     return E

@@ -60,7 +60,7 @@ function radiation_vectors(mesh::TriMesh, rwg::RWGData, grid::SphGrid, k;
     xi, wq = tri_quad_rule(quad_order)
     Nq = length(wq)
 
-    # Precompute quad points and areas per triangle (avoids recomputation per basis)
+    # Precompute quad points and areas per triangle
     quad_pts = Vector{Vector{Vec3}}(undef, Nt)
     areas = Vector{Float64}(undef, Nt)
     @inbounds for t in 1:Nt
@@ -68,16 +68,31 @@ function radiation_vectors(mesh::TriMesh, rwg::RWGData, grid::SphGrid, k;
         areas[t] = triangle_area(mesh, t)
     end
 
-    # Precompute rhat Vec3 (avoids column-slice allocation in inner loop)
+    # Precompute rhat Vec3
     rhat_vec = Vector{Vec3}(undef, NΩ)
     @inbounds for q in 1:NΩ
         rhat_vec[q] = Vec3(grid.rhat[1, q], grid.rhat[2, q], grid.rhat[3, q])
     end
 
+    # Precompute phase exp(ik * rhat · rp) per (grid direction, triangle, quad point).
+    # This only depends on (rhat, rp), not on the basis function, so it is shared
+    # across all RWG functions touching the same triangle.
+    # Layout: phase_cache[q_dir, q_surf, t]
+    phase_cache = Array{ComplexF64, 3}(undef, NΩ, Nq, Nt)
+    Threads.@threads for t in 1:Nt
+        @inbounds for q_surf in 1:Nq
+            rp = quad_pts[t][q_surf]
+            for q_dir in 1:NΩ
+                phase_cache[q_dir, q_surf, t] = exp(1im * k * dot(rhat_vec[q_dir], rp))
+            end
+        end
+    end
+
+    # Assemble G_mat with parallelization over basis functions
     G_mat = zeros(ComplexF64, 3 * NΩ, N)
 
-    @inbounds for n in 1:N
-        for t in (rwg.tplus[n], rwg.tminus[n])
+    Threads.@threads for n in 1:N
+        @inbounds for t in (rwg.tplus[n], rwg.tminus[n])
             A = areas[t]
             pts = quad_pts[t]
 
@@ -88,7 +103,7 @@ function radiation_vectors(mesh::TriMesh, rwg::RWGData, grid::SphGrid, k;
 
                 for q_dir in 1:NΩ
                     rh = rhat_vec[q_dir]
-                    phase = exp(1im * k * dot(rh, rp))
+                    phase = phase_cache[q_dir, q_surf, t]
 
                     contrib = fn * (wt * phase)
                     rh_cross_N_cross = rh * dot(rh, contrib) - contrib
