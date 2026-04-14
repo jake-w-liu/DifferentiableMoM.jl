@@ -1,0 +1,7 @@
+[deps]
+DifferentiableMoM = "23e8cd96-b521-4dc5-8732-25c09bc9e688"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+
+[compat]
+Documenter = "1"
+julia = "1.10"
