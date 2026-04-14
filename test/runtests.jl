@@ -910,8 +910,26 @@ function crossval_metrics(
     )
 end
 
-if !isfile(joinpath(DATADIR, "convergence_study.csv"))
-    println("  SKIPPED (data files not found — run examples first)")
+paper_metric_inputs = [
+    joinpath(DATADIR, "convergence_study.csv"),
+    joinpath(DATADIR, "gradient_verification.csv"),
+    joinpath(DATADIR, "robustness_sweep.csv"),
+    joinpath(DATADIR, "beam_steer_farfield.csv"),
+    joinpath(DATADIR, "bempp_pec_farfield.csv"),
+    joinpath(DATADIR, "julia_impedance_farfield.csv"),
+    joinpath(DATADIR, "bempp_impedance_farfield.csv"),
+]
+imp_beam_csv = joinpath(DATADIR, "impedance_validation_matrix_summary.csv")
+imp_beam_csv_alt = joinpath(DATADIR, "impedance_validation_matrix_summary_paper_default.csv")
+
+missing_paper_metric_inputs = [path for path in paper_metric_inputs if !isfile(path)]
+if !(isfile(imp_beam_csv) || isfile(imp_beam_csv_alt))
+    push!(missing_paper_metric_inputs, imp_beam_csv)
+end
+
+if !isempty(missing_paper_metric_inputs)
+    missing_names = join(basename.(missing_paper_metric_inputs), ", ")
+    println("  SKIPPED (optional paper-consistency artifacts not found: $missing_names)")
 else
 conv = CSV.read(joinpath(DATADIR, "convergence_study.csv"), DataFrame)
 grad = CSV.read(joinpath(DATADIR, "gradient_verification.csv"), DataFrame)
@@ -935,9 +953,8 @@ df_pec_bempp = CSV.read(joinpath(DATADIR, "bempp_pec_farfield.csv"), DataFrame)
 df_imp_julia = CSV.read(joinpath(DATADIR, "julia_impedance_farfield.csv"), DataFrame)
 df_imp_bempp = CSV.read(joinpath(DATADIR, "bempp_impedance_farfield.csv"), DataFrame)
 
-imp_beam_csv = joinpath(DATADIR, "impedance_validation_matrix_summary.csv")
 if !isfile(imp_beam_csv)
-    imp_beam_csv = joinpath(DATADIR, "impedance_validation_matrix_summary_paper_default.csv")
+    imp_beam_csv = imp_beam_csv_alt
 end
 df_imp_beam = CSV.read(imp_beam_csv, DataFrame)
 

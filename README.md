@@ -49,9 +49,6 @@ julia --project=. examples/12_plate_rcs_stl_roundtrip.jl    # STL mesh I/O round
 julia --project=. examples/13_sphere_rcs_optimization.jl    # sphere RCS optimization
 ```
 
-`examples/demo_aircraft.obj` is a built-in moderate-detail aircraft mesh
-so the workflow runs out-of-the-box without large external assets.
-
 ## Minimal Usage
 
 ```julia
