@@ -382,7 +382,7 @@ If verification passes at random `theta0` but fails at `theta_opt`:
 | **Convergence tracing** | `Vector{NamedTuple{(:iter, :J, :gnorm)}}` | `src/optimization/Optimize.jl` | 20–30 |
 | **Gradient verification** | `verify_gradient` | `src/optimization/Verification.jl` | 42–86 |
 
-**Complete example:** `examples/04_beam_steering.jl` (297 lines) – includes all steps above plus CSV output and plotting.
+**Complete example:** `examples/03_beamsteering_physical_unitcell.jl` (297 lines) – includes the optimization workflow above. For packaged CSV artifacts and consistency inputs, run `validation/paper/run_beam_steering_case.jl`.
 
 ---
 

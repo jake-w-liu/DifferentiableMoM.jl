@@ -139,7 +139,7 @@ println("Smallest singular value: $(cond_info.sv_min)")
 
 ### 3.1 Complete Validation Script
 
-The convergence study example (`examples/01_pec_plate_basics.jl`) demonstrates systematic checks across mesh refinement:
+The convergence study driver (`validation/paper/run_convergence_study.jl`) demonstrates systematic checks across mesh refinement:
 
 ```julia
 # 1. Solve EFIE
@@ -281,9 +281,9 @@ end
 
 ### 6.2 Example Scripts
 
-- **Convergence study**: `examples/01_pec_plate_basics.jl`
+- **Convergence study**: `validation/paper/run_convergence_study.jl`
 - **Paper consistency aggregation**: `validation/paper/generate_consistency_report.jl`
-- **Sphere benchmark**: `examples/02_pec_sphere_mie.jl`
+- **Sphere benchmark**: `examples/04_pec_sphere_mie.jl`
 - **Near-/total-field benchmark**: `examples/21_near_total_field_rayleigh_sphere.jl`
 
 ---
@@ -304,7 +304,7 @@ end
 ### 7.2 Intermediate Level
 
 3. **Mesh convergence study**:
-   - Reproduce the convergence study from `01_pec_plate_basics.jl`
+   - Reproduce the convergence study from `validation/paper/run_convergence_study.jl`
    - Plot energy ratio vs. mesh density
    - Verify condition number growth: $\kappa \sim O(h^{-p})$
 

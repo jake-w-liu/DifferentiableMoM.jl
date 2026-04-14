@@ -1,15 +1,17 @@
 # Bempp-cl Cross-Validation Scripts
 
-This folder provides an independent PEC full-wave reference using `bempp-cl`,
-then compares it against Julia outputs in `data/beam_steer_farfield.csv`.
+This folder provides independent `bempp-cl` cross-validation workflows for the
+package beam-steering study, using Julia-generated reference artifacts in
+`data/`.
 
 ## Scope
 
-- Implemented here: PEC cross-validation of far-field directivity.
-- Not implemented here: impedance-sheet optimization in Bempp.
+- Implemented here: PEC far-field cross-validation, single-case impedance
+  cross-validation, impedance validation matrices, convention sweeps, and
+  operator-aligned impedance benchmarks.
 
-The goal is to add an independent-solver check for the PEC baseline used by the
-paper's beam-steering study.
+The goal is to add independent-solver checks for the public beam-steering
+artifacts used by the paper consistency workflow.
 
 ## Prerequisites
 
@@ -28,13 +30,20 @@ pip install -r validation/bempp/requirements.txt
 
 From project root (`DifferentiableMoM.jl/`):
 
-1) Generate Bempp PEC reference:
+1) Generate the Julia beam-steering reference artifacts used by the PEC and
+impedance comparisons:
+
+```bash
+julia --project=. validation/paper/run_beam_steering_case.jl
+```
+
+2) Generate Bempp PEC reference:
 
 ```bash
 python validation/bempp/run_pec_cross_validation.py
 ```
 
-2) Compare Bempp vs Julia PEC far field:
+3) Compare Bempp vs Julia PEC far field:
 
 ```bash
 python validation/bempp/compare_pec_to_julia.py

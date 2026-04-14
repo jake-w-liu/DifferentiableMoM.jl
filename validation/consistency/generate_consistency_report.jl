@@ -6,6 +6,38 @@ using Dates
 using Printf
 using Statistics
 
+const REQUIRED_INPUTS = [
+    ("convergence_study.csv", "julia --project=. validation/paper/run_convergence_study.jl"),
+    ("gradient_verification.csv", "julia --project=. validation/paper/run_convergence_study.jl"),
+    ("robustness_sweep.csv", "julia --project=. validation/robustness/run_robustness_sweep.jl"),
+    ("cost_scaling.csv", "julia --project=. validation/scaling/run_cost_scaling.jl"),
+    ("beam_steer_trace.csv", "julia --project=. validation/paper/run_beam_steering_case.jl"),
+    ("beam_steer_cut_phi0.csv", "julia --project=. validation/paper/run_beam_steering_case.jl"),
+    ("beam_steer_farfield.csv", "julia --project=. validation/paper/run_beam_steering_case.jl"),
+    ("beam_steer_impedance.csv", "julia --project=. validation/paper/run_beam_steering_case.jl"),
+    ("bempp_pec_farfield.csv", "python validation/bempp/run_pec_cross_validation.py"),
+    ("bempp_impedance_farfield.csv", "python validation/bempp/run_impedance_validation_matrix.py"),
+    ("julia_impedance_farfield.csv", "python validation/bempp/run_impedance_validation_matrix.py"),
+]
+
+function require_inputs(datadir::AbstractString)
+    missing = String[]
+    for (filename, command) in REQUIRED_INPUTS
+        path = joinpath(datadir, filename)
+        isfile(path) || push!(missing, "  - $(filename)  <- run `$(command)`")
+    end
+
+    imp_matrix_csv = joinpath(datadir, "impedance_validation_matrix_summary.csv")
+    imp_matrix_csv_alt = joinpath(datadir, "impedance_validation_matrix_summary_paper_default.csv")
+    if !(isfile(imp_matrix_csv) || isfile(imp_matrix_csv_alt))
+        push!(missing, "  - impedance_validation_matrix_summary.csv  <- run `python validation/bempp/run_impedance_validation_matrix.py`")
+    end
+
+    isempty(missing) || error(
+        "Missing required validation artifacts:\n" * join(missing, "\n")
+    )
+end
+
 function nearest_theta_stats(theta_deg::AbstractVector{<:Real}, values::AbstractVector{<:Real}, target_deg::Float64)
     theta_unique = unique(theta_deg)
     nearest = theta_unique[argmin(abs.(theta_unique .- target_deg))]
@@ -217,6 +249,7 @@ function main()
     out_md = joinpath(datadir, "paper_consistency_report.md")
     out_csv = joinpath(datadir, "paper_metrics_snapshot.csv")
 
+    require_inputs(datadir)
     metrics = compute_paper_metrics(datadir)
     checks = consistency_checks(metrics)
     commit = git_short_commit(repo_root)

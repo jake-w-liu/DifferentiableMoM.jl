@@ -5,10 +5,10 @@
 #
 # No MATLAB required — the POFacets algorithm is faithfully transliterated.
 #
-# Run: julia --project=. validation/validate_po_vs_pofacets.jl
+# Run: julia --project=. validation/po/validate_po_vs_pofacets.jl
 
-push!(LOAD_PATH, joinpath(@__DIR__, "..", "src"))
-include(joinpath(@__DIR__, "..", "src", "DifferentiableMoM.jl"))
+push!(LOAD_PATH, joinpath(@__DIR__, "..", "..", "src"))
+include(joinpath(@__DIR__, "..", "..", "src", "DifferentiableMoM.jl"))
 using .DifferentiableMoM
 using LinearAlgebra
 

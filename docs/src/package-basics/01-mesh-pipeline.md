@@ -397,7 +397,7 @@ I_coarse = solve_forward(Z, v)
 
 - **Mesh repair + coarsening demonstration**: `examples/06_aircraft_rcs.jl`
 - **STL roundtrip and mesh handling**: `examples/12_plate_rcs_stl_roundtrip.jl`
-- **Sphere benchmark mesh flow**: `examples/02_pec_sphere_mie.jl`
+- **Sphere benchmark mesh flow**: `examples/04_pec_sphere_mie.jl`
 
 ### 6.3 Supporting Functions
 

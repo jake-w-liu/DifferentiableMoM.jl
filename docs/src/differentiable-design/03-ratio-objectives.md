@@ -518,7 +518,7 @@ which is a generalized eigenvalue problem. The gradient‑based approach iterati
 - **`src/optimization/Adjoint.jl`** – Adjoint solves `solve_adjoint` and gradient assembly utilities.
 - **`src/optimization/QMatrix.jl`** – Construction of $\mathbf{Q}_t$ and $\mathbf{Q}_{\mathrm{tot}}$ matrices (`build_Q`, masks via `cap_mask` or custom logical masks).
 - **`src/solver/Solve.jl`** – Forward solve and conditioned system preparation.
-- **`examples/04_beam_steering.jl`** – Complete beam‑steering example.
+- **`examples/03_beamsteering_physical_unitcell.jl`** – Complete beam‑steering example.
 - **`test/runtests.jl`** – Verification script for ratio‑objective gradients.
 
 ---

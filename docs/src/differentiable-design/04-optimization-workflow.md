@@ -403,7 +403,7 @@ Use this checklist when an optimization fails or behaves unexpectedly:
 - **`src/assembly/Impedance.jl`** – Patch mass matrices and impedance assembly.
 - **`src/optimization/QMatrix.jl`** – Objective matrix construction.
 - **`src/postprocessing/Visualization.jl`** – Plotting utilities (`plot_mesh_wireframe`, `plot_mesh_comparison`, `save_mesh_preview`).
-- **`examples/04_beam_steering.jl`** – Complete beam‑steering example and demonstration of the full workflow.
+- **`examples/03_beamsteering_physical_unitcell.jl`** – Complete beam‑steering example and demonstration of the full workflow.
 
 ---
 

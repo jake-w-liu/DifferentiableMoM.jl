@@ -62,12 +62,12 @@ where $\Delta\text{dB}_i = 10\log_{10}(\sigma_{\text{MoM},i}) - 10\log_{10}(\sig
 ### 2.1 Running the Benchmark
 
 ```bash
-julia --project=. examples/02_pec_sphere_mie.jl
+julia --project=. examples/04_pec_sphere_mie.jl
 ```
 
 This example script currently runs with built-in parameters (icosphere geometry,
 radius, frequency). For custom sweeps, edit `a`, `freq`, and `subdivisions`
-inside `examples/02_pec_sphere_mie.jl`.
+inside `examples/04_pec_sphere_mie.jl`.
 
 ### 2.2 Reported Outputs
 
@@ -214,7 +214,7 @@ Key algorithms:
 - **Angular functions**: Recurrence for $\pi_n(\mu)$, $\tau_n(\mu)$
 - **Vector scattering**: Coordinate transformations for arbitrary incidence/observation
 
-### 5.2 Benchmark Script (`examples/02_pec_sphere_mie.jl`)
+### 5.2 Benchmark Script (`examples/04_pec_sphere_mie.jl`)
 
 Workflow:
 1. **Mesh generation/loading**: Fallback icosphere or custom OBJ
@@ -309,7 +309,7 @@ a_std = std(radii)
 ### 7.1 Basic Level
 
 1. **Run benchmark with default settings**:
-   - Execute `julia --project=. examples/02_pec_sphere_mie.jl`
+   - Execute `julia --project=. examples/04_pec_sphere_mie.jl`
    - Examine generated CSV files and plot
    - Verify MAE < 1.5 dB for fallback mesh
 
@@ -357,7 +357,7 @@ a_std = std(radii)
   - `mie_s1s2_pec`, `mie_bistatic_rcs_pec`
   - Internal: `_sph_bessel_jy_arrays`, `_mie_nmax`
 
-- **Benchmark script**: `examples/02_pec_sphere_mie.jl`
+- **Benchmark script**: `examples/04_pec_sphere_mie.jl`
   - Complete workflow from mesh to error metrics
   - Fallback icosphere generation
   - Radius estimation and validation
@@ -367,7 +367,7 @@ a_std = std(radii)
 
 ### 8.2 Supporting Scripts
 
-- **Sphere RCS example**: `examples/02_pec_sphere_mie.jl`
+- **Sphere RCS example**: `examples/04_pec_sphere_mie.jl`
 - **Visualization utilities**: `src/postprocessing/Visualization.jl`
 
 ### 8.3 Output Artifacts

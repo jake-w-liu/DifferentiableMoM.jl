@@ -516,8 +516,8 @@ Combine with other techniques:
 
 ### 6.3 Example Scripts
 
-- **Forward solve / convergence**: `examples/01_pec_plate_basics.jl`
-- **Beam objective workflow**: `examples/04_beam_steering.jl`
+- **Forward solve / convergence**: `validation/paper/run_convergence_study.jl`
+- **Beam objective workflow**: `examples/03_beamsteering_physical_unitcell.jl`
 - **Near-/total-field validation**: `examples/21_near_total_field_rayleigh_sphere.jl`
 - **Complex mesh forward solve**: `examples/06_aircraft_rcs.jl`
 

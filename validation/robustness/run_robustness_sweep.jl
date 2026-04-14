@@ -50,7 +50,12 @@ function main()
     partition = PatchPartition(collect(1:Nt), Nt)
     Mp = precompute_patch_mass(mesh, rwg, partition; quad_order=3)
 
-    df_imp = CSV.read(joinpath(DATADIR, "beam_steer_impedance.csv"), DataFrame)
+    imp_path = joinpath(DATADIR, "beam_steer_impedance.csv")
+    isfile(imp_path) || error(
+        "Missing $(basename(imp_path)). Run " *
+        "`julia --project=. validation/paper/run_beam_steering_case.jl` first."
+    )
+    df_imp = CSV.read(imp_path, DataFrame)
     theta_opt = Vector{Float64}(df_imp.theta_opt)
     @assert length(theta_opt) == Nt
 
@@ -153,4 +158,3 @@ function main()
 end
 
 main()
-

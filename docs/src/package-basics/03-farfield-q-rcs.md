@@ -292,7 +292,7 @@ where:
 J = compute_objective(I, Q)  # = real(dot(I, Q * I))
 ```
 
-**Ratio objective:** For beam‑steering applications, the directivity fraction $J = (\mathbf{I}^\dagger \mathbf{Q}_{\text{target}} \mathbf{I}) / (\mathbf{I}^\dagger \mathbf{Q}_{\text{total}} \mathbf{I})$ is evaluated by computing both quadratic forms separately. The gradient is assembled via the quotient rule using two adjoint solves (see Section 1.5). The beam‑steering example `examples/04_beam_steering.jl` demonstrates this workflow.
+**Ratio objective:** For beam‑steering applications, the directivity fraction $J = (\mathbf{I}^\dagger \mathbf{Q}_{\text{target}} \mathbf{I}) / (\mathbf{I}^\dagger \mathbf{Q}_{\text{total}} \mathbf{I})$ is evaluated by computing both quadratic forms separately. The gradient is assembled via the quotient rule using two adjoint solves (see Section 1.5). The beam‑steering example `examples/03_beamsteering_physical_unitcell.jl` demonstrates this workflow.
 
 ### 2.5 RCS Computation
 
@@ -542,7 +542,7 @@ println("Mean absolute error: $mae dB")
 
 ### 3.5 Beam-Steering Optimization Workflow
 
-The complete beam‑steering inverse‑design pipeline is implemented in `examples/04_beam_steering.jl`. This example optimizes a reactive impedance sheet on a $4\lambda\times4\lambda$ plate to steer a normally‑incident plane wave to $\theta_s = 30^\circ$ off broadside.
+The complete beam‑steering inverse‑design pipeline is implemented in `examples/03_beamsteering_physical_unitcell.jl`. This example optimizes a reactive impedance sheet on a $4\lambda\times4\lambda$ plate to steer a normally‑incident plane wave to $\theta_s = 30^\circ$ off broadside.
 
 **Key steps from the script:**
 
@@ -560,7 +560,7 @@ The complete beam‑steering inverse‑design pipeline is implemented in `exampl
 
 **Running the example:**
 ```bash
-julia --project=. examples/04_beam_steering.jl
+julia --project=. examples/03_beamsteering_physical_unitcell.jl
 ```
 Output CSV files are saved to `data/` for further analysis.
 
@@ -800,8 +800,8 @@ end
 
 ### 7.2 Example Scripts
 
-- **Sphere benchmark**: `examples/02_pec_sphere_mie.jl`
-- **Beam steering optimization**: `examples/04_beam_steering.jl`
+- **Sphere benchmark**: `examples/04_pec_sphere_mie.jl`
+- **Beam steering optimization**: `examples/03_beamsteering_physical_unitcell.jl`
 - **Near-/total-field Rayleigh benchmark**: `examples/21_near_total_field_rayleigh_sphere.jl`
 - **Platform RCS**: `examples/06_aircraft_rcs.jl`
 

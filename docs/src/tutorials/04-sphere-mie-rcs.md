@@ -96,7 +96,7 @@ println("Target ka = $ka_target → radius a = $(round(a*100, digits=2)) cm")
 
 ### 2) Generate or Import a Sphere Mesh
 
-The packaged benchmark script `examples/02_pec_sphere_mie.jl` includes a local
+The packaged benchmark script `examples/04_pec_sphere_mie.jl` includes a local
 fallback icosphere generator (subdivided icosahedron). For manual workflows, you
 can either reuse that helper or supply an externally generated OBJ file.
 
@@ -228,13 +228,13 @@ savefig("sphere_mie_comparison.png")
 For a complete benchmark that automates all steps and writes CSV outputs, use the provided example:
 
 ```bash
-julia --project=. examples/02_pec_sphere_mie.jl
+julia --project=. examples/04_pec_sphere_mie.jl
 ```
 
 Optional arguments: provide an external OBJ mesh and/or frequency in GHz.
 
 ```bash
-julia --project=. examples/02_pec_sphere_mie.jl
+julia --project=. examples/04_pec_sphere_mie.jl
 ```
 
 Edit `a`, `freq`, and `subdivisions` inside the script for custom studies.
@@ -266,7 +266,7 @@ For $ka = 10$, a mesh with ~1000 triangles typically yields MAE ≈ 0.5 dB.
 
 ### Convergence Testing
 
-To verify implementation correctness, repeat with increasing mesh density and observe error reduction. The error should decay as $h^p$ where $h$ is the mean triangle edge length and $p ≈ 1$–2 (depending on quadrature order). Use the script `examples/02_pec_sphere_mie.jl` with different `subdivisions` values.
+To verify implementation correctness, repeat with increasing mesh density and observe error reduction. The error should decay as $h^p$ where $h$ is the mean triangle edge length and $p ≈ 1$–2 (depending on quadrature order). Use the script `examples/04_pec_sphere_mie.jl` with different `subdivisions` values.
 
 ---
 
@@ -304,14 +304,14 @@ To verify implementation correctness, repeat with increasing mesh density and ob
 | Task | Function | Source File | Key Lines |
 |------|----------|-------------|-----------|
 | **Mie RCS** | `mie_bistatic_rcs_pec(k, a, khat_inc, pol, rhat)` | `src/postprocessing/Mie.jl` | 30–80 |
-| **Sphere mesh generation** | `write_obj_mesh` (internal) | `examples/02_pec_sphere_mie.jl` | 27–83 |
-| **Radius estimation** | `estimate_sphere_radius` (internal) | `examples/02_pec_sphere_mie.jl` | 85–89 |
+| **Sphere mesh generation** | `write_obj_mesh` (internal) | `examples/04_pec_sphere_mie.jl` | 27–83 |
+| **Radius estimation** | `estimate_sphere_radius` (internal) | `examples/04_pec_sphere_mie.jl` | 85–89 |
 | **Bistatic RCS** | `bistatic_rcs(E_ff; E0)` | `src/postprocessing/Diagnostics.jl` | 60–80 |
 | **Backscatter RCS** | `backscatter_rcs(E_ff, grid, khat_inc; E0)` | `src/postprocessing/Diagnostics.jl` | 100–120 |
 | **Far‑field computation** | `compute_farfield(G_mat, I, NΩ)` | `src/postprocessing/FarField.jl` | 200–220 |
-| **Complete benchmark** | `02_pec_sphere_mie.jl` | `examples/` | full script |
+| **Complete benchmark** | `04_pec_sphere_mie.jl` | `examples/` | full script |
 
-**Standalone MoM sphere RCS** (no Mie comparison): `examples/02_pec_sphere_mie.jl`.
+**Standalone MoM sphere RCS** (no Mie comparison): `examples/04_pec_sphere_mie.jl`.
 
 ---
 

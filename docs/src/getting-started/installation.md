@@ -90,9 +90,9 @@ Documenter output is generated under `docs/build/`.
 From the repository root:
 
 ```bash
-julia --project=. examples/04_beam_steering.jl
+julia --project=. examples/03_beamsteering_physical_unitcell.jl
 julia --project=. examples/05_solver_methods.jl
-julia --project=. examples/02_pec_sphere_mie.jl
+julia --project=. examples/04_pec_sphere_mie.jl
 ```
 
 Generated numeric artifacts are written into `data/` and figures into `figs/`.
