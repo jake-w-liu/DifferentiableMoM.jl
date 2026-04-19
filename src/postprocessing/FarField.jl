@@ -3,7 +3,7 @@
 # E∞(r̂) = (ik η₀)/(4π) r̂ × [r̂ × ∫ J(r') exp(ik r̂·r') dS']
 #        = Σ_n I_n g_n(r̂)
 
-export make_sph_grid, radiation_vectors, compute_farfield
+export make_sph_grid, radiation_vectors, compute_farfield, incident_farfield
 
 """
     make_sph_grid(Ntheta, Nphi)
@@ -130,5 +130,140 @@ function compute_farfield(G_mat::Matrix{ComplexF64}, I_coeffs::Vector{ComplexF64
     # G_mat is (3*NΩ, N), I_coeffs is (N,)
     E_flat = G_mat * I_coeffs   # (3*NΩ,)
     E = reshape(E_flat, 3, NΩ)
+    return E
+end
+
+# ══════════════════════════════════════════════════════════════════════
+# Incident-field far-field amplitudes
+# ══════════════════════════════════════════════════════════════════════
+#
+# `incident_farfield(excitation, r_hat, k)` returns the asymptotic
+# amplitude `E_inc^∞(r̂)` such that `E_inc(r·r̂) ~ E_inc^∞(r̂)·e^{-ikr}/r`
+# as `r → ∞`. Summed with `compute_farfield` (scattered contribution
+# from solved currents) this gives the **total** far-field pattern of a
+# finite scatterer illuminated by a point-like source — the true
+# `r → ∞` limit, not a workaround evaluated at large finite `r`.
+#
+# `PlaneWave` has no 1/r decay in the incident field and is excluded
+# (its "far-field" contribution is a delta function in the incident
+# direction — not a radiation pattern).
+
+"""
+    incident_farfield(excitation, r_hat, k) -> CVec3
+
+Asymptotic amplitude of the incident electric field radiated by
+`excitation` in direction `r̂`, such that
+`E_inc(r·r̂) ~ incident_farfield(...)·exp(-ikr)/r` as `r → ∞`.
+"""
+function incident_farfield(excitation::AbstractExcitation, ::Vec3, ::Real)
+    error("incident_farfield is not defined for excitation type $(typeof(excitation)).")
+end
+
+function incident_farfield(mono::MonopoleExcitation, r_hat::Vec3, k::Real)
+    # Closed-form far-field `E_θ^∞(r̂) = iηk sinθ/(4π) · θ̂ · J`
+    # with J the wire-current phase integral, computed by Simpson over
+    # the appropriate axial range for each source model:
+    #   include_image=true  : dipole-plus-image on z' ∈ [-h, +h]
+    #   include_image=false : physical half-wire on z' ∈ [ 0, +h]
+    # Returns zero below the ground plane when image theory is in
+    # effect (cosθ < 0), and at the axial null (sinθ = 0).
+    η0 = 376.730313668
+    rh = Vec3(r_hat) / max(norm(Vec3(r_hat)), 1e-30)
+    ax = mono.axis
+    cosθ = clamp(dot(rh, ax), -1.0, 1.0)
+
+    mono.include_image && cosθ < 0 &&
+        return CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+
+    sinθ = sqrt(max(0.0, 1.0 - cosθ^2))
+    sinθ > 1e-12 || return CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+    θ_hat = (cosθ * rh - Vec3(ax)) / sinθ
+
+    I_0 = -1im * 2π * mono.amplitude / η0
+    h = mono.height
+    λ = 2π / k
+    z_lo = mono.include_image ? -h : 0.0
+    span = h - z_lo
+    N = max(64, 2 * Int(ceil(50.0 * span / λ)))
+    iseven(N) || (N += 1)
+    dz = span / N
+
+    integ = 0.0 + 0im
+    @inbounds for i in 0:N
+        z = z_lo + i * dz
+        I_z = I_0 * sin(k * (h - abs(z)))  # abs(z) reduces to z for z ≥ 0
+        w = (i == 0 || i == N) ? 1.0 : (isodd(i) ? 4.0 : 2.0)
+        integ += w * I_z * exp(1im * k * z * cosθ)
+    end
+    integ *= dz / 3.0
+
+    Eθ_far = 1im * η0 * k * sinθ / (4π) * integ
+    phase = exp(1im * k * dot(rh, Vec3(mono.position)))
+    return CVec3(Eθ_far * θ_hat) * phase
+end
+
+function incident_farfield(dipole::DipoleExcitation, r_hat::Vec3, k::Real)
+    # Cross-checked against `dipole_incident_field` in this file (keep the
+    # 1/R term, multiply by R·exp(+ikR)):
+    #   Electric: E∞(r̂) = +k²/(4πε₀) · (r̂×p)×r̂ = +k²/(4πε₀) · perp(p)
+    #   Magnetic: E∞(r̂) = +iη₀·k²/(4π) · (m × r̂)
+    rh = Vec3(r_hat) / max(norm(Vec3(r_hat)), 1e-30)
+    ϵ0 = 8.854187817e-12; μ0 = 4π * 1e-7
+    η0 = sqrt(μ0 / ϵ0)
+    if dipole.type == :electric
+        perp = dipole.moment - rh * dot(rh, dipole.moment)
+        E_far = (k^2 / (4π * ϵ0)) * perp
+    elseif dipole.type == :magnetic
+        E_far = 1im * (η0 * k^2 / (4π)) * cross(dipole.moment, rh)
+    else
+        error("Dipole type must be :electric or :magnetic, got $(dipole.type).")
+    end
+    phase = exp(1im * k * dot(rh, dipole.position))
+    return CVec3(E_far) * phase
+end
+
+function incident_farfield(loop::LoopExcitation, r_hat::Vec3, k::Real)
+    # A small circular current loop with current I and radius a radiates
+    # in the far field as an equivalent magnetic dipole with moment
+    # m = I·π·a²·n̂ placed at the loop centre.
+    m = loop.current * π * loop.radius^2 * loop.normal
+    dip = DipoleExcitation(loop.center, m, loop.normal, :magnetic, loop.frequency)
+    return incident_farfield(dip, r_hat, k)
+end
+
+function incident_farfield(pat::PatternFeedExcitation, r_hat::Vec3, k::Real)
+    # `PatternFeedExcitation` is already a tabulated far-field:
+    # E_inc(r·r̂) ~ (Fθ(θ,ϕ)·θ̂ + Fϕ(θ,ϕ)·ϕ̂) · exp(-ikR)/R
+    # (with R = |r − phase_center|). At the far field, R ≈ r − r̂·pc,
+    # so r·E·exp(+ikr) = E_far(r̂) · exp(+ik·r̂·phase_center).
+    pat.frequency > 0 || error("Pattern feed frequency must be positive.")
+    rh = Vec3(r_hat) / max(norm(Vec3(r_hat)), 1e-30)
+
+    θ = acos(clamp(rh[3], -1.0, 1.0))
+    ϕ = atan(rh[2], rh[1])
+    if ϕ < 0
+        ϕ += 2π
+    end
+    _, eθ, eϕ = _spherical_basis(θ, ϕ)
+
+    Fθ = _pattern_interp(pat, pat.Ftheta, θ, ϕ)
+    Fϕ = _pattern_interp(pat, pat.Fphi, θ, ϕ)
+    if pat.convention == :exp_minus_iwt
+        Fθ = conj(Fθ)
+        Fϕ = conj(Fϕ)
+    end
+
+    E_far = Fθ * eθ + Fϕ * eϕ
+    phase = exp(1im * k * dot(rh, pat.phase_center))
+    return CVec3(E_far) * phase
+end
+
+function incident_farfield(multi::MultiExcitation, r_hat::Vec3, k::Real)
+    length(multi.excitations) == length(multi.weights) ||
+        error("MultiExcitation has mismatched excitation/weight lengths.")
+    E = CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+    for (exc, w) in zip(multi.excitations, multi.weights)
+        E = E + w * incident_farfield(exc, r_hat, k)
+    end
     return E
 end

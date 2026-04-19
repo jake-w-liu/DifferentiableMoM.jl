@@ -88,26 +88,25 @@ end
 """
     MonopoleExcitation
 
-Center-fed linear monopole of length `height` standing at `position` on a
-(notional) infinite PEC ground plane with axis along the unit vector `axis`
-(pointing away from the ground). The incident field is modeled rigorously via
-image theory: the physical monopole plus its image forms an axial dipole of
-total length `2·height` carrying the sinusoidal current
+Center-fed linear monopole of length `height` at `position` with axis along
+unit vector `axis`. Two modes are supported via `include_image`:
 
-    I(z') = I₀ · sin(k · (height − |z'|)),    z' ∈ [-height, height]
+* `include_image = true` (default) — equivalent source for a monopole on an
+  infinite PEC ground. Image theory turns the physical wire into a
+  length-`2·height` dipole with sinusoidal current
+  `I(z') = I₀·sin(k·(height−|z'|))` on `z' ∈ [-height, height]`.
+  `monopole_incident_field` returns zero below the ground plane. Use this
+  when no explicit ground-plane scatterer is modeled.
+* `include_image = false` — physical half-wire only, with current
+  `I(z') = I₀·sin(k·(height−z'))` on `z' ∈ [0, height]`, radiating into all
+  of free space. Use this when the finite ground plane is meshed as a MoM
+  scatterer; the induced plate currents then reproduce the image (and the
+  finite-ground truncation corrections).
 
-with the physical current sitting on z' ∈ [0, height]. The field is computed
-by Simpson integration of Hertzian-element contributions along this dipole
-(valid in near- and far-field). In the lower half-space the PEC ground
-truncates the radiation, so `monopole_incident_field` returns zero there.
-
-The `amplitude` parameter uses the UTD `Monopole` convention: in the far
-field
-
-    |E_θ(R,θ)| = |amplitude| · |F(θ)| / R,    F(θ) = [cos(k·h·cosθ) − cos(k·h)] / sinθ,
-
-and the internal current is I₀ = -i · 2π · amplitude / η₀ so that both
-amplitude and phase agree with the UTD far-field expression.
+The `amplitude` parameter follows the UTD `Monopole` convention: when
+`include_image = true` the far-field satisfies
+`|E_θ| = |amplitude|·|F(θ)|/R` with `F(θ) = [cos(k·h·cosθ) − cos(k·h)]/sinθ`,
+and the internal current is `I₀ = -i · 2π · amplitude / η₀`.
 """
 struct MonopoleExcitation <: AbstractExcitation
     position::Vec3                # Base of the monopole on the ground plane (m)
@@ -115,14 +114,17 @@ struct MonopoleExcitation <: AbstractExcitation
     height::Float64               # Physical length h (m)
     amplitude::ComplexF64         # UTD-consistent field amplitude scaling
     frequency::Float64            # Frequency (Hz), needed for wavenumber
-    function MonopoleExcitation(pos, axis, height, amplitude, frequency)
+    include_image::Bool           # true: dipole+image model (infinite-ground equivalent)
+                                  # false: physical wire only (for use with meshed ground)
+    function MonopoleExcitation(pos, axis, height, amplitude, frequency;
+                                include_image::Bool = true)
         axv = Vec3(axis)
         n = norm(axv)
         n > 1e-12 || error("MonopoleExcitation: axis must be nonzero")
         height > 0 || error("MonopoleExcitation: height must be positive, got $height")
         frequency > 0 || error("MonopoleExcitation: frequency must be positive, got $frequency")
         return new(Vec3(pos), axv / n, Float64(height),
-                   ComplexF64(amplitude), Float64(frequency))
+                   ComplexF64(amplitude), Float64(frequency), include_image)
     end
 end
 
@@ -218,8 +220,10 @@ end
 make_delta_gap(edge, voltage, gap_length) = DeltaGapExcitation(edge, voltage, gap_length)
 make_dipole(position, moment, orientation, type, frequency=1e9) = DipoleExcitation(position, moment, orientation, type, frequency)
 make_loop(center, normal, radius, current, frequency=1e9) = LoopExcitation(center, normal, radius, current, frequency)
-make_monopole(position, axis, height, amplitude, frequency=1e9) =
-    MonopoleExcitation(position, axis, height, amplitude, frequency)
+make_monopole(position, axis, height, amplitude, frequency=1e9;
+              include_image::Bool = true) =
+    MonopoleExcitation(position, axis, height, amplitude, frequency;
+                       include_image=include_image)
 
 const _C0 = 299792458.0
 const _EPS0 = 8.854187817e-12
@@ -619,32 +623,47 @@ dipole-plus-image distribution. Uses the exp(+iωt) convention. Returns zero
 below the ground plane (axial projection of `r − position` is negative).
 """
 function monopole_incident_field(r::Vec3, mono::MonopoleExcitation)
-    d = r - mono.position
-    proj = dot(d, mono.axis)
-    ref_len = max(mono.height, norm(d), 1.0)
-    if proj < -1e-12 * ref_len
-        return CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
-    end
-
     k = 2π * mono.frequency / _C0
     I_0 = -1im * 2π * mono.amplitude / _ETA0
-
     λ = 2π / k
-    # Simpson step target: ≤ λ/50 → at least 100 subintervals per wavelength of h.
-    N = max(128, 2 * Int(ceil(50.0 * 2 * mono.height / λ)))
-    iseven(N) || (N += 1)
     h = mono.height
-    dz = 2h / N
 
-    E_sum = CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
-    @inbounds for i in 0:N
-        z_p = -h + i * dz
-        r_p = mono.position + z_p * mono.axis
-        I_z = I_0 * sin(k * (h - abs(z_p)))
-        w = (i == 0 || i == N) ? 1.0 : (isodd(i) ? 4.0 : 2.0)
-        E_sum = E_sum + w * _hertzian_per_length_field(r, r_p, mono.axis, I_z, k)
+    if mono.include_image
+        # dipole+image model: lower half-space is a true void
+        d = r - mono.position
+        proj = dot(d, mono.axis)
+        ref_len = max(h, norm(d), 1.0)
+        if proj < -1e-12 * ref_len
+            return CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+        end
+        # Simpson on z' ∈ [-h, h]
+        N = max(128, 2 * Int(ceil(50.0 * 2 * h / λ)))
+        iseven(N) || (N += 1)
+        dz = 2h / N
+        E_sum = CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+        @inbounds for i in 0:N
+            z_p = -h + i * dz
+            r_p = mono.position + z_p * mono.axis
+            I_z = I_0 * sin(k * (h - abs(z_p)))
+            w = (i == 0 || i == N) ? 1.0 : (isodd(i) ? 4.0 : 2.0)
+            E_sum = E_sum + w * _hertzian_per_length_field(r, r_p, mono.axis, I_z, k)
+        end
+        return (dz / 3.0) * E_sum
+    else
+        # physical half-wire only (no image): radiates into all 4π
+        N = max(64, 2 * Int(ceil(50.0 * h / λ)))
+        iseven(N) || (N += 1)
+        dz = h / N
+        E_sum = CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+        @inbounds for i in 0:N
+            z_p = i * dz
+            r_p = mono.position + z_p * mono.axis
+            I_z = I_0 * sin(k * (h - z_p))
+            w = (i == 0 || i == N) ? 1.0 : (isodd(i) ? 4.0 : 2.0)
+            E_sum = E_sum + w * _hertzian_per_length_field(r, r_p, mono.axis, I_z, k)
+        end
+        return (dz / 3.0) * E_sum
     end
-    return (dz / 3.0) * E_sum
 end
 
 @inline function _supported_incident_wavenumber_abs(k)
