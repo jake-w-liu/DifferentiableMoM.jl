@@ -4,10 +4,13 @@
 
 export assemble_v_plane_wave, assemble_excitation, assemble_multiple_excitations
 export PlaneWaveExcitation, PortExcitation, DeltaGapExcitation, DipoleExcitation,
-       LoopExcitation, ImportedExcitation, PatternFeedExcitation, MultiExcitation
-export make_plane_wave, make_delta_gap, make_dipole, make_loop, make_multi_excitation,
+       LoopExcitation, MonopoleExcitation, ImportedExcitation,
+       PatternFeedExcitation, MultiExcitation
+export make_plane_wave, make_delta_gap, make_dipole, make_loop, make_monopole,
+       make_multi_excitation,
        make_pattern_feed, pattern_feed_field, plane_wave_field,
-       make_analytic_dipole_pattern_feed, make_imported_excitation
+       make_analytic_dipole_pattern_feed, make_imported_excitation,
+       monopole_incident_field
 
 using LinearAlgebra
 using SparseArrays
@@ -80,6 +83,47 @@ struct LoopExcitation <: AbstractExcitation
     radius::Float64               # Loop radius (m)
     current::ComplexF64           # Loop current (A)
     frequency::Float64            # Frequency (Hz), needed for wavenumber
+end
+
+"""
+    MonopoleExcitation
+
+Center-fed linear monopole of length `height` standing at `position` on a
+(notional) infinite PEC ground plane with axis along the unit vector `axis`
+(pointing away from the ground). The incident field is modeled rigorously via
+image theory: the physical monopole plus its image forms an axial dipole of
+total length `2·height` carrying the sinusoidal current
+
+    I(z') = I₀ · sin(k · (height − |z'|)),    z' ∈ [-height, height]
+
+with the physical current sitting on z' ∈ [0, height]. The field is computed
+by Simpson integration of Hertzian-element contributions along this dipole
+(valid in near- and far-field). In the lower half-space the PEC ground
+truncates the radiation, so `monopole_incident_field` returns zero there.
+
+The `amplitude` parameter uses the UTD `Monopole` convention: in the far
+field
+
+    |E_θ(R,θ)| = |amplitude| · |F(θ)| / R,    F(θ) = [cos(k·h·cosθ) − cos(k·h)] / sinθ,
+
+and the internal current is I₀ = -i · 2π · amplitude / η₀ so that both
+amplitude and phase agree with the UTD far-field expression.
+"""
+struct MonopoleExcitation <: AbstractExcitation
+    position::Vec3                # Base of the monopole on the ground plane (m)
+    axis::Vec3                    # Unit vector along the monopole
+    height::Float64               # Physical length h (m)
+    amplitude::ComplexF64         # UTD-consistent field amplitude scaling
+    frequency::Float64            # Frequency (Hz), needed for wavenumber
+    function MonopoleExcitation(pos, axis, height, amplitude, frequency)
+        axv = Vec3(axis)
+        n = norm(axv)
+        n > 1e-12 || error("MonopoleExcitation: axis must be nonzero")
+        height > 0 || error("MonopoleExcitation: height must be positive, got $height")
+        frequency > 0 || error("MonopoleExcitation: frequency must be positive, got $frequency")
+        return new(Vec3(pos), axv / n, Float64(height),
+                   ComplexF64(amplitude), Float64(frequency))
+    end
 end
 
 """
@@ -174,6 +218,8 @@ end
 make_delta_gap(edge, voltage, gap_length) = DeltaGapExcitation(edge, voltage, gap_length)
 make_dipole(position, moment, orientation, type, frequency=1e9) = DipoleExcitation(position, moment, orientation, type, frequency)
 make_loop(center, normal, radius, current, frequency=1e9) = LoopExcitation(center, normal, radius, current, frequency)
+make_monopole(position, axis, height, amplitude, frequency=1e9) =
+    MonopoleExcitation(position, axis, height, amplitude, frequency)
 
 const _C0 = 299792458.0
 const _EPS0 = 8.854187817e-12
@@ -538,6 +584,69 @@ function loop_incident_field(r::Vec3, loop::LoopExcitation)
     return dipole_incident_field(r, dip)
 end
 
+# Hertzian current element (Balanis eq 4-56a,b, exp(+iωt) convention).
+# Returns dE/dz' for a unit-length axial element carrying current `I` at `r_p`.
+@inline function _hertzian_per_length_field(r::Vec3, r_p::Vec3, axis::Vec3,
+                                            I::ComplexF64, k::Float64)
+    η0 = 376.730313668
+    R_vec = r - r_p
+    R = norm(R_vec)
+    R < 1e-12 && return CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+    R_hat = R_vec / R
+    cosθ = clamp(dot(R_hat, axis), -1.0, 1.0)
+    sin2θ = max(0.0, 1.0 - cosθ^2)
+    sinθ = sqrt(sin2θ)
+    expfac = exp(-1im * k * R)
+    kR = k * R
+
+    E_r = η0 * I / (2π) * cosθ * expfac / R^2 * (1.0 + 1.0 / (1im * kR))
+    if sinθ > 1e-12
+        θ_hat = (cosθ * R_hat - axis) / sinθ
+        E_θ = 1im * η0 * k * I / (4π) * sinθ * expfac / R *
+              (1.0 + 1.0 / (1im * kR) - 1.0 / kR^2)
+        return E_r * R_hat + E_θ * θ_hat
+    else
+        return E_r * R_hat
+    end
+end
+
+"""
+    monopole_incident_field(r, mono)
+
+Incident electric field at `r` from a `MonopoleExcitation`, computed by
+rigorous Simpson integration of the sinusoidal current on the equivalent
+dipole-plus-image distribution. Uses the exp(+iωt) convention. Returns zero
+below the ground plane (axial projection of `r − position` is negative).
+"""
+function monopole_incident_field(r::Vec3, mono::MonopoleExcitation)
+    d = r - mono.position
+    proj = dot(d, mono.axis)
+    ref_len = max(mono.height, norm(d), 1.0)
+    if proj < -1e-12 * ref_len
+        return CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+    end
+
+    k = 2π * mono.frequency / _C0
+    I_0 = -1im * 2π * mono.amplitude / _ETA0
+
+    λ = 2π / k
+    # Simpson step target: ≤ λ/50 → at least 100 subintervals per wavelength of h.
+    N = max(128, 2 * Int(ceil(50.0 * 2 * mono.height / λ)))
+    iseven(N) || (N += 1)
+    h = mono.height
+    dz = 2h / N
+
+    E_sum = CVec3(0.0 + 0im, 0.0 + 0im, 0.0 + 0im)
+    @inbounds for i in 0:N
+        z_p = -h + i * dz
+        r_p = mono.position + z_p * mono.axis
+        I_z = I_0 * sin(k * (h - abs(z_p)))
+        w = (i == 0 || i == N) ? 1.0 : (isodd(i) ? 4.0 : 2.0)
+        E_sum = E_sum + w * _hertzian_per_length_field(r, r_p, mono.axis, I_z, k)
+    end
+    return (dz / 3.0) * E_sum
+end
+
 @inline function _supported_incident_wavenumber_abs(k)
     tol_im = max(1e-10 * max(abs(real(k)), 1.0), 1e-12)
     abs(imag(k)) <= tol_im ||
@@ -575,6 +684,12 @@ function _validate_incident_electric_field_wavenumber(excitation::LoopExcitation
     excitation.frequency > 0 || error("Loop frequency must be positive.")
     k_model = 2π * excitation.frequency / _C0
     return _check_incident_wavenumber_match(k_model, k, "LoopExcitation")
+end
+
+function _validate_incident_electric_field_wavenumber(excitation::MonopoleExcitation, k)
+    excitation.frequency > 0 || error("Monopole frequency must be positive.")
+    k_model = 2π * excitation.frequency / _C0
+    return _check_incident_wavenumber_match(k_model, k, "MonopoleExcitation")
 end
 
 function _validate_incident_electric_field_wavenumber(excitation::PatternFeedExcitation, k)
@@ -637,6 +752,10 @@ end
 
 function _incident_electric_field(excitation::LoopExcitation, r::Vec3, k)
     return loop_incident_field(r, excitation)
+end
+
+function _incident_electric_field(excitation::MonopoleExcitation, r::Vec3, k)
+    return monopole_incident_field(r, excitation)
 end
 
 function _incident_electric_field(excitation::PatternFeedExcitation, r::Vec3, k)
@@ -716,6 +835,8 @@ function assemble_excitation(mesh::TriMesh, rwg::RWGData,
         return assemble_dipole(mesh, rwg, excitation; quad_order=quad_order)
     elseif excitation isa LoopExcitation
         return assemble_loop(mesh, rwg, excitation; quad_order=quad_order)
+    elseif excitation isa MonopoleExcitation
+        return assemble_monopole(mesh, rwg, excitation; quad_order=quad_order)
     elseif excitation isa ImportedExcitation
         return assemble_imported_excitation(mesh, rwg, excitation; quad_order=quad_order)
     elseif excitation isa PatternFeedExcitation
@@ -844,6 +965,29 @@ function assemble_loop(mesh::TriMesh, rwg::RWGData,
                 rq = pts[q]
                 fn = eval_rwg(rwg, n, rq, t)
                 Einc = loop_incident_field(rq, loop)
+                v[n] += -wq[q] * dot(fn, Einc) * (2 * A)
+            end
+        end
+    end
+    return v
+end
+
+function assemble_monopole(mesh::TriMesh, rwg::RWGData,
+                           mono::MonopoleExcitation;
+                           quad_order::Int=3)
+    N = rwg.nedges
+    xi, wq = tri_quad_rule(quad_order)
+    Nq = length(wq)
+
+    v = zeros(ComplexF64, N)
+    for n in 1:N
+        for t in (rwg.tplus[n], rwg.tminus[n])
+            A = triangle_area(mesh, t)
+            pts = tri_quad_points(mesh, t, xi)
+            for q in 1:Nq
+                rq = pts[q]
+                fn = eval_rwg(rwg, n, rq, t)
+                Einc = monopole_incident_field(rq, mono)
                 v[n] += -wq[q] * dot(fn, Einc) * (2 * A)
             end
         end
