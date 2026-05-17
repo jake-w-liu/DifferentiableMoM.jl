@@ -622,6 +622,22 @@ println("\n── Test 41: PeriodicEFIE ──")
         @test any(abs.(imag.(rwg_bloch.coeff_minus)) .> 1e-8)
     end
 
+    # ── F: ACA dense blocks match EFIE for complex Bloch RWG coefficients ──
+    @testset "F: ACA dense blocks with Bloch RWG" begin
+        dx_fp = 1.2 * lambda_pe
+        dy_fp = 1.2 * lambda_pe
+        mesh_fp = make_rect_plate(dx_fp, dy_fp, 4, 4)
+        lat_obl = PeriodicLattice(dx_fp, dy_fp, π/6, 0.0, k_pe; N_spatial=1, N_spectral=1)
+        rwg_bloch = build_rwg_periodic(mesh_fp, lat_obl; precheck=false)
+        Z_ref = assemble_Z_efie(mesh_fp, rwg_bloch, k_pe; mesh_precheck=false, quad_order=3)
+        A_aca = build_aca_operator(mesh_fp, rwg_bloch, k_pe;
+                                   leaf_size=8, eta=0.1, aca_tol=1e-12,
+                                   max_rank=20, quad_order=3)
+        x = ComplexF64[sin(i) + 1im * cos(i) for i in 1:rwg_bloch.nedges]
+        rel = norm(A_aca * x - Z_ref * x) / norm(Z_ref * x)
+        @test rel < 1e-12
+    end
+
     # ── A: Large period → Z_per approaches Z_free ──
     @testset "A: Large period → Z_per approaches Z_free" begin
         Z_free = assemble_Z_efie(mesh_pe, rwg_pe, k_pe; mesh_precheck=false)

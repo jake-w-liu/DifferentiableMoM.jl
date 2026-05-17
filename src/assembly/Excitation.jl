@@ -539,6 +539,18 @@ function _effective_quad_order(requested::Int, min_required::Int)
     return last(_TRI_QUAD_ORDERS)
 end
 
+function _excitation_quadrature_cache(mesh::TriMesh, quad_order::Int)
+    xi, wq = tri_quad_rule(quad_order)
+    Nt = ntriangles(mesh)
+    quad_pts = Vector{Vector{Vec3}}(undef, Nt)
+    areas = Vector{Float64}(undef, Nt)
+    @inbounds for t in 1:Nt
+        quad_pts[t] = tri_quad_points(mesh, t, xi)
+        areas[t] = triangle_area(mesh, t)
+    end
+    return wq, quad_pts, areas
+end
+
 """
     dipole_incident_field(r, dipole)
 
@@ -892,7 +904,7 @@ function assemble_plane_wave(mesh::TriMesh, rwg::RWGData,
                              pw::PlaneWaveExcitation;
                              quad_order::Int=3)
     N = rwg.nedges
-    xi, wq = tri_quad_rule(quad_order)
+    wq, quad_pts, areas = _excitation_quadrature_cache(mesh, quad_order)
     Nq = length(wq)
 
     CT = ComplexF64
@@ -900,8 +912,8 @@ function assemble_plane_wave(mesh::TriMesh, rwg::RWGData,
 
     for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
 
             for q in 1:Nq
                 rq = pts[q]
@@ -944,15 +956,15 @@ function assemble_dipole(mesh::TriMesh, rwg::RWGData,
                          dipole::DipoleExcitation;
                          quad_order::Int=3)
     N = rwg.nedges
-    xi, wq = tri_quad_rule(quad_order)
+    wq, quad_pts, areas = _excitation_quadrature_cache(mesh, quad_order)
     Nq = length(wq)
 
     v = zeros(ComplexF64, N)
 
     for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
 
             for q in 1:Nq
                 rq = pts[q]
@@ -972,14 +984,14 @@ function assemble_loop(mesh::TriMesh, rwg::RWGData,
                        loop::LoopExcitation;
                        quad_order::Int=3)
     N = rwg.nedges
-    xi, wq = tri_quad_rule(quad_order)
+    wq, quad_pts, areas = _excitation_quadrature_cache(mesh, quad_order)
     Nq = length(wq)
 
     v = zeros(ComplexF64, N)
     for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
             for q in 1:Nq
                 rq = pts[q]
                 fn = eval_rwg(rwg, n, rq, t)
@@ -995,14 +1007,14 @@ function assemble_monopole(mesh::TriMesh, rwg::RWGData,
                            mono::MonopoleExcitation;
                            quad_order::Int=3)
     N = rwg.nedges
-    xi, wq = tri_quad_rule(quad_order)
+    wq, quad_pts, areas = _excitation_quadrature_cache(mesh, quad_order)
     Nq = length(wq)
 
     v = zeros(ComplexF64, N)
     for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
             for q in 1:Nq
                 rq = pts[q]
                 fn = eval_rwg(rwg, n, rq, t)
@@ -1019,15 +1031,15 @@ function assemble_imported_excitation(mesh::TriMesh, rwg::RWGData,
                                       quad_order::Int=3)
     quad_order_eff = _effective_quad_order(quad_order, imported.min_quad_order)
     N = rwg.nedges
-    xi, wq = tri_quad_rule(quad_order_eff)
+    wq, quad_pts, areas = _excitation_quadrature_cache(mesh, quad_order_eff)
     Nq = length(wq)
 
     v = zeros(ComplexF64, N)
 
     for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
 
             for q in 1:Nq
                 rq = pts[q]
@@ -1050,15 +1062,15 @@ function assemble_pattern_feed(mesh::TriMesh, rwg::RWGData,
                                pat::PatternFeedExcitation;
                                quad_order::Int=3)
     N = rwg.nedges
-    xi, wq = tri_quad_rule(quad_order)
+    wq, quad_pts, areas = _excitation_quadrature_cache(mesh, quad_order)
     Nq = length(wq)
 
     v = zeros(ComplexF64, N)
 
     for n in 1:N
         for t in (rwg.tplus[n], rwg.tminus[n])
-            A = triangle_area(mesh, t)
-            pts = tri_quad_points(mesh, t, xi)
+            A = areas[t]
+            pts = quad_pts[t]
 
             for q in 1:Nq
                 rq = pts[q]

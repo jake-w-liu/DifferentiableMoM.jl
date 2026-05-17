@@ -300,7 +300,7 @@ function _fill_dense_block_batched!(data::Matrix{ComplexF64}, cache::EFIEApplyCa
                             for qn in 1:Nq
                                 G = G_mat[qm, qn]
                                 vec_part = dot(fm, fn_vals[qn]) * G
-                                scl_part = dvm * dvn * G / (cache.k^2)
+                                scl_part = conj(dvm) * dvn * G / (cache.k^2)
                                 weight = cache.wq[qm] * cache.wq[qn] * (2 * Am) * (2 * An)
                                 val += (vec_part - scl_part) * weight
                             end
