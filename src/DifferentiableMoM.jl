@@ -6,6 +6,7 @@ using StaticArrays
 using Random
 using Krylov
 using SpecialFunctions
+using FFTW
 
 include("Types.jl")
 
@@ -62,6 +63,15 @@ include("mom2d/Assembly2D.jl")
 include("mom2d/Excitation2D.jl")
 include("mom2d/Scatter2D.jl")
 include("mom2d/Mie2D.jl")
+
+# 3D vector material volume solver (DDA / VIE-style)
+include("mom3d/Types3D.jl")
+include("mom3d/MaterialModels3D.jl")
+include("mom3d/DDA3D.jl")
+include("mom3d/EMDDA3D.jl")
+include("mom3d/Adjoint3D.jl")
+include("mom3d/FFTDDA3D.jl")
+include("mom3d/SurfaceIE3D.jl")
 
 # Workflow
 include("Workflow.jl")

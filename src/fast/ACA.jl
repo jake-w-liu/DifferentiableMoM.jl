@@ -179,12 +179,12 @@ function aca_lowrank(cache::EFIEApplyCache,
         used_cols[pivot_col] = true
 
         # Update Frobenius norm estimate
-        # ||A_k||_F^2 = ||A_{k-1}||_F^2 + 2 Re{Σ_{j<k} (u_j'u_k)(v_j'v_k)} + ||u_k||^2 ||v_k||^2
+        # ||A_k||_F^2 = ||A_{k-1}||_F^2 + 2 Re{Σ_{j<k} (u_j'u_k)(v_k'v_j)} + ||u_k||^2 ||v_k||^2
         norm_u = sqrt(real(dot(u_k, u_k)))
         norm_v = sqrt(real(dot(v_k, v_k)))
         cross_term = 0.0
         for prev in 1:(length(U_cols)-1)
-            cross_term += 2.0 * real(dot(U_cols[prev], u_k) * dot(V_cols[prev], v_k))
+            cross_term += 2.0 * real(dot(U_cols[prev], u_k) * conj(dot(V_cols[prev], v_k)))
         end
         frob_sq += norm_u^2 * norm_v^2 + cross_term
         frob_sq = max(frob_sq, 1e-30)  # guard

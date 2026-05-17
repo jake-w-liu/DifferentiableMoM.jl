@@ -5,7 +5,15 @@ and inverse design of reactive impedance metasurfaces.
 
 The current scope targets:
 - RWG-discretized EFIE forward solves (dense, ACA H-matrix, MLFMA),
-- adjoint sensitivities for impedance parameters,
+- 3D vector material scattering on voxel grids via dense and matrix-free
+  DDA/VIE-style solvers for isotropic, electric-anisotropic, magnetodielectric,
+  explicit bianisotropic-polarizability, and normalized bianisotropic
+  constitutive voxels,
+- closed-surface dielectric PMCHWT/Muller dense and matrix-free GMRES SIE
+  assembly/solves for isotropic homogeneous media,
+- material helper models for passive static, Drude, Lorentz, and Debye
+  permittivity plus magnetic permeability,
+- adjoint sensitivities for impedance and DDA material parameters,
 - beam-oriented far-field objectives and multi-angle RCS optimization,
 - spatial patch assignment for impedance design,
 - validation workflows (including Bempp-cl and sphere Mie benchmarks).
@@ -32,7 +40,7 @@ Pkg.add(url="https://github.com/jake-w-liu/DifferentiableMoM.jl")
 From the package root:
 
 ```bash
-julia --project=. test/runtests.jl                     # run all 36 tests
+julia --project=. test/runtests.jl                     # run all 51 tests
 julia --project=. examples/01_pec_plate_basics.jl       # basic EFIE on a plate
 julia --project=. examples/02_impedance_optimization.jl # impedance design
 julia --project=. examples/03_beamsteering_physical_unitcell.jl # paper beam-steering example
@@ -60,11 +68,52 @@ k    = 2π / 0.1
 Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 ```
 
+3D material scattering uses a separate vector DDA/VIE-style voxel solver:
+
+```julia
+grid = VoxelGrid3D((-0.05, 0.05), (-0.05, 0.05), (-0.05, 0.05), 7, 7, 7)
+epsr = fill(2.5 + 0im, grid.nvoxels)
+Einc = planewave_dda_3d(grid, Vec3(0, 0, k), 1.0 + 0im, Vec3(1, 0, 0))
+res  = solve_dda_3d(grid, k, epsr, Einc; solver=:gmres)
+Ffar = farfield_dda_3d(res, Vec3(0, 1, 0))
+```
+
+Coupled electric-magnetic volume DDA is available for magnetodielectric voxels,
+explicit `6 x 6` bianisotropic polarizabilities, and normalized
+bianisotropic constitutive matrices:
+
+```julia
+Einc, Hinc = planewave_em_dda_3d(grid, Vec3(0, 0, k), 1.0 + 0im, Vec3(1, 0, 0))
+res_em = solve_em_dda_3d(grid, k, 2.5 + 0im, 1.2 + 0im, Einc, Hinc; solver=:gmres)
+```
+
+Closed dielectric surfaces can be assembled with dense PMCHWT/Muller systems
+or solved with matrix-free GMRES:
+
+```julia
+rwg_closed = build_rwg(mesh_closed; allow_boundary=false, require_closed=true)
+A_pmchwt = assemble_pmchwt_3d(mesh_closed, rwg_closed, k, 2.5 + 0im)
+res_sie = solve_dielectric_sie_3d(mesh_closed, rwg_closed, k, 2.5 + 0im, rhs;
+                                  solver=:gmres)
+```
+
 ## Key Features
 
 - **Multi-scale solvers:** dense LU/GMRES (small), ACA H-matrix (medium), MLFMA (large N).
+- **3D material scattering:** vector DDA/VIE-style dense LU and matrix-free
+  GMRES solves for isotropic, diagonal anisotropic, full tensor electric
+  permittivity, coupled electric-magnetic permeability, and explicit
+  bianisotropic polarizability or normalized bianisotropic constitutive
+  matrices on voxel grids, with near/far scattered fields and FFT convolution
+  matvecs on uniform electric DDA grids.
+- **Dielectric surface IE:** dense PMCHWT/Muller assembly plus matrix-free
+  GMRES solves for closed RWG surfaces separating homogeneous isotropic media.
+- **Material models:** passive static permittivity/permeability helpers,
+  anisotropic tensors, and normalized bianisotropic constitutive tensors, plus
+  Drude, Lorentz, and Debye dispersion evaluators for the `exp(+iωt)` convention.
 - **Adjoint differentiation:** impedance gradients from explicit
-  \(\partial Z / \partial \theta_p\) assembly.
+  \(\partial Z / \partial \theta_p\) assembly and DDA material gradients for
+  real scalar permittivity design variables.
 - **Objective operators:** Hermitian PSD \(Q\)-matrix far-field objectives.
 - **Optimization:** projected L-BFGS, multi-angle backscatter RCS optimization,
   and ratio-objective two-adjoint workflow.
@@ -78,7 +127,7 @@ Z    = assemble_Z_efie(mesh, rwg, k; quad_order=3)
 
 ## Validation and Reproducibility
 
-### Regression tests (36 sequential tests)
+### Regression tests (51 sequential tests)
 
 ```bash
 julia --project=. test/runtests.jl
@@ -167,9 +216,9 @@ julia --project=. validation/paper/generate_consistency_report.jl
 
 ## Repository Layout
 
-- `src/` — solver, adjoint, optimization, fast methods, verification, visualization (30 source files)
+- `src/` — solver, adjoint, optimization, fast methods, material solvers, verification, visualization
 - `examples/` — numbered runnable examples (`01_`–`23_`) and auxiliary assets
-- `test/` — 36 sequential regression tests
+- `test/` — 51 sequential regression tests
 - `validation/` — analytical, paper, and external cross-validation workflows
 - `data/` — test-generated CSV files for validation
 

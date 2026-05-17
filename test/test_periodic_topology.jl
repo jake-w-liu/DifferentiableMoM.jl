@@ -551,6 +551,39 @@ println("\n── Test 40: DensityAdjoint ──")
         end
         println("    Max adjoint vs FD relative error: $(round(max_rel_err, sigdigits=3))")
     end
+
+    # ── G: Reactive Z_max gradient keeps complex coefficient inside Re{...} ──
+    @testset "G: Reactive density gradient vs finite difference" begin
+        config_rx = DensityConfig(; p=3.0, Z_max_factor=1000.0, reactive=true)
+        Z_rx = Z_efie_da + assemble_Z_penalty(Mt_da, rho_bar_da, config_rx)
+        I_rx = Z_rx \ v_da
+        lambda_rx = solve_adjoint(Z_rx, Q_da, I_rx)
+        g_rx = gradient_density_full(Mt_da, I_rx, lambda_rx,
+                                     rho_tilde_da, rho_bar_da, config_rx,
+                                     W_da, w_sum_da, beta_da)
+
+        h = 1e-5
+        check_indices = sort(randperm(Nt_da)[1:min(3, Nt_da)])
+        max_rel_err = 0.0
+        for t in check_indices
+            rho_plus = copy(rho_da); rho_plus[t] += h
+            rho_minus = copy(rho_da); rho_minus[t] -= h
+
+            _, rho_bar_plus = filter_and_project(W_da, w_sum_da, rho_plus, beta_da)
+            Z_plus = Z_efie_da + assemble_Z_penalty(Mt_da, rho_bar_plus, config_rx)
+            J_plus = compute_objective(Z_plus \ v_da, Q_da)
+
+            _, rho_bar_minus = filter_and_project(W_da, w_sum_da, rho_minus, beta_da)
+            Z_minus = Z_efie_da + assemble_Z_penalty(Mt_da, rho_bar_minus, config_rx)
+            J_minus = compute_objective(Z_minus \ v_da, Q_da)
+
+            g_fd = (J_plus - J_minus) / (2h)
+            rel_err = abs(g_rx[t] - g_fd) / max(abs(g_fd), 1e-20)
+            max_rel_err = max(max_rel_err, rel_err)
+            @test rel_err < 1e-4
+        end
+        println("    Reactive Z_max adjoint vs FD relative error: $(round(max_rel_err, sigdigits=3))")
+    end
 end
 println("  PASS ✓")
 

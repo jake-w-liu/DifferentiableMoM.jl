@@ -2262,7 +2262,59 @@ if found_admissible
     @assert err_aca < 1e-4 "ACA approximation too inaccurate: $err_aca"
     @assert rank_aca < min(m_blk, n_blk) "ACA should compress: rank=$rank_aca >= min($m_blk,$n_blk)"
 else
-    println("  SKIP: no admissible block pair found (mesh too small)")
+    # Fallback: the default smoke-test mesh can be too small to produce an
+    # admissible far block. Use a coarser-quadrature larger plate so ACA's
+    # actual low-rank stopping logic is still tested deterministically.
+    let
+        mesh_aca_fb = make_rect_plate(1.0, 1.0, 20, 20)
+        rwg_aca_fb = build_rwg(mesh_aca_fb)
+        centers_aca_fb = rwg_centers(mesh_aca_fb, rwg_aca_fb)
+        cache_aca_fb = DifferentiableMoM._build_efie_cache(
+            mesh_aca_fb, rwg_aca_fb, 2π; quad_order=1, eta0=eta0)
+        tree_aca_fb = build_cluster_tree(centers_aca_fb; leaf_size=64)
+        leaves_aca_fb = leaf_nodes(tree_aca_fb)
+
+        row_node_fb = 0
+        col_node_fb = 0
+        min_block_fb = 0
+        for i_leaf in leaves_aca_fb, j_leaf in leaves_aca_fb
+            if i_leaf != j_leaf && is_admissible(tree_aca_fb, i_leaf, j_leaf; eta=0.8)
+                ni = length(tree_aca_fb.nodes[i_leaf].indices)
+                nj = length(tree_aca_fb.nodes[j_leaf].indices)
+                if min(ni, nj) > min_block_fb
+                    row_node_fb = i_leaf
+                    col_node_fb = j_leaf
+                    min_block_fb = min(ni, nj)
+                end
+            end
+        end
+        @assert row_node_fb != 0 "ACA fallback should find an admissible block"
+
+        rn_fb = tree_aca_fb.nodes[row_node_fb]
+        cn_fb = tree_aca_fb.nodes[col_node_fb]
+        row_idx_fb = [tree_aca_fb.perm[k] for k in rn_fb.indices]
+        col_idx_fb = [tree_aca_fb.perm[k] for k in cn_fb.indices]
+
+        m_blk = length(row_idx_fb)
+        n_blk = length(col_idx_fb)
+        Z_sub = Matrix{ComplexF64}(undef, m_blk, n_blk)
+        for jj in 1:n_blk
+            for ii in 1:m_blk
+                Z_sub[ii, jj] = DifferentiableMoM._efie_entry(
+                    cache_aca_fb, row_idx_fb[ii], col_idx_fb[jj])
+            end
+        end
+
+        U_aca, V_aca = aca_lowrank(
+            cache_aca_fb, row_idx_fb, col_idx_fb; tol=1e-4, max_rank=30)
+        rank_aca = size(U_aca, 2)
+        approx_aca = U_aca * V_aca'
+        err_aca = norm(approx_aca - Z_sub) / max(norm(Z_sub), 1e-30)
+
+        println("  Fallback block size: $(m_blk) x $(n_blk), ACA rank: $rank_aca, rel error: $err_aca")
+        @assert err_aca < 5e-3 "ACA fallback approximation too inaccurate: $err_aca"
+        @assert rank_aca < min(m_blk, n_blk) "ACA fallback should compress: rank=$rank_aca >= min($m_blk,$n_blk)"
+    end
 end
 
 println("  PASS ✓")
@@ -3052,6 +3104,23 @@ configs_test = build_multiangle_configs(mesh, rwg, k, angles_2;
 @assert length(configs_test[1].v) == N "Excitation vector should have length N"
 @assert size(configs_test[1].Q) == (N, N) "Q matrix should be N×N"
 @assert configs_test[1].weight == 1.0
+configs_proj = build_multiangle_configs(
+    mesh, rwg, k,
+    [(theta_inc=π/4, phi_inc=0.0, pol=Vec3(1.0, 0.0, 0.0), weight=1.0)];
+    grid=grid_opt,
+    backscatter_cone=15.0,
+)
+khat_proj = Vec3(sin(π/4), 0.0, cos(π/4))
+@assert abs(dot(khat_proj, configs_proj[1].pol)) < 1e-12 "Multi-angle polarization must be transverse"
+@assert abs(norm(configs_proj[1].pol) - 1.0) < 1e-12 "Multi-angle polarization must be unit length"
+configs_default_pol = build_multiangle_configs(
+    mesh, rwg, k,
+    [(theta_inc=π/4, phi_inc=0.2, weight=1.0)];
+    grid=grid_opt,
+    backscatter_cone=15.0,
+)
+khat_default = Vec3(sin(π/4) * cos(0.2), sin(π/4) * sin(0.2), cos(π/4))
+@assert abs(dot(khat_default, configs_default_pol[1].pol)) < 1e-12 "Default multi-angle polarization must be transverse"
 println("  35b: PASS")
 
 # 35c: optimize_multiangle_rcs smoke test
@@ -3315,8 +3384,18 @@ println("  PASS ✓")
 include("test_periodic_topology.jl")
 
 # ─────────────────────────────────────────────────
+# 3D vector material DDA solver
+# ─────────────────────────────────────────────────
+include("test_material_models3d.jl")
+include("test_mom3d.jl")
+include("test_mom3d_adjoint.jl")
+include("test_mom3d_fft.jl")
+include("test_mom3d_em.jl")
+include("test_surface_ie3d.jl")
+
+# ─────────────────────────────────────────────────
 # Summary
 # ─────────────────────────────────────────────────
 println("\n" * "="^60)
-println("ALL 45 TESTS PASSED")
+println("ALL 51 TESTS PASSED")
 println("="^60)

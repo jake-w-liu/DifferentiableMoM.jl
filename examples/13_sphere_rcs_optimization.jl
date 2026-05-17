@@ -343,12 +343,13 @@ println("\n── RCS comparison (optimized vs PEC) ──")
 
 Z_opt_multi = assemble_full_Z(Z_efie, Mp, theta_opt_multi)
 for (a_idx, ang) in enumerate(angles)
+    cfg = configs[a_idx]
     # PEC solve at this angle
     khat_a = Vec3(sin(ang.theta_inc)*cos(ang.phi_inc),
                   sin(ang.theta_inc)*sin(ang.phi_inc),
                   cos(ang.theta_inc))
     k_vec_a = k * khat_a
-    v_a = assemble_excitation(mesh, rwg, make_plane_wave(k_vec_a, 1.0, ang.pol))
+    v_a = assemble_excitation(mesh, rwg, make_plane_wave(k_vec_a, 1.0, cfg.pol))
 
     # PEC
     I_pec_a = Z_efie \ Vector{ComplexF64}(v_a)
@@ -491,10 +492,11 @@ println("  Backscatter directions: $(round.(bs_signed_deg, digits=1))° (signed-
 pec_sc_dB = Vector{Vector{Float64}}(undef, 2)
 opt_sc_dB = Vector{Vector{Float64}}(undef, 2)
 for (a_idx, ang) in enumerate(angles)
+    cfg = configs[a_idx]
     khat_a = Vec3(sin(ang.theta_inc)*cos(ang.phi_inc),
                   sin(ang.theta_inc)*sin(ang.phi_inc),
                   cos(ang.theta_inc))
-    v_a = assemble_excitation(mesh, rwg, make_plane_wave(k * khat_a, 1.0, ang.pol))
+    v_a = assemble_excitation(mesh, rwg, make_plane_wave(k * khat_a, 1.0, cfg.pol))
 
     I_pec_a = Z_efie \ Vector{ComplexF64}(v_a)
     E_pec_sc = compute_farfield(G_sc, Vector{ComplexF64}(I_pec_a), Nsc)

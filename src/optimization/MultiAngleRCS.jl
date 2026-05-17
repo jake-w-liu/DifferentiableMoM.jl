@@ -25,6 +25,21 @@ struct AngleConfig
     weight::Float64                 # Weight in composite objective
 end
 
+function _default_transverse_pol(khat::Vec3)
+    ref = abs(khat[1]) < 0.9 ? Vec3(1.0, 0.0, 0.0) : Vec3(0.0, 1.0, 0.0)
+    p = ref - dot(ref, khat) * khat
+    return p / norm(p)
+end
+
+function _transverse_unit_pol(khat::Vec3, pol::Vec3)
+    all(isfinite, pol) || error("Incident polarization must be finite.")
+    p = pol - dot(pol, khat) * khat
+    pn = norm(p)
+    pn > 1e-12 ||
+        error("Incident polarization must have a nonzero transverse component.")
+    return p / pn
+end
+
 """
     build_multiangle_configs(mesh, rwg, k, angles; grid, backscatter_cone=10.0)
 
@@ -65,7 +80,8 @@ function build_multiangle_configs(mesh::TriMesh, rwg::RWGData, k::Float64,
         bs_dir = -khat
 
         # Excitation
-        pw_pol = hasfield(typeof(ang), :pol) ? ang.pol : Vec3(1.0, 0.0, 0.0)
+        pw_pol_raw = hasfield(typeof(ang), :pol) ? Vec3(ang.pol) : _default_transverse_pol(khat)
+        pw_pol = _transverse_unit_pol(khat, pw_pol_raw)
         E0 = 1.0
         v = assemble_excitation(mesh, rwg, PlaneWaveExcitation(k_vec, E0, pw_pol))
 

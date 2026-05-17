@@ -11,7 +11,7 @@
 # Gradient w.r.t. projected densities:
 #   ∂J/∂ρ̄_t = -2 Re{ λ† (∂Z/∂ρ̄_t) I }
 #            = -2 Re{ λ† (-p ρ̄_t^(p-1) Z_max M_t) I }
-#            = 2p Z_max ρ̄_t^(p-1) Re{ λ† M_t I }
+#            = 2p ρ̄_t^(p-1) Re{ Z_max λ† M_t I }
 #
 # Then chain rule through filtering/projection gives ∂J/∂ρ.
 
@@ -39,7 +39,7 @@ function gradient_density(Mt::Vector{<:AbstractMatrix},
     for t in 1:Nt
         # ∂Z/∂ρ̄_t = -p * ρ̄_t^(p-1) * Z_max * M_t
         # g[t] = -2 Re{ λ† (∂Z/∂ρ̄_t) I }
-        #      = 2p Z_max ρ̄_t^(p-1) Re{ λ† M_t I }
+        #      = 2p ρ̄_t^(p-1) Re{ Z_max λ† M_t I }
         lMI = _dot_left_matrix_right(lambda, Mt[t], I)
         g[t] = 2 * config.p * rho_bar[t]^(config.p - 1) * real(config.Z_max * lMI)
     end
@@ -48,7 +48,7 @@ function gradient_density(Mt::Vector{<:AbstractMatrix},
 end
 
 """
-    gradient_density_full(Mt, I, lambda, rho, rho_tilde, rho_bar, config,
+    gradient_density_full(Mt, I, lambda, rho_tilde, rho_bar, config,
                           W, w_sum, beta; eta=0.5)
 
 Full gradient computation with chain rule through filtering and projection:

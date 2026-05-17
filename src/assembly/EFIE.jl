@@ -32,7 +32,7 @@ struct EFIEApplyCache{TK, Tω, TD, TV}
 end
 
 function _build_efie_cache(mesh::TriMesh, rwg::RWGData, k;
-                           quad_order::Int=3, eta0::Float64=376.730313668)
+                           quad_order::Int=3, eta0=376.730313668)
     N = rwg.nedges
     Nt = ntriangles(mesh)
     Tcoef = promote_type(eltype(rwg.coeff_plus), eltype(rwg.coeff_minus))
