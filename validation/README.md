@@ -8,6 +8,7 @@ Recommended run order from the package root:
 ```bash
 # Analytical / standalone validation
 julia --project=. validation/mie/validate_mie_rcs.jl
+julia --project=. validation/mie/validate_dielectric_mie_dda.jl
 julia --project=. validation/po/validate_po_vs_pofacets.jl
 
 # Paper data drivers

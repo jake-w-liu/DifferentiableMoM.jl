@@ -143,6 +143,19 @@ println("\n── Test 46: 3D vector material DDA solver ──")
         @test abs(q_total[2]) / abs(q_total[1]) < 1e-10
         @test abs(q_total[3]) / abs(q_total[1]) < 1e-10
         @test rel_err < 0.02
+
+        rhat = Vec3(0.0, 1.0, 0.0)
+        F_dda = farfield_dda_3d(res, rhat)
+        sigma_dda = 4π * real(dot(F_dda, F_dda))
+        sigma_mie = mie_bistatic_rcs_dielectric(k_small, a,
+                                                Vec3(0.0, 0.0, 1.0),
+                                                Vec3(1.0, 0.0, 0.0),
+                                                rhat, eps_sphere)
+        sigma_rayleigh = 4π * k_small^4 * a^6 *
+                         abs2((eps_sphere - 1) / (eps_sphere + 2))
+
+        @test abs(sigma_mie - sigma_rayleigh) / sigma_rayleigh < 1e-3
+        @test abs(sigma_dda - sigma_mie) / sigma_mie < 0.06
     end
 end
 

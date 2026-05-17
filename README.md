@@ -142,6 +142,15 @@ comparison tables to `data/mie_rcs_validation*.csv`.
 julia --project=. validation/mie/validate_mie_rcs.jl
 ```
 
+### Mie series — dielectric sphere DDA
+
+3D voxel DDA dielectric far-field validation against exact homogeneous-sphere
+Mie theory. Saves cut and summary CSVs under `validation/mie/`.
+
+```bash
+julia --project=. validation/mie/validate_dielectric_mie_dda.jl
+```
+
 ### Physical Optics — PO sanity check
 
 Self-contained PO validation: compare the package `solve_po` result against a
