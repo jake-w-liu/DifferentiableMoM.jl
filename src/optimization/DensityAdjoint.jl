@@ -40,7 +40,7 @@ function gradient_density(Mt::Vector{<:AbstractMatrix},
         # ∂Z/∂ρ̄_t = -p * ρ̄_t^(p-1) * Z_max * M_t
         # g[t] = -2 Re{ λ† (∂Z/∂ρ̄_t) I }
         #      = 2p Z_max ρ̄_t^(p-1) Re{ λ† M_t I }
-        lMI = dot(lambda, Mt[t] * I)
+        lMI = _dot_left_matrix_right(lambda, Mt[t], I)
         g[t] = 2 * config.p * rho_bar[t]^(config.p - 1) * real(config.Z_max * lMI)
     end
 

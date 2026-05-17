@@ -10,7 +10,7 @@ export assemble_Z_impedance, precompute_patch_mass, assemble_dZ_dtheta
 
 Precompute the patch mass matrices M_p[m,n] = ∫_{Γ_p} f_m · f_n dS
 for each patch p = 1:P.
-Returns a vector of sparse matrices.
+Returns a vector of compact local matrices.
 """
 function precompute_patch_mass(mesh::TriMesh, rwg::RWGData,
                                partition::PatchPartition; quad_order::Int=3)
@@ -34,8 +34,9 @@ function precompute_patch_mass(mesh::TriMesh, rwg::RWGData,
         push!(tri_to_basis[rwg.tminus[n]], n)
     end
 
-    # Build sparse mass matrices for each patch
-    Mp = [spzeros(Tmass, N, N) for _ in 1:P]
+    rows_p = [Int[] for _ in 1:P]
+    cols_p = [Int[] for _ in 1:P]
+    vals_p = [Tmass[] for _ in 1:P]
 
     for t in 1:Nt
         p = partition.tri_patch[t]
@@ -57,12 +58,16 @@ function precompute_patch_mass(mesh::TriMesh, rwg::RWGData,
                 end
                 val *= 2 * A  # reference-to-physical scaling
 
-                Mp[p][m, n] += val
+                if val != zero(Tmass)
+                    push!(rows_p[p], m)
+                    push!(cols_p[p], n)
+                    push!(vals_p[p], val)
+                end
             end
         end
     end
 
-    return Mp
+    return [LocalMassMatrix(N, rows_p[p], cols_p[p], vals_p[p]) for p in 1:P]
 end
 
 """
@@ -76,7 +81,7 @@ function assemble_Z_impedance(Mp::Vector{<:AbstractMatrix}, theta::AbstractVecto
     CT = eltype(theta) <: Complex ? eltype(theta) : ComplexF64
     Z_imp = zeros(CT, N, N)
     for p in eachindex(theta)
-        Z_imp .-= theta[p] .* Mp[p]
+        _add_scaled_matrix!(Z_imp, -theta[p], Mp[p])
     end
     return Z_imp
 end

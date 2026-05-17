@@ -79,7 +79,7 @@ function assemble_full_Z!(Z::Matrix{<:Number},
     copyto!(Z, Z_efie)
     for p in eachindex(theta)
         coeff = reactive ? (1im * theta[p]) : theta[p]
-        Z .-= coeff .* Mp[p]
+        _add_scaled_matrix!(Z, -coeff, Mp[p])
     end
     return Z
 end
@@ -98,7 +98,7 @@ function make_mass_regularizer(Mp::Vector{<:AbstractMatrix})
     N = size(Mp[1], 1)
     R = zeros(ComplexF64, N, N)
     for p in eachindex(Mp)
-        R .+= ComplexF64.(Mp[p])
+        _add_scaled_matrix!(R, one(ComplexF64), Mp[p])
     end
     # Enforce Hermitian symmetry up to numerical tolerance
     return 0.5 .* (R + R')

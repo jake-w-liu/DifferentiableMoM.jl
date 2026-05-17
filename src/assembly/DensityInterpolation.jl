@@ -47,7 +47,7 @@ end
 Precompute per-triangle mass matrices M_t[m,n] = ∫_t f_m · f_n dS
 for all triangles t = 1:Nt.
 
-Returns a vector of sparse matrices, one per triangle.
+Returns a vector of compact local matrices, one per triangle.
 Only basis functions with support on triangle t have nonzero entries in M_t.
 """
 function precompute_triangle_mass(mesh::TriMesh, rwg::RWGData; quad_order::Int=3)
@@ -70,12 +70,18 @@ function precompute_triangle_mass(mesh::TriMesh, rwg::RWGData; quad_order::Int=3
         push!(tri_to_basis[rwg.tminus[n]], n)
     end
 
-    # Build sparse mass matrix for each triangle
-    Mt = [spzeros(Tmass, N, N) for _ in 1:Nt]
+    Mt = Vector{LocalMassMatrix{Tmass}}(undef, Nt)
 
     for t in 1:Nt
         A = areas[t]
         basis_on_t = tri_to_basis[t]
+        nnz_hint = length(basis_on_t)^2
+        rows = Vector{Int}()
+        cols = Vector{Int}()
+        vals = Vector{Tmass}()
+        sizehint!(rows, nnz_hint)
+        sizehint!(cols, nnz_hint)
+        sizehint!(vals, nnz_hint)
 
         for bi in eachindex(basis_on_t)
             m = basis_on_t[bi]
@@ -91,9 +97,14 @@ function precompute_triangle_mass(mesh::TriMesh, rwg::RWGData; quad_order::Int=3
                 end
                 val *= 2 * A  # reference-to-physical Jacobian
 
-                Mt[t][m, n] += val
+                if val != zero(Tmass)
+                    push!(rows, m)
+                    push!(cols, n)
+                    push!(vals, val)
+                end
             end
         end
+        Mt[t] = LocalMassMatrix(N, rows, cols, vals)
     end
 
     return Mt
@@ -122,7 +133,7 @@ function assemble_Z_penalty(Mt::Vector{<:AbstractMatrix},
     Z_pen = zeros(CT, N, N)
     for t in 1:Nt
         penalty = (1 - rho_bar[t]^config.p) * config.Z_max
-        Z_pen .+= penalty .* Mt[t]
+        _add_scaled_matrix!(Z_pen, penalty, Mt[t])
     end
 
     return Z_pen
@@ -140,5 +151,6 @@ This is exact and closed-form (no finite differences needed).
 function assemble_dZ_drhobar(Mt::Vector{<:AbstractMatrix},
                              rho_bar::AbstractVector{<:Real},
                              config::DensityConfig, t::Int)
-    return -config.p * rho_bar[t]^(config.p - 1) * config.Z_max * Mt[t]
+    coeff = -config.p * rho_bar[t]^(config.p - 1) * config.Z_max
+    return coeff * Mt[t]
 end

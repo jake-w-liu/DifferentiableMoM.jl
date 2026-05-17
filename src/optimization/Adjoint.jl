@@ -91,7 +91,7 @@ function gradient_impedance(Mp::Vector{<:AbstractMatrix},
     P = length(Mp)
     g = zeros(Float64, P)
     for p in 1:P
-        lMI = dot(lambda, Mp[p] * I)
+        lMI = _dot_left_matrix_right(lambda, Mp[p], I)
         if reactive
             # ∂Z/∂θ_p = -iM_p
             # g[p] = -2 Re{ λ† (-iM_p) I } = 2 Re{ i λ† M_p I } = -2 Im{ λ† M_p I }
